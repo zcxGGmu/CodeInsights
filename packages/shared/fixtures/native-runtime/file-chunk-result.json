@@ -1,0 +1,13 @@
+{
+  "requestId": "req-file-chunk-001",
+  "pathToken": "workspace-file:demo-log",
+  "offset": 0,
+  "length": 64,
+  "content": "第一行日志\\n第二行日志\\n",
+  "encoding": "utf-8",
+  "truncated": false,
+  "binaryDetected": false,
+  "nextOffset": 64,
+  "implementation": "typescript",
+  "readAt": 1764590400900
+}

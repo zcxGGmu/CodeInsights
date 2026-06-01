@@ -53,3 +53,6 @@ export * from './dingtalk'
 
 // 微信集成相关类型
 export * from './wechat'
+
+// Native Runtime DTO / IPC 契约
+export * from './native-runtime'

@@ -1,0 +1,26 @@
+{
+  "requestId": "req-search-001",
+  "query": "关键字",
+  "matches": [
+    {
+      "id": "match-pipeline-001",
+      "sourceKind": "pipeline",
+      "title": "Pipeline 记录",
+      "snippet": "planner 输出包含关键字和测试建议",
+      "matchedRanges": [
+        {
+          "start": 12,
+          "length": 3
+        }
+      ],
+      "score": 1,
+      "sessionId": "pipeline-session-demo",
+      "recordId": "record-demo-001",
+      "updatedAt": 1764590400000
+    }
+  ],
+  "hasMore": false,
+  "indexState": "fallback",
+  "implementation": "typescript",
+  "searchedAt": 1764590400100
+}

@@ -1,0 +1,14 @@
+{
+  "requestId": "req-workspace-index-001",
+  "workspaceId": "workspace-demo",
+  "rootFingerprint": "sha256:demo-workspace-root",
+  "ignoreSummary": {
+    "directories": [".git", "node_modules", "dist"],
+    "patterns": ["*.log"]
+  },
+  "indexedFiles": 128,
+  "status": "ready",
+  "implementation": "typescript",
+  "startedAt": 1764590400700,
+  "completedAt": 1764590400800
+}

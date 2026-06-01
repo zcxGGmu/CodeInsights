@@ -1,5 +1,101 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go Phase 0 基线、契约与 Benchmark 计划
+
+范围确认：本轮从 Phase 0“基线、契约与 benchmark”开始，但当前先只写计划并在实现前 check-in。Phase 0 的目标是建立 shared DTO / IPC 草案、`NativeRuntimeAdapter` TypeScript interface、contract fixtures、diagnostics 类型和 benchmark fixture，并记录 JSONL 搜索、Pipeline records tail、workspace search、大文件预览的真实基线数据。Phase 0 不追求性能提升，不改变用户可见行为，不进入 Rust / Go 实现。
+
+启动基线：
+
+- [x] 已读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、开发跟踪清单和下次启动提示词。
+- [x] 已运行 `git status --short --branch`：当前分支为 `rust-go-refactor`，启动时工作树干净。
+- [x] 已运行 `git log -5 --oneline`：最新提交为 `72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`，因此本轮以 `72bec6bf` 作为最新已确认恢复入口。
+- [x] 已确认当前尚未实现 `NativeRuntimeAdapter`、TS fallback 重构、Rust sidecar、Go supervisor 或任何 native binary。
+- [x] 已确认用户边界：不直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 `README.md` / 根 `AGENTS.md`。
+
+执行计划：
+
+- [x] 实现前确认：提交本 Phase 0 计划给用户确认，确认后再开始触达代码与 fixture。
+- [x] 建立 shared 契约草案：定义 native runtime status、capability、implementation、error code、fallback reason、operation model、search、JSONL tail、workspace index、file chunk、diagnostics DTO 与 `NATIVE_RUNTIME_IPC_CHANNELS` 草案。
+- [x] 建立 contract fixtures：为 search input / result、tail input / result、diagnostics、operation progress、workspace index、file chunk 准备脱敏 JSON fixture；不使用真实用户 `~/.codeinsights/` 数据。
+- [x] 建立主进程内部接口：新增 `NativeRuntimeAdapter` TypeScript interface，只作为 `apps/electron/src/main/lib` 内部替换边界；默认实现仍是 TypeScript / disabled diagnostics。
+- [x] 建立 diagnostics 空实现：返回 `implementation: "typescript"`、native 默认关闭、capabilities 和 fallback reason；不接入 UI 主流程。
+- [x] 建立 benchmark fixture 与 runner：用合成数据覆盖 `chat-search-large-history`、`agent-runtime-search`、`pipeline-tail-large-records`、`workspace-file-name-search`、`large-log-preview`，runner 输出 JSON summary。
+- [x] 记录真实基线数据：记录数据规模、机器环境、冷 / 热缓存、P50 / P95 / P99、最大内存、event loop delay；benchmark 只写临时目录，不写真实 `~/.codeinsights/`。
+- [x] 更新版本与锁文件：如 Phase 0 修改 `@codeinsights/shared` 或 `@codeinsights/electron` 包代码，递增对应 package patch 版本并同步 `bun.lock`。
+- [x] 阶段收尾：更新 Rust / Go development checklist、`docs/improve/rust-go/next-session-prompt.md`、本节 Review 和必要 lessons。
+- [x] 验证通过后单独提交 Phase 0，提交信息使用详细中文，提交范围仅包含 Phase 0 相关文件。
+
+拟触达文件：
+
+- [x] `packages/shared/src/types/native-runtime.ts`
+- [x] `packages/shared/src/types/native-runtime.test.ts`
+- [x] `packages/shared/src/types/index.ts`
+- [skip] `packages/shared/src/index.ts`（现有 re-export 已覆盖）
+- [x] `packages/shared/fixtures/native-runtime/`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-types.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.test.ts`
+- [skip] `apps/electron/src/main/lib/native-runtime/__fixtures__/`（benchmark fixture 运行时生成）
+- [x] `apps/electron/scripts/native-runtime-benchmark.ts`
+- [x] `apps/electron/scripts/native-runtime-benchmark.test.ts`
+- [x] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`
+- [x] `docs/improve/rust-go/next-session-prompt.md`
+- [x] `tasks/todo.md`
+- [skip] `tasks/lessons.md`（本阶段无新的纠正规则）
+- [x] `packages/shared/package.json`、`apps/electron/package.json`、`bun.lock`（对应包代码变更已递增版本）
+
+验证命令：
+
+```bash
+bun test packages/shared/src/types/native-runtime.test.ts
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+bun run --filter='@codeinsights/shared' typecheck
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:preload
+bun run --filter='@codeinsights/electron' build:renderer
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+git diff --check
+git status --short --branch
+```
+
+验证备注：
+
+- `native-runtime:benchmark` 脚本若 Phase 0 新增，需要同步 `apps/electron/package.json`；若决定先用 `bun apps/electron/scripts/native-runtime-benchmark.ts` 直跑，则在 Review 记录实际命令。
+- Phase 0 不运行 `cargo test` / `go test`，因为不会创建 Rust / Go 工程。
+- 如 benchmark 运行时间过长，保留 quick / full 两档；提交前至少运行 quick，并在 Review 写明 full 是否运行及原因。
+
+禁止事项：
+
+- [x] 不直接重写现有搜索服务或 Pipeline records 读取路径。
+- [x] 不新增 Rust crate、Go module、native binary、optionalDependencies 或打包配置。
+- [x] 不安装依赖；如后续确需依赖，先做搜索与 decision record。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不把 benchmark 合成大文件提交进仓库。
+- [x] 不复制用户真实 `~/.codeinsights/` 数据进 fixture。
+- [x] 不让 renderer 直接知道 native binary path 或调用 native runtime。
+- [x] 不接入真实 UI 主流程，不改变 Agent / Pipeline / Search / File Preview 用户可见行为。
+- [x] 不 push、不创建 PR、不执行真实远端写。
+
+### 实现前 Check-in
+
+已完成实现前确认；用户确认后进入 Phase 0 代码、fixture、benchmark 与 diagnostics 空实现。
+
+### Review
+
+- 启动基线：已读取 lessons / todo / Rust-Go 方案 / checklist / next-session prompt；`git status --short --branch` 启动时在 `rust-go-refactor` 且工作树干净；`git log -5 --oneline` 确认最新恢复入口为 `72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`。
+- Shared 契约：已新增 `packages/shared/src/types/native-runtime.ts` 与 `packages/shared/src/types/native-runtime.test.ts`，覆盖 NativeRuntime status、capability、implementation、fallback reason、error code、operation model、search、JSONL tail、workspace index、file chunk、diagnostics 和 `NATIVE_RUNTIME_IPC_CHANNELS`；已通过 `packages/shared/src/types/index.ts` re-export；`@codeinsights/shared` 版本从 `0.1.57` 提升到 `0.1.58`。
+- Contract fixtures：已新增 `packages/shared/fixtures/native-runtime/`，覆盖 search input / result、tail input / result、diagnostics、operation progress、workspace index 和 file chunk；fixture 为脱敏合成样本，没有真实用户路径、token 或 `~/.codeinsights/` 数据。
+- 主进程边界：已新增 `apps/electron/src/main/lib/native-runtime/native-runtime-types.ts` 的 `NativeRuntimeAdapter` interface，以及 `native-runtime-diagnostics.ts` 的 TypeScript fallback diagnostics 空实现；未注册 IPC，未改 preload，未接入 UI 主流程。
+- Benchmark runner：已新增 `apps/electron/scripts/native-runtime-benchmark.ts` 和 helper 测试，新增 `native-runtime:benchmark` app 脚本；benchmark 运行时在临时目录生成数据并默认清理，不写真实配置目录；`@codeinsights/electron` 版本从 `0.0.130` 提升到 `0.0.131`，`bun.lock` 已同步。
+- 大规模 benchmark 基线：macOS arm64、Bun 1.3.13、records 50000、payload 256 bytes、workspace files 100000、log 500MB、iterations 3。`chat-search-large-history` P50 55.331ms / P95 93.134ms / P99 93.134ms / event loop delay 107.361ms / memory delta 52,150,272 bytes；`agent-runtime-search` P50 39.888ms / P95 52.886ms / P99 52.886ms / event loop delay 52.938ms / memory delta 360,448 bytes；`pipeline-tail-large-records` P50 33.376ms / P95 34.611ms / P99 34.611ms / event loop delay 34.644ms / memory delta 147,456 bytes；`workspace-file-name-search` P50 11.366ms / P95 13.074ms / P99 13.074ms / event loop delay 13.105ms / memory delta 5,881,856 bytes；`large-log-preview` P50 343.660ms / P95 394.817ms / P99 394.817ms / event loop delay 395.802ms / memory delta 251,740,160 bytes。
+- Benchmark 清理边界：默认会清理临时合成数据；只有显式传 `--keep-artifacts` 时才会保留系统临时目录中的合成文件，调试后需要手动删除输出中的 artifact 目录。
+- 验证通过：`bun test packages/shared/src/types/native-runtime.test.ts`；`bun test apps/electron/src/main/lib/native-runtime`；`bun test apps/electron/scripts/native-runtime-benchmark.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 边界确认：本阶段未写 Rust / Go，未安装新依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未重写现有搜索服务或 Pipeline records 读取路径，未 push，未创建 PR。
+- 进入 Phase 1 条件：已具备。下一阶段应从 TypeScript fallback 与 EventSearchService 重构开始，复用本阶段 DTO / fixtures / benchmark 基线，继续禁止直接写 Rust / Go。
+- 阶段提交：本节由 Phase 0 提交承载，实际提交号在最终回复中给出。
+
 ## 2026-06-01 Rust/Go 最新状态同步计划
 
 范围确认：本轮响应“更新文档最新开发状态、标清完成/未完成、给下次启动提示词，并记住阶段完成后自动同步”的要求。只同步 Rust / Go 文档、下次启动提示词、任务记录和 lessons；不改业务代码，不安装依赖，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

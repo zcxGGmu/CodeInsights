@@ -1,0 +1,19 @@
+{
+  "requestId": "req-tail-001",
+  "fileKind": "pipeline-records",
+  "sessionId": "pipeline-session-demo",
+  "records": [
+    {
+      "id": "record-demo-121",
+      "sessionId": "pipeline-session-demo",
+      "type": "node_output",
+      "node": "planner",
+      "content": "继续生成测试计划",
+      "createdAt": 1764590400200
+    }
+  ],
+  "nextCursor": "line:121",
+  "hasMore": false,
+  "implementation": "typescript",
+  "readAt": 1764590400300
+}

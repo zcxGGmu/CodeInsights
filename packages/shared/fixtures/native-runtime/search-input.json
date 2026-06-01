@@ -1,0 +1,8 @@
+{
+  "requestId": "req-search-001",
+  "query": "关键字",
+  "scope": ["chat", "agent", "pipeline", "workspace"],
+  "limit": 20,
+  "sessionId": "pipeline-session-demo",
+  "workspaceId": "workspace-demo"
+}

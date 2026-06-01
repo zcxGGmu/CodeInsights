@@ -1,0 +1,11 @@
+{
+  "operationId": "op-index-demo",
+  "kind": "index_rebuild",
+  "phase": "completed",
+  "completed": 100,
+  "total": 100,
+  "message": "索引已完成",
+  "source": "typescript",
+  "startedAt": 1764590400500,
+  "completedAt": 1764590400600
+}

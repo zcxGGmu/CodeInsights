@@ -1,0 +1,8 @@
+{
+  "requestId": "req-tail-001",
+  "fileKind": "pipeline-records",
+  "sessionId": "pipeline-session-demo",
+  "cursor": "line:120",
+  "limit": 2,
+  "direction": "forward"
+}

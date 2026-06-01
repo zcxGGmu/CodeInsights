@@ -1,0 +1,7 @@
+{
+  "requestId": "req-file-chunk-001",
+  "pathToken": "workspace-file:demo-log",
+  "offset": 0,
+  "length": 64,
+  "encoding": "utf-8"
+}

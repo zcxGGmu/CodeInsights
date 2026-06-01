@@ -9,9 +9,9 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-01
-> 最新开发基线：`8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`。这是文档与计划基线，不包含功能实现。
-> 最新已确认恢复入口：`fe34b231 docs(tasks): 固化阶段完成即提交纪律`。若本轮状态同步提交已产生，以最终回复中的最新 HEAD 为准。
-> 当前结论：Rust / Go 优化方案与开发跟踪清单已完成，阶段提交纪律已固化；当前尚未开始实现 `NativeRuntimeAdapter`、TS fallback 重构、Rust sidecar、Go supervisor 或任何 native binary。
+> 最新开发基线：Phase 0 已完成 shared DTO / IPC 草案、contract fixtures、主进程 `NativeRuntimeAdapter` interface、diagnostics 空实现和 benchmark runner；本阶段提交后以最终回复中的真实 HEAD 为准。
+> 最新已确认恢复入口：`72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`；本阶段提交后以最终回复中的真实 HEAD 为准。
+> 当前结论：Rust / Go 优化重构 Phase 0 已建立可回归基线，但尚未实现 EventSearchService、Pipeline cursor tail、workspace index、SearchDialog 接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
 > 当前策略：先做 TypeScript 抽象、contract fixtures、benchmark 和 UI 状态收敛；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
@@ -21,7 +21,7 @@
 - [x] Rust / Go 开发跟踪清单已生成：`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`。
 - [x] 阶段提交纪律已固化：`fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
 - [x] 已补齐 Rust / Go 下次启动提示词入口：`docs/improve/rust-go/next-session-prompt.md`。
-- [ ] Phase 0：基线、契约与 benchmark。
+- [x] Phase 0：基线、契约与 benchmark。
 - [ ] Phase 1：TypeScript fallback 与 EventSearchService 重构。
 - [ ] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [ ] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
@@ -34,7 +34,9 @@
 
 ### 当前未完成的关键能力
 
-- [ ] NativeRuntime shared DTO / IPC / preload API 尚未实现。
+- [x] NativeRuntime shared DTO / IPC 草案已完成；preload API 尚未实现。
+- [x] 主进程 `NativeRuntimeAdapter` TypeScript interface 与 diagnostics 空实现已完成。
+- [x] Contract fixtures 和 benchmark runner 已完成；基线数字见 Phase 0 Review。
 - [ ] EventSearchService 尚未统一 Chat / Agent / Pipeline 搜索。
 - [ ] Pipeline records tail 尚未改为 cursor / offset 读取。
 - [ ] Workspace 文件索引尚未建立可取消、可重建的缓存层。
@@ -49,10 +51,10 @@
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态仍是“方案与清单完成，功能尚未实现；下一步从 Phase 0 开始”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史至少包含 `fe34b231 docs(tasks): 固化阶段完成即提交纪律` 和 `8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`，或包含其后的 Rust / Go 状态同步提交。
-4. 如果开始 Phase 0，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项。
-5. 不要直接写 Rust / Go。先做 benchmark、shared 契约、TS fallback 和 fixture parity。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；下一步从 Phase 1 TypeScript fallback 与 EventSearchService 重构开始”。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 Phase 0 提交或其后的 Rust / Go 状态同步提交。
+4. 如果开始 Phase 1，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项。
+5. 不要直接写 Rust / Go。Phase 1 仍然只做 TypeScript fallback、EventSearchService、旧搜索行为回归测试和 fixture parity。
 
 ## 使用规则
 
@@ -117,7 +119,7 @@
 
 | 里程碑 | 阶段 | 目标 | 初始状态 | 是否必须 |
 |--------|------|------|----------|----------|
-| M0 | Phase 0 | 建立基线、契约草案、benchmark 和 fixture | [ ] | 必须 |
+| M0 | Phase 0 | 建立基线、契约草案、benchmark 和 fixture | [x] | 必须 |
 | M1 | Phase 1 | 收敛 TS fallback 与 EventSearchService | [ ] | 必须 |
 | M2 | Phase 2 | Pipeline records cursor / tail 与 SearchDialog 接入 | [ ] | 必须 |
 | M3 | Phase 3 | Workspace 文件索引 TS cache 与 watcher invalidation | [ ] | 必须 |
@@ -132,12 +134,12 @@
 
 ### 阶段状态
 
-- [ ] 阶段开始
-- [ ] 测试 / fixture 先行完成
-- [ ] 实现完成
-- [ ] 验证完成
-- [ ] 阶段 Review 完成
-- [ ] 阶段提交完成
+- [x] 阶段开始
+- [x] 测试 / fixture 先行完成
+- [x] 实现完成
+- [x] 验证完成
+- [x] 阶段 Review 完成
+- [x] 阶段提交完成
 
 ### 目标
 
@@ -145,84 +147,96 @@
 
 ### 入口条件
 
-- [ ] 已阅读 Rust / Go 优化方案的“工程目标与不变量”“目标架构”“分阶段路线”和“最小可交付切片”。
-- [ ] 当前工作树无无关未提交改动，或已明确只会 stage 本阶段文件。
-- [ ] 已确认本阶段不创建 Rust / Go 工程、不添加 native binary、不修改 UI 主流程。
-- [ ] 已在 `tasks/todo.md` 写入 Phase 0 计划和边界。
+- [x] 已阅读 Rust / Go 优化方案的“工程目标与不变量”“目标架构”“分阶段路线”和“最小可交付切片”。
+- [x] 当前工作树无无关未提交改动，或已明确只会 stage 本阶段文件。
+- [x] 已确认本阶段不创建 Rust / Go 工程、不添加 native binary、不修改 UI 主流程。
+- [x] 已在 `tasks/todo.md` 写入 Phase 0 计划和边界。
 
 ### 契约任务
 
-- [ ] 在 `packages/shared` 设计 `NativeRuntimeStatus`、`NativeCapability`、`NativeImplementationKind`、`NativeRuntimeErrorCode`。
-- [ ] 设计搜索输入 / 输出 DTO：query、scope、limit、cursor、requestId、sessionId、sourceKind、snippet、matchedRanges、implementation。
-- [ ] 设计 JSONL tail DTO：fileKind、sessionId、cursor、limit、direction、records、nextCursor、implementation。
-- [ ] 设计 workspace index DTO：workspaceId、rootPath fingerprint、ignoreSummary、indexedFiles、status、startedAt、completedAt。
-- [ ] 设计 file chunk DTO：path token、offset、length、encoding、truncated、binaryDetected、nextOffset。
-- [ ] 设计 diagnostics DTO：binaryPath、protocolVersion、cacheSchemaVersion、fallbackReason、lastError、capabilities。
-- [ ] 定义 operation model：operationId、requestId、startedAt、cancelledAt、completedAt、status、progress、source。
-- [ ] 定义 feature flag 和环境变量名称，例如 `CODEINSIGHTS_NATIVE_RUNTIME`、`CODEINSIGHTS_NATIVE_SEARCH`，默认关闭。
-- [ ] 定义 fallback reason 枚举：missing_binary、disabled、version_mismatch、contract_violation、timeout、crashed、cache_corrupted。
-- [ ] 为每类 DTO 准备 JSON fixture，fixture 只放脱敏样本，不放真实用户路径和 token。
+- [x] 在 `packages/shared` 设计 `NativeRuntimeStatus`、`NativeCapability`、`NativeImplementationKind`、`NativeRuntimeErrorCode`。
+- [x] 设计搜索输入 / 输出 DTO：query、scope、limit、cursor、requestId、sessionId、sourceKind、snippet、matchedRanges、implementation。
+- [x] 设计 JSONL tail DTO：fileKind、sessionId、cursor、limit、direction、records、nextCursor、implementation。
+- [x] 设计 workspace index DTO：workspaceId、rootPath fingerprint、ignoreSummary、indexedFiles、status、startedAt、completedAt。
+- [x] 设计 file chunk DTO：path token、offset、length、encoding、truncated、binaryDetected、nextOffset。
+- [x] 设计 diagnostics DTO：binaryPath、protocolVersion、cacheSchemaVersion、fallbackReason、lastError、capabilities。
+- [x] 定义 operation model：operationId、requestId、startedAt、cancelledAt、completedAt、status、progress、source。
+- [x] 定义 feature flag 和环境变量名称，例如 `CODEINSIGHTS_NATIVE_RUNTIME`、`CODEINSIGHTS_NATIVE_SEARCH`，默认关闭。
+- [x] 定义 fallback reason 枚举：missing_binary、disabled、version_mismatch、contract_violation、timeout、crashed、cache_corrupted。
+- [x] 为每类 DTO 准备 JSON fixture，fixture 只放脱敏样本，不放真实用户路径和 token。
 
 ### Benchmark 任务
 
-- [ ] 新增或规划 `apps/electron/scripts/native-runtime-benchmark.ts`。
-- [ ] 生成 `chat-search-large-history` fixture：多会话、多 JSONL 文件、含中英文、代码块和坏行。
-- [ ] 生成 `agent-runtime-search` fixture：SDK message、tool_start、tool_result、error、done 混合。
-- [ ] 生成 `pipeline-tail-large-records` fixture：单 session 50000 records，覆盖 node output、artifact、gate、error。
-- [ ] 生成 `workspace-file-name-search` fixture：100000 文件路径，覆盖 ignore、hidden、symlink、nested packages。
-- [ ] 生成 `large-log-preview` fixture：至少 500MB 文本的合成方式，不把大文件提交进仓库。
-- [ ] 记录当前实现 P50 / P95 / P99、最大内存、event loop delay、冷启动和热缓存差异。
+- [x] 新增或规划 `apps/electron/scripts/native-runtime-benchmark.ts`。
+- [x] 生成 `chat-search-large-history` fixture：多会话、多 JSONL 文件、含中英文、代码块和坏行。
+- [x] 生成 `agent-runtime-search` fixture：SDK message、tool_start、tool_result、error、done 混合。
+- [x] 生成 `pipeline-tail-large-records` fixture：单 session 50000 records，覆盖 node output、artifact、gate、error。
+- [x] 生成 `workspace-file-name-search` fixture：100000 文件路径，覆盖 ignore、hidden、symlink、nested packages。
+- [x] 生成 `large-log-preview` fixture：已跑到 500MB 合成文本，不把大文件提交进仓库。
+- [x] 记录当前实现 P50 / P95 / P99、最大内存、event loop delay、冷启动和热缓存差异。
 
 ### 实现任务
 
-- [ ] 新增 `NativeRuntimeAdapter` TypeScript interface，仅作为主进程内部类型。
-- [ ] 新增 diagnostics service 的空实现，返回 `implementation: "typescript"` 或 `nativeEnabled: false`。
-- [ ] 将 benchmark 与 production service 解耦，避免 benchmark 写入真实 `~/.codeinsights/`。
-- [ ] 给 benchmark 输出增加 JSON summary，便于阶段 Review 记录真实数字。
-- [ ] 明确 feature flag 名称和默认值，默认关闭 native。
+- [x] 新增 `NativeRuntimeAdapter` TypeScript interface，仅作为主进程内部类型。
+- [x] 新增 diagnostics service 的空实现，返回 `implementation: "typescript"` 或 `nativeEnabled: false`。
+- [x] 将 benchmark 与 production service 解耦，避免 benchmark 写入真实 `~/.codeinsights/`。
+- [x] 给 benchmark 输出增加 JSON summary，便于阶段 Review 记录真实数字。
+- [x] 明确 feature flag 名称和默认值，默认关闭 native。
 
 ### 触达文件
 
-- [ ] `packages/shared/src/types/native-runtime.ts`
-- [ ] `packages/shared/src/index.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-types.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
-- [ ] `apps/electron/scripts/native-runtime-benchmark.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/__fixtures__/`
-- [ ] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`
-- [ ] `tasks/todo.md`
+- [x] `packages/shared/src/types/native-runtime.ts`
+- [skip] `packages/shared/src/index.ts`：现有包根已 re-export `./types/index`，本阶段只需更新 `packages/shared/src/types/index.ts`。
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-types.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [x] `apps/electron/scripts/native-runtime-benchmark.ts`
+- [skip] `apps/electron/src/main/lib/native-runtime/__fixtures__/`：Phase 0 contract fixture 放在 shared 包；benchmark fixture 运行时生成到临时目录。
+- [x] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`
+- [x] `tasks/todo.md`
 
 ### 验证命令
 
 ```bash
 bun test packages/shared/src/types/native-runtime.test.ts
 bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+bun run --filter='@codeinsights/shared' typecheck
 bun run --filter='@codeinsights/electron' typecheck
 bun run --filter='@codeinsights/electron' build:main
 bun run --filter='@codeinsights/electron' build:preload
 bun run --filter='@codeinsights/electron' build:renderer
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
 git diff --check
-git status --short
+git status --short --branch
 ```
 
 ### 完成定义
 
-- [ ] shared DTO、main 内部 interface 和 fixtures 已提交。
-- [ ] benchmark 可重复运行，输出包含数据规模和真实性能数字。
-- [ ] 未引入 Rust / Go 工程、native binary 或新运行时依赖。
-- [ ] 没有 native 能力时，现有产品行为完全不变。
-- [ ] Phase 0 Review 写明后续是否具备进入 Phase 1 的条件。
+- [x] shared DTO、main 内部 interface 和 fixtures 已提交。
+- [x] benchmark 可重复运行，输出包含数据规模和真实性能数字。
+- [x] 未引入 Rust / Go 工程、native binary 或新运行时依赖。
+- [x] 没有 native 能力时，现有产品行为完全不变。
+- [x] Phase 0 Review 写明后续是否具备进入 Phase 1 的条件。
 
 ### 禁止事项
 
-- [ ] 不直接重写现有搜索服务。
-- [ ] 不新增 Rust / Go crate、module、binary、optionalDependencies。
-- [ ] 不把 benchmark 合成大文件提交进仓库。
-- [ ] 不把用户真实 `~/.codeinsights/` 数据复制进 fixture。
+- [x] 不直接重写现有搜索服务。
+- [x] 不新增 Rust / Go crate、module、binary、optionalDependencies。
+- [x] 不把 benchmark 合成大文件提交进仓库。
+- [x] 不把用户真实 `~/.codeinsights/` 数据复制进 fixture。
 
 ### 阶段 Review
 
-待 Phase 0 完成后追加。
+- 已完成 shared DTO / IPC 草案：`packages/shared/src/types/native-runtime.ts` 定义 status、capability、implementation、fallback reason、error code、operation model、search、JSONL tail、workspace index、file chunk、diagnostics 与 `NATIVE_RUNTIME_IPC_CHANNELS`；`packages/shared/src/types/index.ts` 已 re-export；`@codeinsights/shared` 版本递增到 `0.1.58`。
+- 已完成 contract fixtures：`packages/shared/fixtures/native-runtime/` 覆盖 search input / result、tail input / result、diagnostics、operation progress、workspace index 和 file chunk；样本均为脱敏合成数据。
+- 已完成主进程内部边界：`apps/electron/src/main/lib/native-runtime/native-runtime-types.ts` 新增 `NativeRuntimeAdapter` interface；`native-runtime-diagnostics.ts` 返回 TypeScript fallback diagnostics，native 默认关闭，不接入 UI / preload / IPC 主流程。
+- 已完成 benchmark runner：`apps/electron/scripts/native-runtime-benchmark.ts` 运行时在临时目录生成合成 JSONL、workspace path list 和 log，不写真实 `~/.codeinsights/`，默认自动清理；`@codeinsights/electron` 版本递增到 `0.0.131` 并新增 `native-runtime:benchmark` 脚本。
+- 大规模 benchmark 基线：macOS arm64、Bun 1.3.13、records 50000、payload 256 bytes、workspace files 100000、log 500MB、iterations 3。`chat-search-large-history` P50 55.331ms / P95 93.134ms / P99 93.134ms / event loop delay 107.361ms / memory delta 52,150,272 bytes；`agent-runtime-search` P50 39.888ms / P95 52.886ms / P99 52.886ms / event loop delay 52.938ms / memory delta 360,448 bytes；`pipeline-tail-large-records` P50 33.376ms / P95 34.611ms / P99 34.611ms / event loop delay 34.644ms / memory delta 147,456 bytes；`workspace-file-name-search` P50 11.366ms / P95 13.074ms / P99 13.074ms / event loop delay 13.105ms / memory delta 5,881,856 bytes；`large-log-preview` P50 343.660ms / P95 394.817ms / P99 394.817ms / event loop delay 395.802ms / memory delta 251,740,160 bytes。
+- Benchmark 清理边界：默认会清理临时合成数据；只有显式传 `--keep-artifacts` 时才会保留系统临时目录中的合成文件，调试后需要手动删除输出中的 artifact 目录。
+- 验证通过：`bun test packages/shared/src/types/native-runtime.test.ts`；`bun test apps/electron/src/main/lib/native-runtime`；`bun test apps/electron/scripts/native-runtime-benchmark.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 边界确认：本阶段未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未接入 renderer / preload / IPC 主流程，未重写现有搜索服务或 Pipeline records 读取路径，未复制真实用户数据进 fixture。
+- 进入 Phase 1 条件：已具备。下一阶段应以本阶段 DTO / fixtures / benchmark 为基线，先做 TypeScript fallback 与 EventSearchService 重构，保留旧 IPC 行为回归测试，仍然不要开始 Rust sidecar。
+- 阶段提交：本节由 Phase 0 提交承载；实际提交号在最终回复中给出。
 
 ## Phase 1：TypeScript Fallback 与 EventSearchService 重构
 

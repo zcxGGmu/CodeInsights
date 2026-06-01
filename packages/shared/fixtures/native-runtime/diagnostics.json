@@ -1,0 +1,28 @@
+{
+  "status": {
+    "available": true,
+    "nativeEnabled": false,
+    "implementation": "typescript",
+    "protocolVersion": 1,
+    "cacheSchemaVersion": 1,
+    "capabilities": ["diagnostics"],
+    "fallbackReason": "disabled",
+    "checkedAt": 1764590400400
+  },
+  "protocolVersion": 1,
+  "cacheSchemaVersion": 1,
+  "capabilities": [
+    {
+      "capability": "diagnostics",
+      "available": true,
+      "implementation": "typescript"
+    }
+  ],
+  "fallbackReason": "disabled",
+  "lastError": {
+    "code": "disabled",
+    "message": "Native runtime 默认关闭，当前使用 TypeScript fallback。",
+    "recoverable": true
+  },
+  "checkedAt": 1764590400400
+}
