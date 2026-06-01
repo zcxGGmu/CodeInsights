@@ -9,8 +9,8 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-01
-> 最新开发基线：Phase 0 已完成 shared DTO / IPC 草案、contract fixtures、主进程 `NativeRuntimeAdapter` interface、diagnostics 空实现和 benchmark runner；本阶段提交后以最终回复中的真实 HEAD 为准。
-> 最新已确认恢复入口：`72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`；本阶段提交后以最终回复中的真实 HEAD 为准。
+> 最新开发基线：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
+> 最新已确认恢复入口：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
 > 当前结论：Rust / Go 优化重构 Phase 0 已建立可回归基线，但尚未实现 EventSearchService、Pipeline cursor tail、workspace index、SearchDialog 接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
 > 当前策略：先做 TypeScript 抽象、contract fixtures、benchmark 和 UI 状态收敛；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
 
@@ -52,7 +52,7 @@
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
 2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；下一步从 Phase 1 TypeScript fallback 与 EventSearchService 重构开始”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 Phase 0 提交或其后的 Rust / Go 状态同步提交。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark` 或其后的 Rust / Go 状态同步提交。
 4. 如果开始 Phase 1，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项。
 5. 不要直接写 Rust / Go。Phase 1 仍然只做 TypeScript fallback、EventSearchService、旧搜索行为回归测试和 fixture parity。
 
@@ -236,7 +236,7 @@ git status --short --branch
 - 验证通过：`bun test packages/shared/src/types/native-runtime.test.ts`；`bun test apps/electron/src/main/lib/native-runtime`；`bun test apps/electron/scripts/native-runtime-benchmark.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
 - 边界确认：本阶段未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未接入 renderer / preload / IPC 主流程，未重写现有搜索服务或 Pipeline records 读取路径，未复制真实用户数据进 fixture。
 - 进入 Phase 1 条件：已具备。下一阶段应以本阶段 DTO / fixtures / benchmark 为基线，先做 TypeScript fallback 与 EventSearchService 重构，保留旧 IPC 行为回归测试，仍然不要开始 Rust sidecar。
-- 阶段提交：本节由 Phase 0 提交承载；实际提交号在最终回复中给出。
+- 阶段提交：已提交 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
 
 ## Phase 1：TypeScript Fallback 与 EventSearchService 重构
 
@@ -1143,5 +1143,5 @@ git status --short
 可直接复制给下一次 Codex：
 
 ```text
-请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：优化方案与开发跟踪清单已完成，阶段提交纪律已固化，但功能尚未实现；最新已确认开发基线是 8131b66b docs(rust-go): 新增优化方案和开发跟踪清单，最新已确认恢复入口是 fe34b231 docs(tasks): 固化阶段完成即提交纪律。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 0“基线、契约与 benchmark”开始，不要直接写 Rust / Go；先在 tasks/todo.md 写 Phase 0 计划，遵守不修改根 README.md / AGENTS.md、不中途安装依赖、不创建 native binary、先测试和 benchmark 后实现的边界。
+请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律和 Phase 0“基线、契约与 benchmark”已经完成；Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；目前尚未实现 EventSearchService、TS fallback 搜索重构、Pipeline cursor tail、workspace index、SearchDialog 接入、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 1“TypeScript fallback 与 EventSearchService 重构”开始；先在 tasks/todo.md 写 Phase 1 计划，明确范围、触达文件、验证命令和禁止事项。不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。
 ```

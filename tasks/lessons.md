@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-01 Rust / Go 阶段收尾状态同步
+
+- Rust / Go 优化重构每完成一个 Phase 并通过验证、完成阶段提交后，必须立即执行独立状态同步：更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，明确最新开发基线、完成项、未完成项、下一阶段入口、验证结果和禁止事项。
+- Rust / Go 状态同步也要单独提交，提交信息使用详细中文；不能把 Phase 实现提交、状态文档同步和下一阶段计划混在一个大提交里。
+- 最终回复必须给一份可直接复制给下一次 Codex 的启动提示词；提示词要包含真实开发基线提交号、要求启动后运行 `git status --short --branch` / `git log -5 --oneline`、下一阶段入口和当前禁止事项。
+- 仓库内 `next-session-prompt.md` 不能可靠写入自身提交 hash 时，至少写清最近真实 Phase 开发基线，并要求下次启动用 `git log` 确认其后的 Rust / Go docs / tasks / feat 提交；最终回复再补上本轮状态同步后的实际 HEAD。
+
 ## 2026-05-30 客户端完整验证与 Bun 测试隔离
 
 - 仓库级 `bun test` 在默认非隔离模式下会受到跨文件 mock / module state 污染影响；完整客户端验证应使用根脚本 `bun run test`，并保持其映射到 `bun test --isolate`，避免把测试顺序污染误判为产品回归。

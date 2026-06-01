@@ -1,5 +1,38 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go Phase 0 后续状态同步计划
+
+范围确认：本轮响应“更新文档最新开发状态、标注完成/未完成、给下次启动提示词，并记住阶段完成后自动执行”的要求。当前 Phase 0 已在 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark` 完成；本轮只同步 Rust / Go development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，不改业务代码，不安装依赖，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+执行计划：
+
+- [x] 检查当前分支、工作树和最近提交，确认当前真实开发基线。
+- [x] 更新 Rust / Go 开发跟踪清单，回填 Phase 0 真实提交、完成项、未完成项和下一阶段入口。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，给下一次 Codex 会话提供可复制恢复提示词。
+- [x] 更新 `tasks/lessons.md`，把 Rust / Go 阶段完成后的自动状态同步习惯写成长期规则。
+- [x] 更新本节 Review，记录同步结果、验证命令、未完成项和提交边界。
+- [x] 运行文档校验：关键状态搜索、占位词扫描、行尾空白、Markdown code fence 和 `git diff --check`。
+- [x] 单独提交本轮状态同步，提交信息使用详细中文。
+
+边界：
+
+- [x] 不修改业务代码。
+- [x] 不安装依赖。
+- [x] 不新增 Rust / Go、native binary、optionalDependencies 或打包配置。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不 push、不创建 PR。
+- [x] 不把未实现的 Rust / Go 功能标记为完成。
+
+### Review
+
+- 启动检查：`git status --short --branch` 显示当前分支为 `rust-go-refactor` 且启动时工作树干净；`git log -5 --oneline` 确认最新开发提交为 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
+- Rust / Go checklist 已更新：最新开发基线回填为 `987d600e`；完成项明确包含方案、深化方案、开发跟踪清单、阶段提交纪律、下次启动提示词和 Phase 0；未完成项明确保留 Phase 1-9、EventSearchService、Pipeline cursor tail、workspace index、SearchDialog、Diagnostics UI、Rust sidecar、Go supervisor 和 native binary。
+- `next-session-prompt.md` 已更新：可复制提示词改为从 Phase 1“TypeScript fallback 与 EventSearchService 重构”开始，并要求启动后运行 `git status --short --branch` / `git log -5 --oneline`，若存在更新的 Rust / Go 状态同步提交则以最新提交为准。
+- `tasks/lessons.md` 已更新：Rust / Go 每个 Phase 完成并提交后，必须默认同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交状态同步；最终回复必须给可直接复制的下次启动提示词。
+- 验证通过：关键状态 `rg` 搜索；旧基线和占位表达扫描；行尾空白 `awk` 检查；Markdown code fence 成对检查；`git diff --check -- docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md docs/improve/rust-go/next-session-prompt.md tasks/todo.md tasks/lessons.md`。
+- 边界确认：本轮未修改业务代码，未安装依赖，未新增 Rust / Go、native binary、optionalDependencies 或打包配置，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR，未把任何未实现 Rust / Go 功能标记为完成。
+- 阶段提交：本节由本轮状态同步提交承载；仓库内不写自身提交 hash，最终回复给出实际 HEAD。
+
 ## 2026-06-01 Rust/Go Phase 0 基线、契约与 Benchmark 计划
 
 范围确认：本轮从 Phase 0“基线、契约与 benchmark”开始，但当前先只写计划并在实现前 check-in。Phase 0 的目标是建立 shared DTO / IPC 草案、`NativeRuntimeAdapter` TypeScript interface、contract fixtures、diagnostics 类型和 benchmark fixture，并记录 JSONL 搜索、Pipeline records tail、workspace search、大文件预览的真实基线数据。Phase 0 不追求性能提升，不改变用户可见行为，不进入 Rust / Go 实现。
@@ -94,7 +127,7 @@ git status --short --branch
 - 验证通过：`bun test packages/shared/src/types/native-runtime.test.ts`；`bun test apps/electron/src/main/lib/native-runtime`；`bun test apps/electron/scripts/native-runtime-benchmark.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
 - 边界确认：本阶段未写 Rust / Go，未安装新依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未重写现有搜索服务或 Pipeline records 读取路径，未 push，未创建 PR。
 - 进入 Phase 1 条件：已具备。下一阶段应从 TypeScript fallback 与 EventSearchService 重构开始，复用本阶段 DTO / fixtures / benchmark 基线，继续禁止直接写 Rust / Go。
-- 阶段提交：本节由 Phase 0 提交承载，实际提交号在最终回复中给出。
+- 阶段提交：已提交 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
 
 ## 2026-06-01 Rust/Go 最新状态同步计划
 
@@ -128,7 +161,7 @@ git status --short --branch
 - 已修正上一轮“阶段提交习惯固化计划”的未勾选提交项，回填实际提交 `fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
 - 验证通过：关键状态 `rg` 搜索；Rust / Go 文档占位词扫描无命中；行尾空白 `awk` 检查；Markdown code fence 成对检查；`git diff --check -- docs/improve/rust-go tasks/todo.md tasks/lessons.md`。
 - 边界确认：本轮未修改业务代码，未安装依赖，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR，未把任何未实现 Rust / Go 功能标记为完成。
-- 阶段提交：本节由本轮状态同步提交承载，实际提交号在最终回复中给出。
+- 阶段提交：已提交 `72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`。
 
 ## 2026-06-01 阶段提交习惯固化计划
 

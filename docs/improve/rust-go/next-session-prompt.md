@@ -2,8 +2,8 @@
 
 > 更新时间：2026-06-01
 > 当前分支：`rust-go-refactor`
-> 最新已确认开发基线：Phase 0 基线、契约与 benchmark 已完成；本阶段提交后以最终回复中的真实 HEAD 为准。
-> 最新已确认恢复入口：`72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词`；本阶段提交后以最终回复中的真实 HEAD 为准。
+> 最新已确认开发基线：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
+> 最新已确认恢复入口：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
 > 说明：如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
 
 ## 当前真实进度
@@ -42,7 +42,7 @@
 ```text
 请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。
 
-当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律和 Phase 0“基线、契约与 benchmark”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；目前尚未实现 EventSearchService、TS fallback 搜索重构、Pipeline cursor tail、workspace index、SearchDialog 接入、Rust sidecar、Go supervisor 或任何 native binary。最新已确认恢复入口至少是 72bec6bf docs(rust-go): 同步最新开发状态和下次启动提示词；请启动后运行 git status --short --branch 和 git log -5 --oneline，若存在更新的 Rust / Go Phase 0 提交或状态同步提交，以最新提交为准。
+当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律和 Phase 0“基线、契约与 benchmark”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；目前尚未实现 EventSearchService、TS fallback 搜索重构、Pipeline cursor tail、workspace index、SearchDialog 接入、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark；请启动后运行 git status --short --branch 和 git log -5 --oneline，若存在更新的 Rust / Go 状态同步提交，以最新提交为准。
 
 下一步从 Phase 1“TypeScript fallback 与 EventSearchService 重构”开始。请先在 tasks/todo.md 写 Phase 1 计划，明确范围、触达文件、验证命令和禁止事项；不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。Phase 1 应复用 Phase 0 DTO / fixtures / benchmark 基线，在 TypeScript 内收敛 Chat / Agent / Pipeline 搜索 facade，保留旧 IPC 行为回归测试，并记录相对 Phase 0 的性能变化。
 
