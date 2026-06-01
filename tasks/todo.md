@@ -1,5 +1,99 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go 开发跟踪清单生成计划
+
+范围确认：本轮根据已深化的 Rust / Go 优化方案，新增一个可长期跟踪迭代开发进度的清单文档；只修改 `docs/improve/rust-go/` 下的新清单文档和本任务记录，不改业务代码，不安装依赖，不创建 Rust / Go 工程，不修改根 `README.md` / 根 `AGENTS.md`。
+
+执行计划：
+
+- [x] 复查 Rust / Go 优化方案、Pipeline 既有开发清单格式和项目任务管理规则。
+- [x] 生成 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，覆盖状态、使用规则、全局不变量、里程碑、分阶段任务、横向工作流、积压池和下次启动入口。
+- [x] 将每个阶段拆成入口条件、契约 / 后端 / 前端 / 测试 / 验证 / 完成定义 / 禁止事项，保证后续可以直接按清单迭代。
+- [x] 明确 Rust / Go 引入门槛、TS fallback、feature flag、packaged smoke、安全隐私、版本递增和回滚要求。
+- [x] 运行 Markdown 结构、行尾空白、code fence、占位词和 `git diff --check` 校验。
+- [x] 在本节追加 Review，记录文档路径、覆盖内容、验证结果和未触达边界。
+
+边界：
+
+- [x] 不修改业务代码。
+- [x] 不安装新依赖。
+- [x] 不创建 Rust / Go 工程或 native binary。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不把清单中的阶段任务描述为已实现功能。
+
+### Review
+
+- 已新增 Rust / Go 优化重构开发跟踪清单：`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，共约 1130 行。
+- 清单已覆盖：最新开发状态、当前完成 / 未完成、下次启动入口、使用规则、状态标记、全局不变量、质量门禁、里程碑总览、Phase 0-9、横向工作流、后续积压池、阶段 Review 模板和下一轮启动提示词。
+- 阶段拆分已按后续可执行迭代设计：Phase 0 基线 / 契约 / benchmark，Phase 1 TS fallback 与 EventSearchService，Phase 2 Pipeline records cursor / 全局搜索，Phase 3 workspace index，Phase 4 前端状态与 diagnostics，Phase 5 Rust search sidecar，Phase 6 大文件 chunk preview，Phase 7 PathSafety / GitOutputParser，Phase 8 打包 CI 发布，Phase 9 Go supervisor 可选 spike。
+- 已明确关键工程门禁：Rust / Go 不能直接进入主线；必须先有 TS fallback、shared DTO / fixtures、benchmark、feature flag、fallback reason、operation model、contract parity、packaged smoke、安全脱敏、cache 可重建和 rollback 策略。
+- 已把 Go supervisor 明确为可选 spike，只有 runtime 进程树 / watcher / lifecycle 问题成为高频痛点或用户明确要求时才推进。
+- 验证通过：关键章节 `rg` 覆盖检查；`awk` 行尾空白检查；Markdown code fence 成对检查；`TODO|TBD|待补|xxx|FIXME` 扫描无命中；`git diff --check -- tasks/todo.md`；未跟踪清单文档和优化方案文档分别通过 `git diff --check --no-index /dev/null ...`；提交前 `git status --short --branch` 显示仅有 `tasks/todo.md` 修改和 `docs/improve/rust-go/` 未跟踪变更。
+- 本轮未修改业务代码，未安装依赖，未创建 Rust / Go 工程或 native binary，未修改根 `README.md` / 根 `AGENTS.md`。清单中的阶段任务均为后续计划，不代表已实现功能。
+
+## 2026-06-01 Rust/Go 优化方案深化计划
+
+范围确认：本轮继续完善 `docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md`，把现有方向扩展为更细的工程实施规格；只修改该方案文档和本任务记录，不改业务代码，不安装依赖，不修改根 `README.md` / 根 `AGENTS.md`。
+
+执行计划：
+
+- [x] 复查当前 Rust / Go 优化方案、相关工程实践技能和本轮边界。
+- [x] 补充工程目标、约束、不变量、决策矩阵和系统分层细节。
+- [x] 细化后端 native adapter、sidecar 协议、缓存、JSONL、workspace index、path safety、Git parser、runtime supervisor、错误模型和 observability。
+- [x] 细化前端状态、IPC、搜索体验、大文件预览、设置页诊断、BDD 与新增功能验收。
+- [x] 补充打包、CI、版本兼容、benchmark、security、rollback、迁移阶段和首个 MVP 切片。
+- [x] 运行文档验证：关键章节覆盖、行尾空白、`git diff --check` 和 `git status --short`。
+- [x] 在本节追加 Review，记录本轮深化内容、验证结果和未触达边界。
+
+边界：
+
+- [x] 不修改业务代码。
+- [x] 不安装新依赖。
+- [x] 不创建 Rust / Go 工程。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不把方案文档描述为已实现功能。
+
+### Review
+
+- 已复查 Rust / Go 优化方案和相关工程实践技能；本轮继续保持“native 只作为主进程背后的可替换能力层，不迁移 renderer / preload / IPC / Jotai / 业务编排”的核心判断。
+- 已将方案文档从 593 行深化到约 1672 行，重点补充：工程目标与强制不变量、成功标准、现有调用链与 native 插入点、决策矩阵、模块分层、`NativeRuntimeService` facade、sidecar transport、sidecar 状态机、cache manifest、EventStore / cursor / append 一致性、workspace index 数据模型、watcher 策略、PathSafety / GitOutputParser 规格、Go supervisor 触发门槛、observability / diagnostics。
+- 已补充前端细节：全局 native runtime listener、搜索 UI 状态机、SearchDialog requestId 防旧结果覆盖、大文件预览 chunk viewer、设置页诊断入口、native runtime atoms、索引状态和用户可见 fallback 行为。
+- 已补充新增功能与验收：全局本地搜索中心、Pipeline Evidence Index、Workspace Code Intelligence、大文件 / 日志预览器、Native Runtime 诊断与自愈、本地贡献分析器、本地隐私扫描；每类功能都补了 MVP / 增强项 / 边界或 BDD。
+- 已补充实施治理：建议 IPC 通道、renderer API、operation model、schema / fixture 策略、错误模型、Phase 0-6 入口条件与完成定义、阶段优先级、回滚策略、扩展 BDD、推荐测试文件布局、benchmark 矩阵、CI 分层、代码审查检查清单、安全与隐私、兼容与版本策略、依赖选择策略、MVP 文件落点和下一轮实施建议。
+- 验证通过：关键章节 `rg` 覆盖检查；行尾空白 `awk` 检查；`git diff --check -- tasks/todo.md`；未跟踪方案文档 `git diff --check --no-index /dev/null docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md`；Markdown code fence 成对检查；`TODO|TBD|待补|xxx|FIXME` 扫描无命中；`git status --short` 确认仅有本任务记录和 `docs/improve/rust-go/` 变更。
+- 验证备注：第一次执行 untracked 文档的 `git diff --check --no-index` 时误用了 zsh 只读变量名 `status`，命令失败；已改用 `rc` 重跑并通过。
+- 本轮未修改业务代码，未安装依赖，未创建 Rust / Go 工程，未修改根 `README.md` / 根 `AGENTS.md`。当前仍是方案深化文档，不代表 native 功能已经实现。
+
+## 2026-06-01 Rust/Go 优化重构方案文档计划
+
+范围确认：本轮只做当前项目深入探索和 Rust / Go 优化重构方案文档，不改业务代码，不安装依赖，不修改根 `README.md` / 根 `AGENTS.md`。目标是在 `docs/improve/rust-go/` 下生成一篇可执行的优化方案，覆盖前端、后端/主进程、跨语言集成、打包验证和可新增功能。
+
+执行计划：
+
+- [x] 复习 `tasks/lessons.md` 和现有 `docs/improve/` 方案结构，确认文档风格和本轮边界。
+- [x] 扫描 monorepo 结构、Electron main/preload/renderer、shared/core/ui 包和现有 runtime 模块，识别性能、可靠性、可维护性热点。
+- [x] 并行探索主进程/存储、前端/IPC、跨语言集成路线和既有方案文档结构，汇总子任务结论。
+- [x] 评估 Rust / Go / 继续 TypeScript 的适用边界，按收益、风险、迁移成本和开源维护成本排序候选组件。
+- [x] 在 `docs/improve/rust-go/` 生成 Rust / Go 优化重构方案文档，包含前后端、新增功能、阶段路线、验证策略和不建议迁移项。
+- [x] 运行文档验证：路径存在性、关键章节覆盖、`git diff --check` 和 `git status --short`。
+- [x] 在本节追加 Review，记录探索结论、生成文档路径、验证结果和未触达边界。
+
+边界：
+
+- [x] 不修改业务代码。
+- [x] 不安装新依赖。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`，如未来需要公开文档同步再单独征求授权。
+- [x] 不把方案文档描述为已实现功能。
+
+### Review
+
+- 已复习 `tasks/lessons.md` 和 `docs/improve/` 既有方案结构；本轮沿用“结论摘要 / 当前事实 / 风险 / 分阶段路线 / BDD / 验证计划”的文档风格。
+- 已扫描当前仓库结构、Electron main / preload / renderer、`packages/shared`、Agent / Pipeline runtime、JSONL 存储、文件预览、workspace watcher、打包配置和已有 runtime binary 打包策略。
+- 并行探索结论已汇总：Rust / Go 不适合整体重写 Electron、renderer、preload、IPC 合约、Jotai 状态和 Agent / Pipeline 业务编排；值得优先评估的是 JSONL / workspace 搜索索引、Pipeline records tail、大文件分片预览、patch-work 路径安全、Git 输出解析和可选 runtime supervisor。
+- 已生成方案文档：`docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md`。文档覆盖后端/主进程、前端体验、新增功能、NativeRuntimeAdapter 目标架构、数据契约、分阶段路线、BDD 验收、验证计划、风险和不建议迁移项。
+- 验证通过：`rg -n '结论摘要|当前实现事实|目标架构|后端优化方案|前端优化方案|可新增功能实现|数据契约与 IPC|分阶段路线|BDD 验收场景|验证计划|不建议做的事|最小可交付切片|官方参考' docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md`；`git diff --check -- tasks/todo.md`；`awk '/[ \t]$/ ...' docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md tasks/todo.md`；`find docs/improve/rust-go -maxdepth 1 -type f -print`。
+- 本轮未修改业务代码，未安装依赖，未修改根 `README.md` / 根 `AGENTS.md`，未创建 Rust / Go 工程或 native binary；当前产物只是优化方案文档。
+
 ## 2026-05-30 Pipeline v1 完整客户端验证计划
 
 范围确认：本轮只对已完成的客户端与 Pipeline v1 相关能力做完整本机验证，不改业务代码，不重新实现 Markdown / HTML / PDF 报告导出，不运行真实 GitHub remote smoke，不读取或输出 token，不 push，不创建真实 PR，不修改根 `README.md` / 根 `AGENTS.md`。目标是用仓库现有测试、类型检查、构建、打包和 smoke 脚本确认客户端主功能可运行，并把真实通过 / 失败 / gated 项写入 Review。
