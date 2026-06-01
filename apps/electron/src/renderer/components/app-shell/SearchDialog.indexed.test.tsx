@@ -41,6 +41,15 @@ describe('SearchDialog indexed content model', () => {
           matchLength: 2,
         },
       ],
+      workspaceResults: [
+        {
+          name: 'build-report.md',
+          path: 'docs/build-report.md',
+          type: 'file',
+          size: 1024,
+          mtimeMs: 1764590400000,
+        },
+      ],
       pipelineResults: [
         {
           sessionId: 'pipeline-content-hit',
@@ -60,6 +69,7 @@ describe('SearchDialog indexed content model', () => {
 
     expect(results.map((result) => [result.type, result.id, result.recordId])).toEqual([
       ['pipeline', 'pipeline-content-hit', 'pipeline-record-1'],
+      ['workspace', 'docs/build-report.md', 'docs/build-report.md'],
       ['chat', 'chat-content-hit', 'message-2'],
       ['agent', 'agent-content-hit', 'agent-message-1'],
     ])
@@ -69,6 +79,7 @@ describe('SearchDialog indexed content model', () => {
     const groups = buildSearchDialogContentGroups(results)
     expect(groups.map((group) => [group.type, group.label, group.results.length])).toEqual([
       ['pipeline', 'Pipeline 记录', 1],
+      ['workspace', 'Workspace 文件', 1],
       ['chat', 'Chat 消息', 1],
       ['agent', 'Agent 消息', 1],
     ])

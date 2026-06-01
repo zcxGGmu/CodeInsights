@@ -15,11 +15,13 @@ import {
 } from './native-runtime-diagnostics'
 import { TypeScriptEventSearchService } from './ts-event-search-service'
 import { TypeScriptPipelineTailService } from './ts-pipeline-tail-service'
+import { TypeScriptWorkspaceIndexService } from './ts-workspace-index-service'
 import type { NativeRuntimeAdapter } from './native-runtime-types'
 import { getPipelineSessionRecordsPath } from '../config-paths'
 
 const eventSearchService = new TypeScriptEventSearchService()
 const pipelineTailService = new TypeScriptPipelineTailService()
+const workspaceIndexService = new TypeScriptWorkspaceIndexService()
 
 function unsupportedOperation(operation: string): Error {
   return new Error(`Native Runtime ${operation} 尚未接入 TypeScript facade`)
@@ -31,6 +33,10 @@ export function getTypeScriptEventSearchService(): TypeScriptEventSearchService 
 
 export function getTypeScriptPipelineTailService(): TypeScriptPipelineTailService {
   return pipelineTailService
+}
+
+export function getTypeScriptWorkspaceIndexService(): TypeScriptWorkspaceIndexService {
+  return workspaceIndexService
 }
 
 /**
@@ -85,9 +91,10 @@ export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
   }
 
   async indexWorkspace(
-    _input: NativeRuntimeWorkspaceIndexInput,
+    input: NativeRuntimeWorkspaceIndexInput,
+    signal?: AbortSignal,
   ): Promise<NativeRuntimeWorkspaceIndexResult> {
-    throw unsupportedOperation('indexWorkspace')
+    return workspaceIndexService.indexWorkspace(input, signal)
   }
 
   async readFileChunk(

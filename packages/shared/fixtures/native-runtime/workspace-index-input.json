@@ -1,0 +1,9 @@
+{
+  "requestId": "req-workspace-index-001",
+  "workspaceId": "workspace-demo",
+  "rootPath": "/Users/example/.codeinsights/agent-workspaces/default/workspace-files",
+  "additionalPaths": [
+    "/Users/example/project"
+  ],
+  "force": true
+}

@@ -1009,6 +1009,14 @@ export interface FileIndexEntry {
   path: string
   /** 条目类型 */
   type: 'file' | 'dir'
+  /** 文件大小（字节），目录或旧实现可能为空 */
+  size?: number
+  /** 最近修改时间，Unix ms，旧实现可能为空 */
+  mtimeMs?: number
+  /** 搜索来源：工作区内置目录或用户附加目录 */
+  source?: 'workspace' | 'attached'
+  /** 来源根目录内的相对路径 */
+  relativePath?: string
 }
 
 /** 文件搜索结果 */

@@ -98,6 +98,8 @@ import {
   updateSkillFromSource,
 } from '../lib/agent-workspace-manager'
 import { watchAttachedDirectory, unwatchAttachedDirectory } from '../lib/workspace-watcher'
+import { getTypeScriptWorkspaceIndexService } from '../lib/native-runtime/native-runtime-service'
+import { resolveWorkspaceSearchScope } from '../lib/agent-workspace-search-scope'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -1084,113 +1086,26 @@ export function registerAgentIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SEARCH_WORKSPACE_FILES,
     async (_, rootPath: string, query: string, limit = 20, additionalPaths?: string[]): Promise<FileSearchResult> => {
-      const { readdirSync } = await import('node:fs')
-      const { resolve, relative } = await import('node:path')
-
-      const safeRoot = resolve(rootPath)
-      const ignoreDirs = new Set(['node_modules', '.git', 'dist', '.next', '__pycache__', '.venv', 'build', '.cache'])
-      const ignoreFiles = new Set(['.DS_Store', '.Spotlight-V100', '.Trashes', 'Thumbs.db', 'desktop.ini'])
-
-      // 按来源分组收集文件，用于空 query 时均衡分配结果
-      const rootEntries: Array<{ name: string; path: string; type: 'file' | 'dir' }> = []
-      const additionalEntryGroups: Array<Array<{ name: string; path: string; type: 'file' | 'dir' }>> = []
-
-      function scan(
-        dir: string,
-        depth: number,
-        baseRoot: string,
-        target: Array<{ name: string; path: string; type: 'file' | 'dir' }>,
-        useAbsPath: boolean,
-      ): void {
-        if (depth > 10) return
-        try {
-          const items = readdirSync(dir, { withFileTypes: true })
-          for (const item of items) {
-            if (ignoreFiles.has(item.name)) continue
-            if (item.isDirectory() && ignoreDirs.has(item.name)) continue
-
-            const fullPath = resolve(dir, item.name)
-            const entryPath = useAbsPath ? fullPath : relative(baseRoot, fullPath)
-            target.push({
-              name: item.name,
-              path: entryPath,
-              type: item.isDirectory() ? 'dir' : 'file',
-            })
-
-            if (item.isDirectory()) {
-              scan(fullPath, depth + 1, baseRoot, target, useAbsPath)
-            }
-          }
-        } catch {
-          // 忽略无权限的目录
-        }
+      if (typeof rootPath !== 'string' || rootPath.trim().length === 0) {
+        throw new Error('无效的工作区路径')
       }
-
-      // session 目录：相对路径
-      scan(safeRoot, 0, safeRoot, rootEntries, false)
-
-      // 附加目录：绝对路径（消除歧义，agent 可直接使用）
-      if (additionalPaths && additionalPaths.length > 0) {
-        for (const addPath of additionalPaths) {
-          const addRoot = resolve(addPath)
-          const group: Array<{ name: string; path: string; type: 'file' | 'dir' }> = []
-          scan(addRoot, 0, addRoot, group, true)
-          additionalEntryGroups.push(group)
-        }
+      if (typeof query !== 'string') {
+        throw new Error('无效的搜索关键词')
       }
+      const normalizedLimit = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)))
+      const safeAdditionalPaths = Array.isArray(additionalPaths)
+        ? additionalPaths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
+        : []
+      const searchScope = await resolveWorkspaceSearchScope(rootPath, safeAdditionalPaths)
 
-      // 搜索匹配
-      const q = query.toLowerCase()
-
-      if (!q) {
-        // 空 query：从各来源交替取结果，确保均衡展示
-        const allGroups = [rootEntries, ...additionalEntryGroups].filter((g) => g.length > 0)
-        const result: Array<{ name: string; path: string; type: 'file' | 'dir' }> = []
-        const groupCount = allGroups.length
-        if (groupCount > 0) {
-          // 每组至少分配 perGroup 条，剩余名额按需补充
-          const perGroup = Math.max(1, Math.floor(limit / groupCount))
-          for (const group of allGroups) {
-            result.push(...group.slice(0, perGroup))
-          }
-          // 如果还有剩余名额，按组顺序补充
-          if (result.length < limit) {
-            for (const group of allGroups) {
-              for (let i = perGroup; i < group.length && result.length < limit; i++) {
-                result.push(group[i]!)
-              }
-            }
-          }
-        }
-        const allEntries = [rootEntries, ...additionalEntryGroups].flat()
-        return { entries: result.slice(0, limit), total: allEntries.length }
-      }
-
-      const allEntries = [rootEntries, ...additionalEntryGroups].flat()
-      const matched = allEntries.filter((entry) => {
-        const nameLower = entry.name.toLowerCase()
-        const pathLower = entry.path.toLowerCase()
-        if (nameLower.startsWith(q)) return true
-        if (nameLower.includes(q) || pathLower.includes(q)) return true
-        // 模糊匹配
-        let qi = 0
-        for (let i = 0; i < nameLower.length && qi < q.length; i++) {
-          if (nameLower[i] === q[qi]) qi++
-        }
-        return qi === q.length
+      return getTypeScriptWorkspaceIndexService().searchWorkspaceFiles({
+        requestId: `workspace-search-${Date.now()}`,
+        workspaceId: searchScope.workspaceId,
+        rootPath: searchScope.rootPath,
+        query,
+        limit: normalizedLimit,
+        additionalPaths: searchScope.additionalPaths,
       })
-
-      // 排序：精确前缀优先，目录优先，路径短优先
-      matched.sort((a, b) => {
-        const aStartsWith = a.name.toLowerCase().startsWith(q) ? 0 : 1
-        const bStartsWith = b.name.toLowerCase().startsWith(q) ? 0 : 1
-        if (aStartsWith !== bStartsWith) return aStartsWith - bStartsWith
-        if (a.type === 'dir' && b.type !== 'dir') return -1
-        if (a.type !== 'dir' && b.type === 'dir') return 1
-        return a.path.length - b.path.length
-      })
-
-      return { entries: matched.slice(0, limit), total: matched.length }
     }
   )
 }

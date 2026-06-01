@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -83,5 +83,27 @@ describe('native-runtime-service', () => {
 
     expect(latest.records.map((record) => (record as { id: string }).id)).toEqual(['record-3', 'record-4'])
     expect(older.records.map((record) => (record as { id: string }).id)).toEqual(['record-1', 'record-2'])
+  })
+
+  test('indexWorkspace 使用 shared contract rootPath 构建 TypeScript workspace index', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-workspace-index-'))
+    tempDirs.push(root)
+    mkdirSync(join(root, 'src'), { recursive: true })
+    writeFileSync(join(root, 'src', 'target.ts'), '', 'utf-8')
+
+    const result = await nativeRuntimeService.indexWorkspace({
+      requestId: 'workspace-index-contract',
+      workspaceId: 'workspace-1',
+      rootPath: root,
+      force: true,
+    })
+
+    expect(result).toMatchObject({
+      requestId: 'workspace-index-contract',
+      workspaceId: 'workspace-1',
+      indexedFiles: 1,
+      status: 'ready',
+      implementation: 'typescript',
+    })
   })
 })

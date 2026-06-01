@@ -3,6 +3,7 @@ import {
   buildBenchmarkSummary,
   parseBenchmarkArgs,
   percentile,
+  runBenchmark,
 } from './native-runtime-benchmark'
 
 describe('native-runtime-benchmark helpers', () => {
@@ -70,5 +71,30 @@ describe('native-runtime-benchmark helpers', () => {
       p99Ms: 4,
     })
     expect(summary.artifactDir).toBeUndefined()
+  })
+
+  test('runBenchmark 输出 workspace cold build 与 warm search 指标', async () => {
+    const summary = await runBenchmark({
+      records: 10,
+      payloadBytes: 64,
+      workspaceFiles: 20,
+      logBytes: 1024,
+      iterations: 1,
+      keepArtifacts: false,
+    })
+
+    const coldBuild = summary.cases.find((item) => item.name === 'workspace-file-name-index-cold-build')
+    const warmSearch = summary.cases.find((item) => item.name === 'workspace-file-name-search')
+
+    expect(summary.implementation).toBe('typescript')
+    expect(coldBuild).toMatchObject({
+      files: 20,
+    })
+    expect(warmSearch).toMatchObject({
+      files: 20,
+    })
+    expect(coldBuild?.p50Ms).toBeGreaterThanOrEqual(0)
+    expect(warmSearch?.eventLoopDelayMs).toBeGreaterThanOrEqual(0)
+    expect(warmSearch?.memoryDeltaBytes).toBeGreaterThanOrEqual(0)
   })
 })

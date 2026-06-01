@@ -11,7 +11,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { Search, X, MessageSquare, Bot, Archive, Loader2, GitBranch } from 'lucide-react'
+import { Search, X, MessageSquare, Bot, Archive, Loader2, GitBranch, FileText } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { searchDialogOpenAtom } from '@/atoms/search-atoms'
@@ -20,12 +20,15 @@ import { pipelineSessionsAtom } from '@/atoms/pipeline-atoms'
 import {
   agentSessionsAtom,
   agentWorkspacesAtom,
+  currentAgentWorkspaceIdAtom,
+  workspaceAttachedDirectoriesMapAtom,
 } from '@/atoms/agent-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { pipelineRecordFocusIntentAtom } from '@/atoms/pipeline-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import type {
   AgentMessageSearchResult,
+  FileIndexEntry,
   MessageSearchResult,
   PipelineSessionRecordsSearchMatch,
 } from '@codeinsights/shared'
@@ -43,7 +46,7 @@ interface TitleResult {
 export interface SearchDialogContentResult {
   id: string
   title: string
-  type: 'pipeline' | 'chat' | 'agent'
+  type: 'pipeline' | 'workspace' | 'chat' | 'agent'
   snippet: string
   matchStart: number
   matchLength: number
@@ -51,6 +54,9 @@ export interface SearchDialogContentResult {
   recordId?: string
   recordTitle?: string
   stage?: string
+  filePath?: string
+  size?: number
+  mtimeMs?: number
 }
 
 export interface SearchDialogContentGroup {
@@ -65,6 +71,7 @@ export interface BuildSearchDialogContentResultsInput {
   chatResults: MessageSearchResult[]
   agentResults: AgentMessageSearchResult[]
   pipelineResults: PipelineSessionRecordsSearchMatch[]
+  workspaceResults?: FileIndexEntry[]
 }
 
 export interface SearchDialogContentRequestState {
@@ -104,6 +111,26 @@ export function buildSearchDialogContentResults(
       }
     })
 
+  const workspaceContent: SearchDialogContentResult[] = (input.workspaceResults ?? [])
+    .map((result) => {
+      const snippet = result.path
+      const match = resolveSnippetMatch(`${result.name}\n${snippet}`, input.query)
+      return {
+        id: result.path,
+        title: result.name,
+        type: 'workspace' as const,
+        snippet,
+        matchStart: match.matchStart > result.name.length
+          ? match.matchStart - result.name.length - 1
+          : resolveSnippetMatch(snippet, input.query).matchStart,
+        matchLength: match.matchLength,
+        recordId: result.path,
+        filePath: result.path,
+        size: result.size,
+        mtimeMs: result.mtimeMs,
+      }
+    })
+
   const chatContent: SearchDialogContentResult[] = input.chatResults
     .filter((result) => !input.titleIds.has(result.conversationId))
     .map((result) => ({
@@ -130,7 +157,7 @@ export function buildSearchDialogContentResults(
       recordId: result.messageId,
     }))
 
-  return [...pipelineContent, ...chatContent, ...agentContent]
+  return [...pipelineContent, ...workspaceContent, ...chatContent, ...agentContent]
 }
 
 export function buildSearchDialogContentGroups(
@@ -138,10 +165,11 @@ export function buildSearchDialogContentGroups(
 ): SearchDialogContentGroup[] {
   const labels: Record<SearchDialogContentResult['type'], string> = {
     pipeline: 'Pipeline 记录',
+    workspace: 'Workspace 文件',
     chat: 'Chat 消息',
     agent: 'Agent 消息',
   }
-  const order: Array<SearchDialogContentResult['type']> = ['pipeline', 'chat', 'agent']
+  const order: Array<SearchDialogContentResult['type']> = ['pipeline', 'workspace', 'chat', 'agent']
 
   return order
     .map((type) => ({
@@ -219,6 +247,8 @@ export function SearchDialog(): React.ReactElement {
   const conversations = useAtomValue(conversationsAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
+  const currentAgentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const workspaceAttachedDirectoriesMap = useAtomValue(workspaceAttachedDirectoriesMapAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setPipelineRecordFocusIntent = useSetAtom(pipelineRecordFocusIntentAtom)
   const openSession = useOpenSession()
@@ -240,12 +270,17 @@ export function SearchDialog(): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = React.useState(0)
   const [contentResults, setContentResults] = React.useState<SearchDialogContentResult[]>([])
   const [contentLoading, setContentLoading] = React.useState(false)
+  const [workspaceSearchBasePaths, setWorkspaceSearchBasePaths] = React.useState<string[]>([])
   const inputRef = React.useRef<HTMLInputElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const isComposingRef = React.useRef(false)
   const commitTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
   const contentSearchSeqRef = React.useRef(0)
   const pipelineFocusSeqRef = React.useRef(0)
+  const currentWorkspace = React.useMemo(
+    () => agentWorkspaces.find((workspace) => workspace.id === currentAgentWorkspaceId) ?? null,
+    [agentWorkspaces, currentAgentWorkspaceId],
+  )
 
   /**
    * 提交搜索词（微 debounce 60ms）
@@ -284,6 +319,7 @@ export function SearchDialog(): React.ReactElement {
     setQuery('')
     setSearchQuery('')
     setContentResults([])
+    setWorkspaceSearchBasePaths([])
     setContentLoading(false)
   }, [])
 
@@ -314,6 +350,7 @@ export function SearchDialog(): React.ReactElement {
     if (!open || !searchQuery || searchQuery.length < 2) {
       contentSearchSeqRef.current += 1
       setContentResults([])
+      setWorkspaceSearchBasePaths([])
       setContentLoading(false)
       return
     }
@@ -333,12 +370,31 @@ export function SearchDialog(): React.ReactElement {
             limit: 20,
           }),
         ])
+        const workspaceSearch = currentWorkspace
+          ? await (async () => {
+            const workspaceFilesPath = await window.electronAPI.getWorkspaceFilesPath(currentWorkspace.slug)
+            const configuredDirs = workspaceAttachedDirectoriesMap.get(currentWorkspace.id)
+              ?? await window.electronAPI.getWorkspaceDirectories(currentWorkspace.slug)
+            const basePaths = [workspaceFilesPath, ...configuredDirs]
+            const result = await window.electronAPI.searchWorkspaceFiles(
+              workspaceFilesPath,
+              searchQuery,
+              20,
+              configuredDirs.length > 0 ? configuredDirs : undefined,
+            )
+            return { result, basePaths }
+          })().catch((error) => {
+            console.error('[搜索] 工作区文件搜索失败:', error)
+            return { result: { entries: [], total: 0 }, basePaths: [] }
+          })
+          : { result: { entries: [], total: 0 }, basePaths: [] }
         if (!shouldApplySearchDialogContentResults({
           requestId,
           latestRequestId: contentSearchSeqRef.current,
           open,
         })) return
 
+        setWorkspaceSearchBasePaths(workspaceSearch.basePaths)
         const titleIds = new Set(titleResults.map((t) => t.id))
         setContentResults(buildSearchDialogContentResults({
           query: searchQuery,
@@ -346,6 +402,7 @@ export function SearchDialog(): React.ReactElement {
           chatResults: chatResults as MessageSearchResult[],
           agentResults: agentResults as AgentMessageSearchResult[],
           pipelineResults: pipelineResult.matches,
+          workspaceResults: workspaceSearch.result.entries,
         }))
       } catch (error) {
         console.error('[搜索] 内容搜索失败:', error)
@@ -364,7 +421,7 @@ export function SearchDialog(): React.ReactElement {
     }, 300)
 
     return () => { clearTimeout(timer) }
-  }, [open, searchQuery, titleResults])
+  }, [open, searchQuery, titleResults, currentWorkspace, workspaceAttachedDirectoriesMap])
 
   // 全部结果列表
   const allResults = React.useMemo(
@@ -384,9 +441,9 @@ export function SearchDialog(): React.ReactElement {
   // 导航到对话/会话
   const navigateToResult = React.useCallback((result: TitleResult | SearchDialogContentResult) => {
     setOpen(false)
-    setActiveView('conversations')
 
     if (result.type === 'pipeline') {
+      setActiveView('conversations')
       const session = pipelineSessions.find((s) => s.id === result.id)
       const title = session?.title ?? result.title
       if ('recordId' in result && result.recordId) {
@@ -398,16 +455,23 @@ export function SearchDialog(): React.ReactElement {
         })
       }
       openSession('pipeline', result.id, title)
+    } else if (result.type === 'workspace') {
+      const path = 'filePath' in result && result.filePath ? result.filePath : result.id
+      window.electronAPI.previewFile(path, workspaceSearchBasePaths).catch((error) => {
+        console.error('[搜索] 打开工作区文件失败:', error)
+      })
     } else if (result.type === 'chat') {
+      setActiveView('conversations')
       const conv = conversations.find((c) => c.id === result.id)
       const title = conv?.title ?? result.title
       openSession('chat', result.id, title)
     } else {
+      setActiveView('conversations')
       const session = agentSessions.find((s) => s.id === result.id)
       const title = session?.title ?? result.title
       openSession('agent', result.id, title)
     }
-  }, [setOpen, setActiveView, openSession, pipelineSessions, conversations, agentSessions, setPipelineRecordFocusIntent])
+  }, [setOpen, setActiveView, openSession, pipelineSessions, conversations, agentSessions, setPipelineRecordFocusIntent, workspaceSearchBasePaths])
 
   // 键盘导航
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
@@ -442,6 +506,7 @@ export function SearchDialog(): React.ReactElement {
       setQuery('')
       setSearchQuery('')
       setContentResults([])
+      setWorkspaceSearchBasePaths([])
       setContentLoading(false)
       setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -578,6 +643,8 @@ export function SearchDialog(): React.ReactElement {
                             <div className="flex items-center gap-2.5">
                               {result.type === 'pipeline' ? (
                                 <GitBranch size={14} className="flex-shrink-0 text-amber-600/70" />
+                              ) : result.type === 'workspace' ? (
+                                <FileText size={14} className="flex-shrink-0 text-emerald-600/70" />
                               ) : result.type === 'chat' ? (
                                 <MessageSquare size={14} className="flex-shrink-0 text-foreground/40" />
                               ) : (
@@ -589,6 +656,10 @@ export function SearchDialog(): React.ReactElement {
                               {result.type === 'pipeline' && result.recordTitle ? (
                                 <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-amber-500/10 text-[10px] leading-4 text-amber-700 font-medium truncate max-w-[90px]">
                                   {result.recordTitle}
+                                </span>
+                              ) : result.type === 'workspace' && result.size != null ? (
+                                <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-emerald-500/10 text-[10px] leading-4 text-emerald-700 font-medium">
+                                  {Math.max(1, Math.round(result.size / 1024))}KB
                                 </span>
                               ) : null}
                               {result.type === 'agent' && (() => {

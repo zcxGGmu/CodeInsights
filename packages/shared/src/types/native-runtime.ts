@@ -180,7 +180,9 @@ export interface NativeRuntimeWorkspaceIgnoreSummary {
 export interface NativeRuntimeWorkspaceIndexInput {
   requestId: string
   workspaceId: string
-  rootFingerprint: string
+  rootPath: string
+  additionalPaths?: string[]
+  rootFingerprint?: string
   force?: boolean
 }
 

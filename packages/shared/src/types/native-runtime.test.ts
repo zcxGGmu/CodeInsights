@@ -14,6 +14,7 @@ import {
   type NativeRuntimeSearchResult,
   type NativeRuntimeTailInput,
   type NativeRuntimeTailResult,
+  type NativeRuntimeWorkspaceIndexInput,
   type NativeRuntimeWorkspaceIndexResult,
 } from './native-runtime'
 
@@ -53,6 +54,7 @@ describe('native runtime shared contract', () => {
     const tailResult = readFixture<NativeRuntimeTailResult>('tail-result.json')
     const diagnostics = readFixture<NativeRuntimeDiagnostics>('diagnostics.json')
     const operation = readFixture<NativeRuntimeOperationProgress>('operation-progress.json')
+    const workspaceIndexInput = readFixture<NativeRuntimeWorkspaceIndexInput>('workspace-index-input.json')
     const workspaceIndex = readFixture<NativeRuntimeWorkspaceIndexResult>('workspace-index-result.json')
     const fileChunkInput = readFixture<NativeRuntimeFileChunkReadInput>('file-chunk-input.json')
     const fileChunkResult = readFixture<NativeRuntimeFileChunkReadResult>('file-chunk-result.json')
@@ -74,6 +76,8 @@ describe('native runtime shared contract', () => {
     expect(operation.phase).toBe('completed')
     expect(isNativeRuntimeTerminalOperationStatus(operation.phase)).toBe(true)
 
+    expect(workspaceIndexInput.rootPath).toContain('/agent-workspaces/')
+    expect(workspaceIndexInput.additionalPaths?.[0]).toContain('/project')
     expect(workspaceIndex.status).toBe('ready')
     expect(workspaceIndex.ignoreSummary.directories).toContain('node_modules')
 

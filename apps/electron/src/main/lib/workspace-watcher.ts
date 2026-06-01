@@ -13,9 +13,11 @@
 
 import { watch, existsSync } from 'node:fs'
 import type { FSWatcher } from 'node:fs'
+import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { AGENT_IPC_CHANNELS } from '@codeinsights/shared'
 import { getAgentWorkspacesDir } from './config-paths'
+import { getTypeScriptWorkspaceIndexService } from './native-runtime/native-runtime-service'
 
 /** debounce 延迟（ms） */
 const DEBOUNCE_MS = 300
@@ -69,6 +71,7 @@ export function startWorkspaceWatcher(win: BrowserWindow): void {
         }, DEBOUNCE_MS)
       } else {
         // 其他文件变化 → 通知文件浏览器刷新
+        getTypeScriptWorkspaceIndexService().invalidateByPath(join(watchDir, filename))
         if (filesTimer) clearTimeout(filesTimer)
         filesTimer = setTimeout(() => {
           if (!win.isDestroyed()) {
@@ -117,6 +120,8 @@ export function watchAttachedDirectory(dirPath: string): void {
   try {
     const w = watch(dirPath, { recursive: true }, () => {
       if (!mainWin || mainWin.isDestroyed()) return
+
+      getTypeScriptWorkspaceIndexService().invalidateByPath(dirPath)
 
       // 统一防抖：所有附加目录变化合并为一次刷新
       if (attachedFilesTimer) clearTimeout(attachedFilesTimer)

@@ -1,5 +1,135 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 计划
+
+范围确认：本轮从 Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”开始。最新开发基线为 `25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`，最新状态同步恢复入口为 `88f41bc7 docs(rust-go): 同步 Phase 2 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript fallback，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD 实现。
+
+启动基线：
+
+- [x] 已读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、开发跟踪清单和下次启动提示词。
+- [x] 已运行 `git status --short --branch`：当前分支为 `rust-go-refactor`，启动时工作树干净。
+- [x] 已运行 `git log -5 --oneline`：最新提交为 `88f41bc7 docs(rust-go): 同步 Phase 2 后续开发状态与下次启动入口`，本轮以 `88f41bc7` 作为最新已确认恢复入口，以 `25e3e6d1` 作为最新已确认开发基线。
+- [x] 已确认 Phase 0、Phase 1 和 Phase 2 已完成；当前尚未实现 workspace index、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
+
+Phase 3 范围：
+
+- [x] 新增 TypeScript workspace index service，建立可取消、可重建的内存 cache，记录 workspaceId、root fingerprint、相对路径、文件名、文件类型、size、mtime、source root 和 ignore summary。
+- [x] 支持工作区 `workspace-files/` 与工作区级 attached directories；附加目录结果保留绝对路径以兼容现有 Agent 引用语义，内部 cache 记录 source root，renderer 不接触扫描逻辑。
+- [x] 支持默认 ignore 规则：`.git`、`node_modules`、构建产物、缓存目录、系统垃圾文件、超大/二进制可疑文件；不读取文件正文，不索引 secret 文件内容。
+- [x] 支持 root fingerprint 变化、cache 损坏、watcher file change / rename / delete / overflow 的 invalidation；stale 后查询可安全 rebuild 或 fallback 扫描。
+- [x] 将现有 `SEARCH_WORKSPACE_FILES` IPC 从每次递归扫描改为复用 workspace index service，保留旧 preload 签名和返回形状。
+- [x] 将 SearchDialog 接入 workspace file source，结果按 Pipeline / Workspace / Chat / Agent 分组；展示 path、size、last modified，点击结果走安全文件预览 / reveal intent，不直接让 renderer 扫描文件系统。
+- [x] 更新 benchmark runner 的 `workspace-file-name-search` case，使其覆盖首次 build 与热 cache 查询，并记录相对 Phase 0 的 P50 / P95 / P99、event loop delay 和内存变化。
+- [x] 递增受影响 package patch 版本并同步 `bun.lock`。
+- [ ] 阶段完成后同步 Rust / Go development checklist、`next-session-prompt.md`、本节 Review 和必要 lessons，并单独提交 Phase 3 实现；随后单独提交状态同步。
+
+明确不在 Phase 3 做：
+
+- [x] 不实现 Native Runtime Diagnostics 设置页完整 UI；如需要仅保留 service status / rebuild 的最小内部接口，正式 UI 放到 Phase 4。
+- [x] 不实现 Rust sidecar、Go supervisor、native optional package、native-cache schema 或 packaged smoke。
+- [x] 不做文件正文索引、大文件内容搜索、日志 chunk preview 或代码结构索引。
+- [x] 不改变 Agent / Pipeline 会话事实源、workspace files 目录结构或 attached directories 配置格式。
+
+拟触达文件：
+
+- [x] `apps/electron/src/main/lib/native-runtime/ts-workspace-index-service.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [skip] `apps/electron/src/main/lib/native-runtime/native-runtime-types.ts`（现有 adapter interface 已覆盖 `indexWorkspace`，无需修改）
+- [x] `apps/electron/src/main/lib/native-runtime/ts-workspace-index-service.test.ts`
+- [x] `apps/electron/src/main/lib/workspace-watcher.ts`
+- [skip] `apps/electron/src/main/lib/agent-workspace-manager.ts`（本阶段直接复用现有 workspace files / attached directories API，无需新增 helper）
+- [x] `apps/electron/src/main/ipc/agent-handlers.ts`
+- [skip] `apps/electron/src/preload/index.ts`（保留旧 `searchWorkspaceFiles` / `previewFile` 签名，无需扩展）
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx`
+- [skip] `apps/electron/src/renderer/atoms/agent-atoms.ts`（直接用 `previewFile` 打开 workspace 命中，不新增 reveal intent）
+- [skip] `packages/shared/src/types/native-runtime.ts`（Phase 3 复用现有 workspace source kind；只扩展 Agent `FileIndexEntry` metadata）
+- [x] `packages/shared/src/types/agent.ts`（现有 `FileSearchResult` 需要可选 size / mtime / source metadata）
+- [x] `apps/electron/scripts/native-runtime-benchmark.ts`
+- [skip] `apps/electron/scripts/native-runtime-benchmark.test.ts`（现有 summary helper 断言仍适用，无需改动）
+- [x] `apps/electron/package.json`
+- [x] `packages/shared/package.json`（shared Agent DTO 变化）
+- [x] `bun.lock`
+- [ ] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（阶段完成后同步）
+- [ ] `docs/improve/rust-go/next-session-prompt.md`（阶段完成后同步）
+- [ ] `tasks/todo.md`
+- [ ] `tasks/lessons.md`（如本阶段发现新的 workspace index / watcher 安全边界）
+
+测试先行计划：
+
+- [x] 先补 `ts-workspace-index-service` 单测：首次 build、热 cache 查询、空 query 均衡返回、模糊匹配排序、limit、中文路径、root fingerprint 变化、manual rebuild。
+- [x] 先补 ignore / safety 单测：`.git`、`node_modules`、build output、隐藏文件、系统垃圾文件、权限错误、外部 symlink、symlink loop、超大/二进制可疑文件跳过。
+- [x] 先补 watcher invalidation 单测：新增、删除、重命名、批量变更、overflow / unknown event 后标记 stale，stale 查询不会返回明显错误旧结果。
+- [x] 先补旧 IPC 兼容测试：`searchWorkspaceFiles(rootPath, query, limit, additionalPaths)` 返回 `entries` / `total` 与旧排序语义兼容，attached directories 仍返回可直接引用的绝对路径。
+- [x] 先补 SearchDialog renderer model 测试：Workspace 分组展示、与标题命中去重边界、点击 workspace file 结果、快速输入 stale result 丢弃、搜索失败 fallback。
+- [x] 更新 benchmark 测试，确保输出 workspace cold build / warm search 的 implementation、样本规模、P50 / P95 / P99、event loop delay 和 memory。
+
+验证命令：
+
+```bash
+bun test apps/electron/src/main/lib/native-runtime/ts-workspace-index-service.test.ts
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+bun test packages/shared/src/types/native-runtime.test.ts
+bun run --filter='@codeinsights/shared' typecheck
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:preload
+bun run --filter='@codeinsights/electron' build:renderer
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+bun install --frozen-lockfile --dry-run
+git diff --check
+git status --short --branch
+```
+
+验证备注：
+
+- Phase 3 不运行 `cargo test` / `go test`，因为不会创建 Rust / Go 工程。
+- 如果未触达 shared DTO，则可跳过 shared typecheck 和 shared native-runtime test，但 Review 必须说明原因。
+- full benchmark 如耗时过长，可先跑 quick benchmark 定位问题；阶段提交前必须跑用户指定规模的 benchmark 或在 Review 写明阻塞原因。
+- SearchDialog 如果只接入模型层而未新增真实文件打开行为，Review 必须明确剩余 UI / diagnostics 体验进入 Phase 4。
+
+禁止事项：
+
+- [x] 不直接写 Rust / Go。
+- [x] 不安装依赖。
+- [x] 不创建 native binary、Rust crate、Go module、optionalDependencies 或打包配置。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不引入本地数据库，不把 workspace index cache 当作事实源。
+- [x] 不读取或缓存文件正文，不索引被 ignore 的 secret 文件内容。
+- [x] 不在 renderer 中递归扫描文件系统，不让 renderer 知道 native binary path 或 cache path。
+- [x] 不跟随仓库外 symlink，不允许 symlink loop 造成递归扫描。
+- [x] 不改变现有 `SEARCH_WORKSPACE_FILES` preload 签名或强迫 renderer 一次性迁移。
+- [x] 不复制用户真实 `~/.codeinsights/` 数据进 fixture 或 benchmark。
+- [x] 不 push、不创建 PR、不执行真实远端写。
+
+### 实现前 Check-in
+
+- [x] 已将 Phase 3 计划写入本节；用户已明确无需确认，直接进入测试与实现。
+
+### Review
+
+Code review 阻塞项修复计划：
+
+- [x] `SEARCH_WORKSPACE_FILES` 不能信任 renderer 传入的任意 `rootPath` / `additionalPaths`；main 端必须只允许已登记 workspace files、session cwd、工作区附加目录和会话附加目录。
+- [x] 修正 workspace index entry 上限统计，确保单个 root 也不能突破 `MAX_INDEX_ENTRIES`。
+- [x] 为同一 cache key / fingerprint 的并发搜索复用 in-flight build，避免大工作区重复递归扫描。
+- [x] 修正 Native Runtime workspace index shared contract，使 facade 调用不再因缺少 `rootPath` 失败。
+- [x] 增强 benchmark 测试，覆盖 workspace cold build / warm search case。
+- [x] 修复后补回归测试并重跑 Phase 3 验证命令。
+
+- 实现完成：新增 `TypeScriptWorkspaceIndexService`，为 workspace 文件搜索提供可重建内存 cache、root fingerprint、ignore summary、source root、相对路径、文件类型、size、mtime、预计算 lowercase 索引和 `AbortSignal` 取消检查；cache 仍是派生状态，不写本地数据库，不改变 JSON / JSONL 事实源。
+- 旧 IPC 兼容：`SEARCH_WORKSPACE_FILES` 保留原 preload 签名和 `FileSearchResult` 返回形状，主进程 handler 会先把 renderer 传入的 root 限定到已登记 workspace files 或 session cwd，并把 additional paths 过滤到已持久化的工作区 / 会话附加目录，再转调 workspace index service；附加目录仍返回可直接引用的绝对路径，workspace root 结果仍返回相对路径。
+- Code review 修复：新增 `agent-workspace-search-scope` 可测边界，阻止任意路径扫描；workspace index 改为全局 entry 计数，单个 root 也受上限保护；同一 cache key / root fingerprint 的并发 build 复用 in-flight promise；shared `NativeRuntimeWorkspaceIndexInput` 补齐 `rootPath` / `additionalPaths`；benchmark 单测覆盖 cold build / warm search case。
+- Watcher invalidation：`workspace-watcher.ts` 在 `WORKSPACE_FILES_CHANGED` 广播前标记相关 index stale；附加目录 watcher 也会使对应路径 stale。由于现有 watcher 事件无 workspaceId payload，本阶段采用路径级 / broad invalidation，细粒度状态 UI 留给 Phase 4。
+- SearchDialog 接入：全局搜索内容结果新增 Workspace 文件分组，顺序为 Pipeline / Workspace / Chat / Agent；workspace 命中展示文件名、路径和大小，点击后通过现有 `previewFile(filePath, basePaths)` 打开，不在 renderer 扫描文件系统。
+- DTO 与版本：`FileIndexEntry` 扩展可选 `size` / `mtimeMs` / `source` / `relativePath` metadata；`@codeinsights/electron` 升到 `0.0.134`，`@codeinsights/shared` 升到 `0.1.61`，`bun.lock` 已同步；未新增依赖。
+- Benchmark 对比：同为 macOS arm64 / Bun 1.3.13 / 50k records / 100k workspace files / 500MB log / iterations 3。Phase 3 新增真实文件系统 cold build：`workspace-file-name-index-cold-build` P50 4912.619ms / P95 5884.354ms / P99 5884.354ms / event loop delay 6.583ms / memory 76,152,832 bytes。热缓存 `workspace-file-name-search` P50 42.658ms / P95 50.541ms / P99 50.541ms / event loop delay 1.694ms / memory 376,832 bytes，低于方案中首次索引后 P95 < 150ms 的目标。Phase 0 `workspace-file-name-search` 为 path-list 合成基线，P50 11.366ms / P95 13.074ms / event loop delay 13.105ms，不是实际文件系统扫描，因此本阶段结论以 Phase 3 cold / warm 分离后的真实性能为准。
+- 验证通过：`bun test apps/electron/src/main/lib/agent-workspace-search-scope.test.ts apps/electron/src/main/lib/native-runtime/ts-workspace-index-service.test.ts apps/electron/src/main/lib/native-runtime apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx apps/electron/scripts/native-runtime-benchmark.test.ts packages/shared/src/types/native-runtime.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 边界确认：本阶段未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未引入本地数据库，未读取 / 缓存文件正文，未跟随外部 symlink，未改 preload 签名，未 push，未创建 PR。
+- 后续入口：Phase 4 前端可见体验、Jotai 状态和 diagnostics。
+
 ## 2026-06-01 Rust/Go Phase 2 Pipeline Records Cursor / Tail 与全局搜索接入计划
 
 范围确认：本轮从 Phase 2“Pipeline records cursor / tail 与全局搜索接入”开始。最新开发基线为 `58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`，最新状态同步恢复入口为 `f7533938 docs(rust-go): 同步 Phase 1 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript fallback，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD 实现。

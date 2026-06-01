@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 import { TypeScriptPipelineTailService } from '../src/main/lib/native-runtime/ts-pipeline-tail-service'
+import { TypeScriptWorkspaceIndexService } from '../src/main/lib/native-runtime/ts-workspace-index-service'
 
 export interface BenchmarkOptions {
   records: number
@@ -144,11 +145,12 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
   }
 }
 
-async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary> {
+export async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary> {
   const startedAt = new Date().toISOString()
   const artifactDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-benchmark-'))
   const eventSearchService = new TypeScriptEventSearchService()
   const pipelineTailService = new TypeScriptPipelineTailService()
+  const workspaceIndexService = new TypeScriptWorkspaceIndexService()
 
   try {
     const fixtures = generateFixtures(artifactDir, options)
@@ -210,10 +212,46 @@ async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary
     ))
 
     cases.push(await measureCase(
+      'workspace-file-name-index-cold-build',
+      { files: options.workspaceFiles, bytes: fixtures.workspaceBytes },
+      options.iterations,
+      async () => {
+        const service = new TypeScriptWorkspaceIndexService()
+        const result = await service.searchWorkspaceFiles({
+          requestId: 'benchmark-workspace-cold',
+          workspaceId: 'workspace-benchmark',
+          rootPath: fixtures.workspaceRootPath,
+          query: 'target',
+          limit: 100,
+          forceRebuild: true,
+        })
+        return result.total
+      },
+    ))
+
+    await workspaceIndexService.searchWorkspaceFiles({
+      requestId: 'benchmark-workspace-warm-prime',
+      workspaceId: 'workspace-benchmark',
+      rootPath: fixtures.workspaceRootPath,
+      query: 'target',
+      limit: 100,
+      forceRebuild: true,
+    })
+
+    cases.push(await measureCase(
       'workspace-file-name-search',
       { files: options.workspaceFiles, bytes: fixtures.workspaceBytes },
       options.iterations,
-      () => searchWorkspacePathList(fixtures.workspaceListPath, 'target'),
+      async () => {
+        const result = await workspaceIndexService.searchWorkspaceFiles({
+          requestId: 'benchmark-workspace-warm',
+          workspaceId: 'workspace-benchmark',
+          rootPath: fixtures.workspaceRootPath,
+          query: 'target',
+          limit: 100,
+        })
+        return result.total
+      },
     ))
 
     cases.push(await measureCase(
@@ -244,7 +282,7 @@ interface GeneratedFixtures {
   agentBytes: number
   pipelineJsonlPath: string
   pipelineBytes: number
-  workspaceListPath: string
+  workspaceRootPath: string
   workspaceBytes: number
   largeLogPath: string
 }
@@ -266,14 +304,14 @@ function generateFixtures(rootDir: string, options: BenchmarkOptions): Generated
   const chatJsonlPath = join(rootDir, 'chat-search-large-history.jsonl')
   const agentJsonlPath = join(rootDir, 'agent-runtime-search.jsonl')
   const pipelineJsonlPath = join(rootDir, 'pipeline-tail-large-records.jsonl')
-  const workspaceListPath = join(rootDir, 'workspace-file-name-search.txt')
+  const workspaceRootPath = join(rootDir, 'workspace-file-name-search')
   const largeLogPath = join(rootDir, 'large-log-preview.log')
 
   const payload = buildPayload(options.payloadBytes)
   writeFileSync(chatJsonlPath, buildChatJsonl(options.records, payload), 'utf-8')
   writeFileSync(agentJsonlPath, buildAgentJsonl(options.records, payload), 'utf-8')
   writeFileSync(pipelineJsonlPath, buildPipelineJsonl(options.records, payload), 'utf-8')
-  writeFileSync(workspaceListPath, buildWorkspacePathList(options.workspaceFiles), 'utf-8')
+  const workspaceBytes = buildWorkspaceTree(workspaceRootPath, options.workspaceFiles)
   writeFileSync(largeLogPath, buildLargeLog(options.logBytes), 'utf-8')
 
   return {
@@ -283,8 +321,8 @@ function generateFixtures(rootDir: string, options: BenchmarkOptions): Generated
     agentBytes: readFileSync(agentJsonlPath).byteLength,
     pipelineJsonlPath,
     pipelineBytes: readFileSync(pipelineJsonlPath).byteLength,
-    workspaceListPath,
-    workspaceBytes: readFileSync(workspaceListPath).byteLength,
+    workspaceRootPath,
+    workspaceBytes,
     largeLogPath,
   }
 }
@@ -335,13 +373,18 @@ function buildPipelineJsonl(records: number, payload: string): string {
   return `${lines.join('\n')}\n`
 }
 
-function buildWorkspacePathList(files: number): string {
-  const lines: string[] = []
+function buildWorkspaceTree(rootPath: string, files: number): number {
+  mkdirSync(rootPath, { recursive: true })
+  let bytes = 0
   for (let index = 0; index < files; index += 1) {
     const marker = index % 17 === 0 ? 'target-' : ''
-    lines.push(`packages/demo-${index % 23}/src/${marker}file-${index}.ts`)
+    const relativePath = `packages/demo-${index % 23}/src/${marker}file-${index}.ts`
+    const filePath = join(rootPath, relativePath)
+    mkdirSync(join(filePath, '..'), { recursive: true })
+    writeFileSync(filePath, '', 'utf-8')
+    bytes += relativePath.length + 1
   }
-  return `${lines.join('\n')}\n`
+  return bytes
 }
 
 function buildLargeLog(bytes: number): string {
@@ -386,14 +429,6 @@ async function measureCase(
     eventLoopDelayMs: Math.max(...eventLoopDelays),
     memoryDeltaBytes: maxMemoryDeltaBytes,
   }
-}
-
-function searchWorkspacePathList(filePath: string, query: string): number {
-  const queryLower = query.toLowerCase()
-  return readFileSync(filePath, 'utf-8')
-    .split('\n')
-    .filter((line) => line.toLowerCase().includes(queryLower))
-    .length
 }
 
 function readLargeLogPreview(filePath: string): number {
