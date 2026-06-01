@@ -1,5 +1,24 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go Phase 3 状态同步计划
+
+范围确认：Phase 3 实现提交已完成，提交为 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`。本轮只做阶段收尾状态同步：更新 Rust / Go development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，并单独提交。继续不修改根 `README.md` / 根 `AGENTS.md`，不写 Rust / Go，不安装依赖，不创建 native binary。
+
+- [x] 已确认 Phase 3 实现提交 `4ec586fc` 位于当前分支历史。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`：标记 Phase 3 完成、写明完成项 / 未完成项 / 验证 / benchmark / 下一阶段入口。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`：将最新开发基线切到 `4ec586fc`，下一阶段入口切到 Phase 4。
+- [x] 更新 `tasks/lessons.md`：记录 workspace index 路径白名单、容量上限和 in-flight build 复用边界。
+- [x] 更新本节 Review，明确状态同步验证与禁止事项。
+- [x] 验证：`git diff --check`、`git status --short --branch`。
+- [x] 状态同步改动已准备为单独提交。
+
+### Review
+
+- 状态同步内容：Phase 3 已完成并提交为 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`；下一阶段入口为 Phase 4“前端可见体验、Jotai 状态和 diagnostics”。
+- 文档边界：仅更新 Rust / Go improvement docs、`tasks/todo.md` 与 `tasks/lessons.md`；未修改根 `README.md` / 根 `AGENTS.md`。
+- 验证通过：`git diff --check`；`git status --short --branch` 显示仅有本轮状态同步文档改动。
+- 禁止事项：未写 Rust / Go，未安装依赖，未创建 native binary，未 push，未创建 PR。
+
 ## 2026-06-01 Rust/Go Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 计划
 
 范围确认：本轮从 Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”开始。最新开发基线为 `25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`，最新状态同步恢复入口为 `88f41bc7 docs(rust-go): 同步 Phase 2 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript fallback，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD 实现。

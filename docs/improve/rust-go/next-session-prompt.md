@@ -2,8 +2,8 @@
 
 > 更新时间：2026-06-01
 > 当前分支：`rust-go-refactor`
-> 最新已确认开发基线：`25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`。
-> 最新已确认恢复入口：`25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 最新已确认开发基线：`4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`。
+> 最新已确认恢复入口：`4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
 > 说明：如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
 
 ## 当前真实进度
@@ -21,10 +21,12 @@
 - [x] Phase 2：已新增 TypeScript Pipeline cursor tail service，支持 latest / before / after、cursor schema version、anchor 校验、截断安全回退、坏行/空行/部分写入容错，并保留旧 afterIndex 兼容路径。
 - [x] Phase 2 SearchDialog：已接入 Pipeline 内容搜索，按 Pipeline / Chat / Agent 分组展示，点击 Pipeline 内容命中可打开 session 并聚焦 record；快速搜索和 records tail 均有 generation 防护。
 - [x] Phase 2 benchmark：macOS arm64 / Bun 1.3.13，50k records、100k workspace paths、500MB log，`pipeline-tail-large-records` P50 2.662ms / P95 9.663ms / P99 9.663ms / event loop delay 9.732ms / memory 491,520 bytes。
+- [x] Phase 3：已新增 TypeScript workspace 文件索引 cache，支持 root fingerprint、ignore 规则、entry 上限、in-flight build 复用、watcher invalidation、workspace / attached source metadata 和 shared workspace index contract input。
+- [x] Phase 3 SearchDialog：已接入 Workspace 文件结果分组，点击结果走现有 `previewFile(path, basePaths)`；main 端通过 `agent-workspace-search-scope` 白名单阻止 renderer 任意路径扫描。
+- [x] Phase 3 benchmark：macOS arm64 / Bun 1.3.13，50k records、100k workspace files、500MB log，`workspace-file-name-index-cold-build` P50 4912.619ms / P95 5884.354ms / P99 5884.354ms；热缓存 `workspace-file-name-search` P50 42.658ms / P95 50.541ms / P99 50.541ms / event loop delay 1.694ms。
 
 未完成：
 
-- [ ] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
 - [ ] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
 - [ ] Phase 5：Rust search sidecar 试点。
 - [ ] Phase 6：大文件 / 日志 chunk preview。
@@ -34,8 +36,8 @@
 
 关键边界：
 
-- [ ] 当前没有任何 Rust / Go 功能实现，也没有 native binary；Phase 0 / Phase 1 / Phase 2 只建立 TypeScript 契约、diagnostics、benchmark 基线、搜索 fallback facade、Pipeline cursor tail 和 SearchDialog Pipeline 搜索。
-- [ ] 不要直接开始写 Rust / Go；Phase 3 仍然先做 TypeScript fallback 的 workspace 文件索引、ignore 规则、watcher invalidation、SearchDialog workspace file source 和 benchmark 对比。
+- [ ] 当前没有任何 Rust / Go 功能实现，也没有 native binary；Phase 0 / Phase 1 / Phase 2 / Phase 3 只建立 TypeScript 契约、diagnostics、benchmark 基线、搜索 fallback facade、Pipeline cursor tail、SearchDialog Pipeline / Workspace 搜索和 workspace index cache。
+- [ ] 不要直接开始写 Rust / Go；Phase 4 仍然先做 TypeScript fallback 的前端可见体验、Jotai diagnostics 状态、rebuild / fallback / error UI 和可取消搜索体验。
 - [ ] 不修改根 `README.md` / 根 `AGENTS.md`，除非用户明确授权。
 - [ ] 不安装依赖；如果后续确需 Rust crate / Go package，先做依赖搜索和 decision record。
 - [ ] 不 push、不创建 PR、不执行真实远端写，除非用户明确要求。
@@ -45,9 +47,9 @@
 ```text
 请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。
 
-当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”和 Phase 2“Pipeline records cursor / tail 与全局搜索接入”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；Phase 1 已新增 jsonl-event-reader.ts、ts-event-search-service.ts 和 native-runtime-service.ts，统一 Chat / Agent / Pipeline TypeScript 搜索 fallback facade，并保留旧 IPC / preload / renderer 行为兼容；Phase 2 已新增 TypeScript Pipeline cursor tail service，支持 latest / before / after、cursor schema version、anchor 校验、截断安全回退、坏行/空行/部分写入容错，SearchDialog 已接入 Pipeline 内容搜索并支持 record 聚焦。目前尚未实现 workspace index、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入；请启动后运行 git status --short --branch 和 git log -5 --oneline，若存在更新的 Rust / Go 状态同步提交，以最新提交为准。
+当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”和 Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；Phase 1 已新增 jsonl-event-reader.ts、ts-event-search-service.ts 和 native-runtime-service.ts，统一 Chat / Agent / Pipeline TypeScript 搜索 fallback facade，并保留旧 IPC / preload / renderer 行为兼容；Phase 2 已新增 TypeScript Pipeline cursor tail service，支持 latest / before / after、cursor schema version、anchor 校验、截断安全回退、坏行/空行/部分写入容错，SearchDialog 已接入 Pipeline 内容搜索并支持 record 聚焦；Phase 3 已新增 TypeScript workspace 文件索引 cache、main 端路径白名单、watcher invalidation 和 SearchDialog Workspace 文件分组。目前尚未实现 Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache；请启动后运行 git status --short --branch 和 git log -5 --oneline，若存在更新的 Rust / Go 状态同步提交，以最新提交为准。
 
-下一步从 Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”开始。请先在 tasks/todo.md 写 Phase 3 计划，明确范围、触达文件、验证命令和禁止事项；用户已明确计划写清后无需等待确认。不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。Phase 3 应复用 Phase 1 EventSearchService、Phase 2 SearchDialog 分组能力和 Phase 0 benchmark 基线，在 TypeScript 内建立 workspace 文件索引、ignore 规则、watcher invalidation、可重建 cache、SearchDialog workspace file source，并记录相对 Phase 0 的 workspace-file-name-search 性能变化。
+下一步从 Phase 4“前端可见体验、Jotai 状态和 diagnostics”开始。请先在 tasks/todo.md 写 Phase 4 计划，明确范围、触达文件、验证命令和禁止事项；用户已明确计划写清后无需等待确认。不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。Phase 4 应复用 Phase 0 NativeRuntime DTO、Phase 1 facade、Phase 2 / Phase 3 SearchDialog request generation 与 workspace index service，在 TypeScript 内补齐 native runtime status / diagnostics / rebuild / clear-cache 的前端可见体验、Jotai 状态、loading / empty / fallback / error / stale request 状态和可取消搜索体验。
 
 请遵守阶段纪律：每完成一个阶段并通过验证后，立即更新 development checklist、next-session-prompt.md、tasks/todo.md Review 和必要的 lessons，然后单独提交该阶段相关文件，提交信息使用详细中文。
 ```

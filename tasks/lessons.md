@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-01 Rust / Go Workspace index 路径白名单与容量上限
+
+- `SEARCH_WORKSPACE_FILES` 这类历史上接收 renderer 路径的 IPC，接入 cache / index 后不能只复用旧签名；main 端必须从已登记 workspace / session / attached directories 派生白名单并用 realpath 对齐，renderer 传入路径只能作为待匹配 intent，不能作为扫描事实源。
+- Workspace index 的容量上限要用跨 root 的全局 entry 计数，而不是等单个 root 扫描完成后再检查；否则一个大 root 可以突破上限并造成内存 / 时间放大。
+- 对大 workspace 的首次索引要复用同一 cache key / fingerprint 的 in-flight build；只靠 SearchDialog debounce 不足以防止并发递归扫描。
+
 ## 2026-06-01 Rust / Go Pipeline cursor tail 安全边界
 
 - Pipeline / JSONL cursor 不能只校验 byte offset 和 schema version；只要 cursor 携带 recordId / createdAt，就必须用它校验 anchor record。文件截断后重新写入到超过旧 offset 时，旧 cursor 也要判为 `cursorInvalid` 并回退到安全窗口。
