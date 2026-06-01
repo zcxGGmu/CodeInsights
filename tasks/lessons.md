@@ -2,6 +2,7 @@
 
 ## 2026-06-01 Rust / Go 阶段收尾状态同步
 
+- Rust / Go 优化重构从 Phase 1 起，阶段计划写入 `tasks/todo.md` 后不再等待用户确认；只要范围、禁止事项和验证命令已写清，就直接按 TDD 开始实现。只有遇到计划外架构变更、需要安装依赖、需要写 Rust / Go、需要 native binary、需要修改根 `README.md` / `AGENTS.md` 或用户明确要求暂停时，才停下来重新规划或请示。
 - Rust / Go 优化重构每完成一个 Phase 并通过验证、完成阶段提交后，必须立即执行独立状态同步：更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，明确最新开发基线、完成项、未完成项、下一阶段入口、验证结果和禁止事项。
 - Rust / Go 状态同步也要单独提交，提交信息使用详细中文；不能把 Phase 实现提交、状态文档同步和下一阶段计划混在一个大提交里。
 - 最终回复必须给一份可直接复制给下一次 Codex 的启动提示词；提示词要包含真实开发基线提交号、要求启动后运行 `git status --short --branch` / `git log -5 --oneline`、下一阶段入口和当前禁止事项。

@@ -9,10 +9,10 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-01
-> 最新开发基线：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`。
-> 最新已确认恢复入口：`987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
-> 当前结论：Rust / Go 优化重构 Phase 0 已建立可回归基线，但尚未实现 EventSearchService、Pipeline cursor tail、workspace index、SearchDialog 接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
-> 当前策略：先做 TypeScript 抽象、contract fixtures、benchmark 和 UI 状态收敛；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
+> 最新开发基线：`58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`。
+> 最新已确认恢复入口：`58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 当前结论：Rust / Go 优化重构 Phase 0 和 Phase 1 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，并在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade。尚未实现 Pipeline cursor tail、workspace index、SearchDialog Pipeline 内容接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
+> 当前策略：下一阶段先做 Phase 2 Pipeline records cursor / tail 与 SearchDialog Pipeline 内容接入，继续复用 Phase 1 EventSearchService 和 Phase 0 benchmark 基线；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
 
@@ -22,7 +22,7 @@
 - [x] 阶段提交纪律已固化：`fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
 - [x] 已补齐 Rust / Go 下次启动提示词入口：`docs/improve/rust-go/next-session-prompt.md`。
 - [x] Phase 0：基线、契约与 benchmark。
-- [ ] Phase 1：TypeScript fallback 与 EventSearchService 重构。
+- [x] Phase 1：TypeScript fallback 与 EventSearchService 重构。
 - [ ] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [ ] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
 - [ ] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
@@ -37,7 +37,7 @@
 - [x] NativeRuntime shared DTO / IPC 草案已完成；preload API 尚未实现。
 - [x] 主进程 `NativeRuntimeAdapter` TypeScript interface 与 diagnostics 空实现已完成。
 - [x] Contract fixtures 和 benchmark runner 已完成；基线数字见 Phase 0 Review。
-- [ ] EventSearchService 尚未统一 Chat / Agent / Pipeline 搜索。
+- [x] EventSearchService 已统一 Chat / Agent / Pipeline 搜索 facade，并保留旧 IPC / preload / renderer 行为兼容。
 - [ ] Pipeline records tail 尚未改为 cursor / offset 读取。
 - [ ] Workspace 文件索引尚未建立可取消、可重建的缓存层。
 - [ ] SearchDialog 尚未接入 Pipeline 内容搜索、索引状态、分页和 stale result 丢弃。
@@ -51,10 +51,10 @@
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；下一步从 Phase 1 TypeScript fallback 与 EventSearchService 重构开始”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark` 或其后的 Rust / Go 状态同步提交。
-4. 如果开始 Phase 1，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项。
-5. 不要直接写 Rust / Go。Phase 1 仍然只做 TypeScript fallback、EventSearchService、旧搜索行为回归测试和 fixture parity。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；下一步从 Phase 2 Pipeline records cursor / tail 与 SearchDialog Pipeline 内容接入开始”。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构` 或其后的 Rust / Go 状态同步提交。
+4. 如果开始 Phase 2，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项；用户已明确计划写清后无需等待确认。
+5. 不要直接写 Rust / Go。Phase 2 仍然只做 TypeScript fallback 的 Pipeline cursor tail、SearchDialog Pipeline 内容搜索、旧行为回归测试和 benchmark 对比。
 
 ## 使用规则
 
@@ -120,7 +120,7 @@
 | 里程碑 | 阶段 | 目标 | 初始状态 | 是否必须 |
 |--------|------|------|----------|----------|
 | M0 | Phase 0 | 建立基线、契约草案、benchmark 和 fixture | [x] | 必须 |
-| M1 | Phase 1 | 收敛 TS fallback 与 EventSearchService | [ ] | 必须 |
+| M1 | Phase 1 | 收敛 TS fallback 与 EventSearchService | [x] | 必须 |
 | M2 | Phase 2 | Pipeline records cursor / tail 与 SearchDialog 接入 | [ ] | 必须 |
 | M3 | Phase 3 | Workspace 文件索引 TS cache 与 watcher invalidation | [ ] | 必须 |
 | M4 | Phase 4 | 前端索引状态、诊断、可取消搜索和大文件入口 | [ ] | 必须 |
@@ -242,94 +242,108 @@ git status --short --branch
 
 ### 阶段状态
 
-- [ ] 阶段开始
-- [ ] 测试先行完成
-- [ ] 实现完成
-- [ ] 验证完成
-- [ ] 阶段 Review 完成
-- [ ] 阶段提交完成
+- [x] 阶段开始
+- [x] 测试先行完成
+- [x] 实现完成
+- [x] 验证完成
+- [x] 阶段 Review 完成
+- [x] 阶段提交完成
 
 ### 目标
 
-先在 TypeScript 内把搜索、tail 和 diagnostics 接口收敛到可替换 facade，确保未来 Rust sidecar 只是替换实现，而不是改变产品语义。
+先在 TypeScript 内把 Chat / Agent / Pipeline 搜索接口收敛到可替换 facade，确保未来 Rust sidecar 只是替换实现，而不是改变产品语义。Pipeline cursor tail 保留到 Phase 2。
 
 ### 入口条件
 
-- [ ] Phase 0 已完成并提交。
-- [ ] benchmark 已记录当前 JSONL 搜索和 tail 基线。
-- [ ] shared DTO 已稳定，至少覆盖 search、tail、diagnostics、error。
-- [ ] 已确认本阶段仍不写 Rust / Go。
+- [x] Phase 0 已完成并提交。
+- [x] benchmark 已记录当前 JSONL 搜索和 tail 基线。
+- [x] shared DTO 已稳定，至少覆盖 search、tail、diagnostics、error。
+- [x] 已确认本阶段仍不写 Rust / Go。
 
 ### 契约任务
 
-- [ ] 将旧搜索返回字段映射到新的 `IndexedSearchResult`，保证 renderer 兼容。
-- [ ] 定义 source kind：`chat_message`、`agent_message`、`pipeline_record`、`workspace_file`。
-- [ ] 定义排序策略：默认按 updatedAt / relevance / source priority，且稳定可测试。
-- [ ] 定义坏 JSONL 行处理策略：跳过并记录 diagnostics，不让整次搜索失败。
-- [ ] 定义 request cancellation 语义：abort 后不写结果、不刷新缓存、不覆盖 UI。
+- [x] 将旧搜索返回字段映射到新的 NativeRuntime search result，保证旧 IPC / renderer 兼容。
+- [x] 定义 source kind：`chat_message`、`agent_message`、`pipeline_record`、`workspace_file`、`patch_work_file`。
+- [x] 定义稳定排序策略：Chat / Agent 保持旧 source 顺序和每会话第一条命中，Pipeline 保持旧分页顺序。
+- [x] 定义坏 JSONL 行处理策略：跳过并记录 diagnostics，不让整次搜索失败。
+- [x] 定义 request cancellation 语义：abort 后抛出可识别错误，不返回旧结果。
 
 ### 后端任务
 
-- [ ] 新增 `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts` facade。
-- [ ] 新增 `ts-event-search-service.ts`，统一 Chat / Agent / Pipeline JSONL 搜索。
-- [ ] 新增 `jsonl-event-reader.ts` 或等价 helper，集中处理 JSONL 读取、坏行、cursor 和 source metadata。
-- [ ] 将 `jsonl-search.ts` 内部转调新 service，保留旧函数入口降低破坏面。
-- [ ] 将 Chat / Agent / Pipeline 现有搜索 IPC handler 内部改为调用新 facade。
-- [ ] 增加 per-request generation，防止旧查询覆盖新查询。
-- [ ] 增加内存缓存上限和 LRU / TTL 策略，避免大历史搜索导致常驻内存膨胀。
+- [x] 新增 `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts` facade。
+- [x] 新增 `ts-event-search-service.ts`，统一 Chat / Agent / Pipeline JSONL 搜索。
+- [x] 新增 `jsonl-event-reader.ts` helper，集中处理 JSONL 读取、坏行、source metadata 和 AbortSignal。
+- [x] 将 `jsonl-search.ts` 内部转调新 reader / service，保留旧函数入口降低破坏面。
+- [x] 将 Chat / Agent / Pipeline 旧搜索入口内部改为调用统一 TypeScript fallback service；IPC handler、preload API 和 renderer 行为未变。
+- [skip] per-request generation 保留到 Phase 2 / Phase 4，因为本阶段未改 renderer 搜索状态和 SearchDialog。
+- [skip] 内存缓存上限和 LRU / TTL 保留到 workspace index / native cache 阶段；Phase 1 未引入常驻搜索 cache。
 
 ### 测试任务
 
-- [ ] 为 Chat JSONL 搜索建立旧字段兼容测试。
-- [ ] 为 Agent SDK message / tool result 搜索建立 fixture 测试。
-- [ ] 为 Pipeline records 搜索建立 fixture 测试。
-- [ ] 覆盖坏 JSONL 行、空文件、缺失会话文件、权限错误、超大 snippet 截断。
-- [ ] 覆盖 abort 后不返回结果和不更新缓存。
-- [ ] 覆盖同 query 多 source 聚合排序稳定性。
+- [x] 为 Chat JSONL 搜索建立旧字段兼容测试。
+- [x] 为 Agent SDK message / tool result 搜索建立 fixture 测试。
+- [x] 为 Pipeline records 搜索建立 fixture 测试。
+- [x] 覆盖坏 JSONL 行、空文件、缺失会话文件、读取失败 diagnostics、超大 snippet 截断。
+- [x] 覆盖 abort 后不返回结果。
+- [x] 覆盖同 query 多 source 聚合排序稳定性。
 
 ### 触达文件
 
-- [ ] `apps/electron/src/main/lib/jsonl-search.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/ts-event-search-service.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/jsonl-event-reader.ts`
-- [ ] `apps/electron/src/main/ipc/*-handlers.ts`
-- [ ] `apps/electron/src/main/lib/*session-manager.ts`
-- [ ] `packages/shared/src/types/native-runtime.ts`
-- [ ] `apps/electron/package.json`
-- [ ] `bun.lock`
+- [x] `apps/electron/src/main/lib/jsonl-search.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/ts-event-search-service.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/jsonl-event-reader.ts`
+- [skip] `apps/electron/src/main/ipc/*-handlers.ts`：旧 handler 签名和通道未变，继续调用 manager / service facade。
+- [x] `apps/electron/src/main/lib/conversation-manager.ts`
+- [x] `apps/electron/src/main/lib/agent-session-manager.ts`
+- [x] `apps/electron/src/main/lib/pipeline-session-manager.ts`
+- [x] `packages/shared/src/types/native-runtime.ts`
+- [x] `packages/shared/fixtures/native-runtime/`
+- [x] `apps/electron/scripts/native-runtime-benchmark.ts`
+- [x] `apps/electron/package.json`
+- [x] `packages/shared/package.json`
+- [x] `bun.lock`
 
 ### 验证命令
 
 ```bash
-bun test apps/electron/src/main/lib/jsonl-search.test.ts
-bun test apps/electron/src/main/lib/native-runtime
-bun test apps/electron/src/main/lib/agent-session-manager.test.ts
-bun test apps/electron/src/main/lib/pipeline-session-manager.test.ts
+bun test apps/electron/src/main/lib/jsonl-search.test.ts apps/electron/src/main/lib/native-runtime apps/electron/src/main/lib/conversation-manager.test.ts apps/electron/src/main/lib/agent-session-manager.test.ts apps/electron/src/main/lib/pipeline-session-manager.test.ts packages/shared/src/types/native-runtime.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts
+bun run --filter='@codeinsights/shared' typecheck
 bun run --filter='@codeinsights/electron' typecheck
 bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+bun install --frozen-lockfile --dry-run
 git diff --check
-git status --short
+git status --short --branch
 ```
 
 ### 完成定义
 
-- [ ] Chat / Agent / Pipeline 内容搜索都能通过统一 TS fallback 路径完成。
-- [ ] 旧 IPC 行为兼容，renderer 不需要一次性大改。
-- [ ] 大 JSONL fixture 下搜索不再重复实现多套解析逻辑。
-- [ ] abort、坏行、缺失文件、超大结果都有测试覆盖。
-- [ ] Review 中记录 Phase 1 相对 Phase 0 的性能变化。
+- [x] Chat / Agent / Pipeline 内容搜索都能通过统一 TS fallback 路径完成。
+- [x] 旧 IPC 行为兼容，renderer 不需要一次性大改。
+- [x] 大 JSONL fixture 下搜索不再重复实现多套解析逻辑。
+- [x] abort、坏行、缺失文件、超大结果都有测试覆盖。
+- [x] Review 中记录 Phase 1 相对 Phase 0 的性能变化。
 
 ### 禁止事项
 
-- [ ] 不删除旧 IPC 通道。
-- [ ] 不在本阶段新增 native binary。
-- [ ] 不改变 JSON / JSONL 事实源格式，除非提供兼容迁移和测试。
-- [ ] 不把搜索 cache 当作唯一数据源。
+- [x] 不删除旧 IPC 通道。
+- [x] 不在本阶段新增 native binary。
+- [x] 不改变 JSON / JSONL 事实源格式。
+- [x] 不把搜索 cache 当作唯一数据源；本阶段未引入搜索 cache。
 
 ### 阶段 Review
 
-待 Phase 1 完成后追加。
+- 阶段提交：已提交 `58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`。
+- 实现完成：新增 `jsonl-event-reader.ts`、`ts-event-search-service.ts` 和 `native-runtime-service.ts`；`jsonl-search.ts` 保留旧入口并转调新 reader；Chat / Agent / Pipeline 旧搜索入口内部改为统一 TypeScript fallback service，旧 IPC 通道、preload 方法和 renderer 行为未改。
+- 契约完成：`NativeRuntimeSearchSourceKind` 最小扩展到 `chat_message` / `agent_message` / `pipeline_record` / `workspace_file` / `patch_work_file`；shared search result fixture 已改为 `pipeline_record`；`@codeinsights/shared` 版本升到 `0.1.59`。
+- 兼容边界：Chat / Agent 保持 query 长度小于 2 返回空、每会话第一条命中、最多 30 条、坏行跳过、读取失败不阻断；Agent 继续兼容旧 `AgentMessage` 与新 `SDKMessage` text block，未知 role 回退 assistant；Pipeline 保持 stage filter、分页、tab 归属和摘要长度行为。
+- 版本与锁文件：`@codeinsights/electron` 升到 `0.0.132`，`bun.lock` 已同步；未新增依赖。
+- Benchmark 对比 Phase 0：同为 macOS arm64 / Bun 1.3.13 / 50k records / 100k workspace paths / 500MB log / iterations 3。Phase 1 `chat-search-large-history` P50 113.440ms / P95 141.404ms / P99 141.404ms / event loop delay 9.716ms / memory 42,663,936 bytes；Phase 0 对应为 P50 55.331ms / P95 93.134ms / P99 93.134ms / event loop delay 107.361ms / memory 52,150,272 bytes。Phase 1 `agent-runtime-search` P50 109.687ms / P95 117.410ms / P99 117.410ms / event loop delay 1.822ms / memory 5,734,400 bytes；Phase 0 对应为 P50 39.888ms / P95 52.886ms / P99 52.886ms / event loop delay 52.938ms / memory 360,448 bytes。
+- Benchmark 结论：Phase 1 将 Chat / Agent 搜索 benchmark 切到真实 EventSearchService 流式 reader；wall-clock 明显变慢，但 main-thread event loop delay 明显下降。Pipeline tail、workspace search 和 large-log preview 仍未优化，数据分别为 P50 68.114ms / 20.163ms / 530.734ms，保留到后续阶段处理。
+- 验证通过：`bun test apps/electron/src/main/lib/jsonl-search.test.ts apps/electron/src/main/lib/native-runtime apps/electron/src/main/lib/conversation-manager.test.ts apps/electron/src/main/lib/agent-session-manager.test.ts apps/electron/src/main/lib/pipeline-session-manager.test.ts packages/shared/src/types/native-runtime.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界确认：本阶段未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未改 preload / renderer，未接入 SearchDialog Pipeline 内容搜索，未实现 Pipeline cursor tail、workspace index、Diagnostics UI、Rust sidecar 或 Go supervisor，未 push，未创建 PR。
+- 后续入口：Phase 2 应从 Pipeline records cursor / tail 与 SearchDialog Pipeline 内容接入开始；继续复用 Phase 1 EventSearchService，不要直接写 Rust / Go。
 
 ## Phase 2：Pipeline Records Cursor / Tail 与全局搜索接入
 
@@ -1143,5 +1157,5 @@ git status --short
 可直接复制给下一次 Codex：
 
 ```text
-请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律和 Phase 0“基线、契约与 benchmark”已经完成；Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；目前尚未实现 EventSearchService、TS fallback 搜索重构、Pipeline cursor tail、workspace index、SearchDialog 接入、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 987d600e feat(rust-go): 完成 Phase 0 基线契约与 benchmark。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 1“TypeScript fallback 与 EventSearchService 重构”开始；先在 tasks/todo.md 写 Phase 1 计划，明确范围、触达文件、验证命令和禁止事项。不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。
+请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”和 Phase 1“TypeScript fallback 与 EventSearchService 重构”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；Phase 1 已新增 jsonl-event-reader.ts、ts-event-search-service.ts 和 native-runtime-service.ts，统一 Chat / Agent / Pipeline TypeScript 搜索 fallback facade，并保留旧 IPC / preload / renderer 行为兼容。目前尚未实现 Pipeline cursor tail、workspace index、SearchDialog Pipeline 内容接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 2“Pipeline records cursor / tail 与全局搜索接入”开始；先在 tasks/todo.md 写 Phase 2 计划，明确范围、触达文件、验证命令和禁止事项。用户已明确计划写清后无需等待确认；不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。
 ```
