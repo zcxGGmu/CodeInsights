@@ -15,6 +15,14 @@ export const pipelineSessionsAtom = atom<PipelineSessionMeta[]>([])
 export const currentPipelineSessionIdAtom = atom<string | null>(null)
 export const pipelineCodexChannelIdAtom = atom<string | null>(null)
 
+export interface PipelineRecordFocusIntent {
+  nonce: number
+  sessionId: string
+  recordId: string
+}
+
+export const pipelineRecordFocusIntentAtom = atom<PipelineRecordFocusIntent | null>(null)
+
 export type PipelineSidebarViewMode = 'active' | 'archived'
 export const pipelineSidebarViewModeAtom = atom<PipelineSidebarViewMode>('active')
 

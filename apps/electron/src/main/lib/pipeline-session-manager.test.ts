@@ -6,10 +6,12 @@ import {
   appendPipelineRecord,
   createPipelineSession,
   getPipelineRecords,
+  getPipelineRecordsSummary,
   getPipelineRecordsTail,
   getPipelineSessionMeta,
   listPipelineSessions,
   searchPipelineRecordsPage,
+  searchPipelineSessionRecords,
 } from './pipeline-session-manager'
 
 describe('pipeline-session-manager', () => {
@@ -122,6 +124,81 @@ describe('pipeline-session-manager', () => {
       nextIndex: 0,
       hasMore: false,
     })
+  })
+
+  test('records 读取入口拒绝未知或非法 sessionId，避免路径穿越', () => {
+    expect(() => getPipelineRecords('../outside')).toThrow('无效 Pipeline 会话')
+    expect(() => getPipelineRecordsTail({
+      sessionId: '../outside',
+      direction: 'latest',
+      limit: 20,
+    })).toThrow('无效 Pipeline 会话')
+  })
+
+  test('getPipelineRecordsTail 会校验 limit、direction 和 cursor 运行时输入', () => {
+    const session = createPipelineSession('运行时校验测试', 'channel-1', 'workspace-1')
+
+    expect(() => getPipelineRecordsTail({
+      sessionId: session.id,
+      direction: 'sideways',
+      limit: 20,
+    } as unknown as Parameters<typeof getPipelineRecordsTail>[0])).toThrow('无效 Pipeline tail direction')
+
+    expect(() => getPipelineRecordsTail({
+      sessionId: session.id,
+      direction: 'latest',
+      limit: Number.NaN,
+    })).toThrow('无效 Pipeline tail limit')
+
+    expect(() => getPipelineRecordsTail({
+      sessionId: session.id,
+      direction: 'after',
+      cursor: 'x'.repeat(8193),
+      limit: 20,
+    })).toThrow('无效 Pipeline tail cursor')
+  })
+
+  test('getPipelineRecordsTail 支持 cursor latest / after 读取新记录', () => {
+    const session = createPipelineSession('cursor 增量记录测试', 'channel-1', 'workspace-1')
+
+    for (let index = 0; index < 4; index += 1) {
+      appendPipelineRecord(session.id, {
+        id: `record-${index}`,
+        sessionId: session.id,
+        type: 'user_input',
+        content: `任务 ${index}`,
+        createdAt: index + 1,
+      })
+    }
+
+    const latest = getPipelineRecordsTail({
+      sessionId: session.id,
+      direction: 'latest',
+      limit: 2,
+    })
+
+    expect(latest.records.map((record) => record.id)).toEqual(['record-2', 'record-3'])
+    expect(typeof latest.previousCursor).toBe('string')
+    expect(typeof latest.nextCursor).toBe('string')
+    expect(latest.hasMore).toBe(true)
+
+    appendPipelineRecord(session.id, {
+      id: 'record-4',
+      sessionId: session.id,
+      type: 'user_input',
+      content: '任务 4',
+      createdAt: 5,
+    })
+
+    const appended = getPipelineRecordsTail({
+      sessionId: session.id,
+      direction: 'after',
+      cursor: latest.nextCursor,
+      limit: 10,
+    })
+
+    expect(appended.records.map((record) => record.id)).toEqual(['record-4'])
+    expect(appended.hasMore).toBe(false)
   })
 
   test('appendPipelineRecord 复用 shared replay patch 更新 pendingGate 和终态', () => {
@@ -322,5 +399,81 @@ describe('pipeline-session-manager', () => {
       ['tester-output', 'logs'],
       ['tester-artifact', 'artifacts'],
     ])
+  })
+
+  test('searchPipelineSessionRecords 返回每个 Pipeline 会话的第一条内容命中', async () => {
+    const first = createPipelineSession('第一条 Pipeline', 'channel-1', 'workspace-1')
+    const second = createPipelineSession('第二条 Pipeline', 'channel-1', 'workspace-1')
+
+    appendPipelineRecord(first.id, {
+      id: 'first-hit',
+      sessionId: first.id,
+      type: 'node_output',
+      node: 'developer',
+      summary: '构建失败',
+      content: '第一条会话命中构建失败',
+      createdAt: 1,
+    })
+    appendPipelineRecord(second.id, {
+      id: 'second-hit',
+      sessionId: second.id,
+      type: 'error',
+      node: 'tester',
+      error: '第二条会话也命中构建失败',
+      createdAt: 2,
+    })
+
+    const result = await searchPipelineSessionRecords({
+      query: '构建失败',
+      limit: 10,
+    })
+
+    expect(result.matches.map((match) => [match.sessionId, match.recordId, match.stage]).sort()).toEqual([
+      [first.id, 'first-hit', 'developer'],
+      [second.id, 'second-hit', 'tester'],
+    ].sort())
+    expect(result.matches.find((match) => match.sessionId === first.id)?.sessionTitle).toBe('第一条 Pipeline')
+    expect(result.matches[0]?.matchLength).toBe(4)
+  })
+
+  test('getPipelineRecordsSummary 独立返回最新任务输入和最新错误记录', async () => {
+    const session = createPipelineSession('summary 测试', 'channel-1', 'workspace-1')
+
+    appendPipelineRecord(session.id, {
+      id: 'task-1',
+      sessionId: session.id,
+      type: 'user_input',
+      content: '第一次任务',
+      createdAt: 1,
+    })
+    appendPipelineRecord(session.id, {
+      id: 'error-1',
+      sessionId: session.id,
+      type: 'error',
+      node: 'developer',
+      error: '第一次失败',
+      createdAt: 2,
+    })
+    appendPipelineRecord(session.id, {
+      id: 'task-2',
+      sessionId: session.id,
+      type: 'user_input',
+      content: '第二次任务',
+      createdAt: 3,
+    })
+    appendPipelineRecord(session.id, {
+      id: 'error-2',
+      sessionId: session.id,
+      type: 'error',
+      node: 'tester',
+      error: '第二次失败',
+      createdAt: 4,
+    })
+
+    const summary = await getPipelineRecordsSummary({ sessionId: session.id })
+
+    expect(summary.latestUserInput).toBe('第二次任务')
+    expect(summary.latestErrorRecord?.id).toBe('error-2')
+    expect(summary.latestErrorRecord?.error).toBe('第二次失败')
   })
 })

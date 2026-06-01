@@ -627,6 +627,9 @@ export function PipelineRecords({
   sessionTitle,
   showLiveOutput,
   version,
+  hasOlderRecords = false,
+  loadingOlderRecords = false,
+  onLoadOlderRecords,
 }: {
   focusRequest?: PipelineRecordsFocusRequest | null
   records: PipelineRecord[]
@@ -636,6 +639,9 @@ export function PipelineRecords({
   sessionTitle?: string
   showLiveOutput?: boolean
   version?: PipelineVersion
+  hasOlderRecords?: boolean
+  loadingOlderRecords?: boolean
+  onLoadOlderRecords?: () => Promise<void> | void
 }): React.ReactElement {
   const [activeTab, setActiveTab] = React.useState<PipelineRecordTab>('artifacts')
   const [stageFilter, setStageFilter] = React.useState<PipelineRecordStageFilter>('all')
@@ -1116,6 +1122,17 @@ export function PipelineRecords({
                 >
                   显示更多阶段产物
                 </Button>
+              ) : hasOlderRecords ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loadingOlderRecords}
+                  onClick={() => { void onLoadOlderRecords?.() }}
+                >
+                  {loadingOlderRecords ? <Loader2 size={15} className="animate-spin" /> : null}
+                  加载更早记录
+                </Button>
               ) : null}
             </>
           ) : null}
@@ -1132,6 +1149,17 @@ export function PipelineRecords({
                   onClick={() => setLogLimit((prev) => prev + LOG_LOAD_STEP)}
                 >
                   加载更早日志
+                </Button>
+              ) : hasOlderRecords ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loadingOlderRecords}
+                  onClick={() => { void onLoadOlderRecords?.() }}
+                >
+                  {loadingOlderRecords ? <Loader2 size={15} className="animate-spin" /> : null}
+                  加载更早记录
                 </Button>
               ) : null}
               {visibleLogs.map((record) => (

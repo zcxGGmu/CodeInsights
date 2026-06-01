@@ -13,6 +13,10 @@ import type {
   PipelineRecord,
   PipelineRecordsSearchInput,
   PipelineRecordsSearchResult,
+  PipelineRecordsSummaryInput,
+  PipelineRecordsSummaryResult,
+  PipelineSessionRecordsSearchInput,
+  PipelineSessionRecordsSearchResult,
   PipelineRecordsTailInput,
   PipelineRecordsTailResult,
   PipelineResumeInput,
@@ -72,9 +76,23 @@ export function registerPipelineIpcHandlers(): void {
   )
 
   ipcMain.handle(
+    PIPELINE_IPC_CHANNELS.GET_RECORDS_SUMMARY,
+    async (_event, input: PipelineRecordsSummaryInput): Promise<PipelineRecordsSummaryResult> => {
+      return getPipelineService().getRecordsSummary(input)
+    }
+  )
+
+  ipcMain.handle(
     PIPELINE_IPC_CHANNELS.SEARCH_RECORDS,
     async (_event, input: PipelineRecordsSearchInput): Promise<PipelineRecordsSearchResult> => {
       return getPipelineService().searchRecords(input)
+    }
+  )
+
+  ipcMain.handle(
+    PIPELINE_IPC_CHANNELS.SEARCH_SESSION_RECORDS,
+    async (_event, input: PipelineSessionRecordsSearchInput): Promise<PipelineSessionRecordsSearchResult> => {
+      return getPipelineService().searchSessionRecords(input)
     }
   )
 

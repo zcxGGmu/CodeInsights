@@ -12,6 +12,10 @@ import type {
   PipelineRecordsTailResult,
   PipelineRecordsSearchInput,
   PipelineRecordsSearchResult,
+  PipelineRecordsSummaryInput,
+  PipelineRecordsSummaryResult,
+  PipelineSessionRecordsSearchInput,
+  PipelineSessionRecordsSearchResult,
   PipelineSelectTaskInput,
   PipelineSelectTaskResult,
   PipelineSessionMeta,
@@ -54,10 +58,12 @@ import {
   createPipelineSession,
   deletePipelineSession,
   getPipelineRecords,
+  getPipelineRecordsSummary,
   getPipelineRecordsTail,
   getPipelineSessionMeta,
   listPipelineSessions,
   searchPipelineRecordsPage,
+  searchPipelineSessionRecords,
   updatePipelineSessionMeta,
 } from './pipeline-session-manager'
 import { PipelineHumanGateService } from './pipeline-human-gate-service'
@@ -2112,8 +2118,18 @@ export function createPipelineService(options: CreatePipelineServiceOptions = {}
       return getPipelineRecordsTail(input)
     },
 
+    async getRecordsSummary(input: PipelineRecordsSummaryInput): Promise<PipelineRecordsSummaryResult> {
+      return getPipelineRecordsSummary(input)
+    },
+
     async searchRecords(input: PipelineRecordsSearchInput): Promise<PipelineRecordsSearchResult> {
       return searchPipelineRecordsPage(input)
+    },
+
+    async searchSessionRecords(
+      input: PipelineSessionRecordsSearchInput,
+    ): Promise<PipelineSessionRecordsSearchResult> {
+      return searchPipelineSessionRecords(input)
     },
 
     readArtifactContent(input: PipelineArtifactContentInput): string {

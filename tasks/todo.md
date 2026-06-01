@@ -1,5 +1,120 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go Phase 2 Pipeline Records Cursor / Tail 与全局搜索接入计划
+
+范围确认：本轮从 Phase 2“Pipeline records cursor / tail 与全局搜索接入”开始。最新开发基线为 `58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`，最新状态同步恢复入口为 `f7533938 docs(rust-go): 同步 Phase 1 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript fallback，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD 实现。
+
+启动基线：
+
+- [x] 已读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、开发跟踪清单和下次启动提示词。
+- [x] 已运行 `git status --short --branch`：当前分支为 `rust-go-refactor`，启动时工作树干净。
+- [x] 已运行 `git log -5 --oneline`：最新提交为 `f7533938 docs(rust-go): 同步 Phase 1 后续开发状态与下次启动入口`，本轮以 `f7533938` 作为最新已确认恢复入口，以 `58cc241d` 作为最新已确认开发基线。
+- [x] 已确认 Phase 0 和 Phase 1 已完成，当前尚未实现 Pipeline cursor tail、SearchDialog Pipeline 内容接入、workspace index、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
+
+Phase 2 范围：
+
+- [x] 在 TypeScript fallback 内实现 Pipeline JSONL records cursor / tail service，支持 `latest`、`before cursor`、`after cursor`，cursor 带 schema version 且不包含绝对路径。
+- [x] 让 `getPipelineRecordsTail()` 内部转调 cursor tail service，保留旧 IPC / preload 返回形状兼容；如新增 cursor API，仅作为向前兼容扩展，不破坏旧调用。
+- [x] 覆盖坏 JSONL 行、空行、append 中的部分写入、cursor schema mismatch、文件截断、append 后继续 tail 和 50000 records fixture。
+- [x] 将 SearchDialog 接入 Pipeline 内容搜索，展示 Chat / Agent / Pipeline 三类结果分组；Pipeline 结果展示 session title、stage、record kind、时间和 snippet。
+- [x] 支持点击 Pipeline 搜索结果打开对应 Pipeline session；record 精确定位若现有 UI 缺少锚点则先以安全可解释方式定位到会话并保留 record metadata。
+- [x] 给 SearchDialog / Pipeline records 增加 request generation 或 requestId 防护，避免快速输入、关闭弹窗、快速切换 session 后旧结果覆盖新结果。
+- [x] 更新 benchmark runner 或新增 Phase 2 case，记录 Pipeline tail 相对 Phase 0 / Phase 1 的 P50 / P95 / P99、event loop delay 和内存变化。
+- [x] 递增受影响 package patch 版本并同步 `bun.lock`。
+- [ ] 阶段完成后同步 Rust / Go development checklist、`next-session-prompt.md`、本节 Review 和必要 lessons，并单独提交 Phase 2 实现；随后单独提交状态同步。
+
+拟触达文件：
+
+- [x] `apps/electron/src/main/lib/native-runtime/ts-pipeline-tail-service.ts`（如现有结构更适合，也可合并到 native-runtime service，但需保持职责清晰）
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [skip] `apps/electron/src/main/lib/native-runtime/ts-event-search-service.ts`（Phase 1 facade 已满足本阶段搜索复用，本轮无需改动）
+- [x] `apps/electron/src/main/lib/pipeline-session-manager.ts`
+- [x] `apps/electron/src/main/lib/pipeline-session-manager.test.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/*.test.ts`
+- [x] `apps/electron/src/main/ipc/pipeline-handlers.ts`（仅在需要新增 cursor 字段或搜索入口时触达）
+- [x] `apps/electron/src/preload/index.ts`（仅在需要暴露 Pipeline 搜索或 cursor API 时触达）
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx`（若不存在则新增）
+- [x] `apps/electron/src/renderer/components/pipeline/PipelineRecords.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/usePipelineRecordsTail.ts`
+- [skip] `packages/shared/src/types/native-runtime.ts`（本阶段扩展的是 Pipeline IPC DTO，落点为 `packages/shared/src/types/pipeline.ts`）
+- [x] `packages/shared/src/types/pipeline.ts`
+- [x] `apps/electron/scripts/native-runtime-benchmark.ts`
+- [skip] `apps/electron/scripts/native-runtime-benchmark.test.ts`（现有 benchmark summary 断言无需改动）
+- [x] `apps/electron/package.json`
+- [x] `packages/shared/package.json`（仅 shared DTO 变化时）
+- [x] `bun.lock`
+- [ ] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（阶段完成后同步）
+- [ ] `docs/improve/rust-go/next-session-prompt.md`（阶段完成后同步）
+- [ ] `tasks/todo.md`
+- [ ] `tasks/lessons.md`（仅出现新纠正或新增长期规则时更新）
+
+测试先行计划：
+
+- [x] 先补 Pipeline cursor tail 单测：latest / before / after、limit、稳定顺序、坏行跳过、空行跳过、部分写入跳过、cursor schema mismatch、文件截断 fallback 和 append 后继续读取。
+- [x] 先补 50000 records fixture 或合成测试，证明 latest tail 不随历史总量明显线性退化，并记录 performance expectation。
+- [x] 先补 SearchDialog renderer 测试：Pipeline 分组展示、Pipeline 结果点击、快速输入 stale result 丢弃、关闭弹窗后不落旧结果、搜索失败 fallback 文案。
+- [x] 保留旧 Chat / Agent 搜索行为测试，确认 Pipeline 接入不改变现有结果形状和点击行为。
+- [x] 更新 benchmark 测试，确保 Phase 2 tail case 输出 implementation、样本规模、P50 / P95 / P99、event loop delay 和 memory。
+
+验证命令：
+
+```bash
+bun test apps/electron/src/main/lib/pipeline-session-manager.test.ts
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx
+bun test apps/electron/src/renderer/components/pipeline
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+bun test packages/shared/src/types/native-runtime.test.ts
+bun run --filter='@codeinsights/shared' typecheck
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:renderer
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+bun install --frozen-lockfile --dry-run
+git diff --check
+git status --short --branch
+```
+
+验证备注：
+
+- Phase 2 不运行 `cargo test` / `go test`，因为不会创建 Rust / Go 工程。
+- 如果未触达 shared DTO，则可跳过 shared typecheck 和 shared native-runtime test，但 Review 必须说明原因。
+- 如果现有 renderer 测试环境无法稳定覆盖交互，应优先补单元 / RTL 测试；必要时增加手动或脚本化 smoke 记录，但不能用未验证 UI 行为替代测试。
+- full benchmark 如耗时过长，可先跑 quick benchmark 定位问题；阶段提交前必须跑用户指定规模的 benchmark 或在 Review 写明阻塞原因。
+
+禁止事项：
+
+- [x] 不直接写 Rust / Go。
+- [x] 不安装依赖。
+- [x] 不创建 native binary、Rust crate、Go module、optionalDependencies 或打包配置。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不把 cursor 设计成绝对文件路径、home path 或不可脱敏内容。
+- [x] 不在 renderer 中读取或解析 JSONL。
+- [x] 不改变 Pipeline record 的 JSONL 事实源格式。
+- [x] 不为了 record 定位回退到每次读取整个 Pipeline JSONL。
+- [x] 不删除旧 IPC 通道或强迫 renderer 一次性迁移。
+- [x] 不把任何搜索 cache 当作唯一数据源。
+- [x] 不复制用户真实 `~/.codeinsights/` 数据进 fixture 或 benchmark。
+- [x] 不让 renderer 知道 native binary path 或直接调用 native runtime。
+- [x] 不 push、不创建 PR、不执行真实远端写。
+
+### 实现前 Check-in
+
+- [x] 已将 Phase 2 计划写入本节；用户已明确无需确认，直接进入测试与实现。
+
+### Review
+
+Code review 阻塞项修复计划：
+
+- [x] 在 Pipeline IPC / manager 边界补运行时输入校验：未知 session 不参与路径拼接，`limit` / `direction` / `cursor` / `query` 做类型、枚举、长度和有限数值校验。
+- [x] 为 Pipeline byte cursor 增加 anchor 校验：`recordId` / `createdAt` 与 offset 前一条记录不一致时标记 `cursorInvalid` 并安全回退。
+- [x] 给 `loadOlderRecords()` 增加 session / load generation 防护，避免切换会话后旧请求写入新 UI。
+- [x] 避免用 latest 300 条截断窗口推导 `currentTask` / 最新 error，改为独立 read model 或小查询驱动重启与错误定位。
+- [x] 修正 NativeRuntime `tailJsonl(backward)` 的方向 cursor 映射。
+- [x] 确保 Pipeline 内容命中即使标题也命中，仍保留 record 精确聚焦能力。
+- [x] 修复后补对应回归测试并重跑 Phase 2 验证命令。
+
 ## 2026-06-01 Rust/Go Phase 1 TypeScript Fallback 与 EventSearchService 重构计划
 
 范围确认：本轮从 Phase 1“TypeScript fallback 与 EventSearchService 重构”开始。用户已明确后续不需要实现前确认，因此计划写清后直接按 TDD 实现；只有遇到计划外架构变更、依赖安装、Rust / Go、native binary、根 `README.md` / 根 `AGENTS.md` 修改或用户明确要求暂停时才停下。Phase 1 的目标是在 TypeScript 内收敛 Chat / Agent / Pipeline 搜索 facade，复用 Phase 0 的 NativeRuntime DTO、contract fixtures 和 benchmark 基线，保留旧 IPC 行为回归测试，并记录相对 Phase 0 的性能变化。本阶段不写 Rust / Go，不安装依赖，不创建 native binary，不修改根 `README.md` / 根 `AGENTS.md`。实现提交：`58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`。

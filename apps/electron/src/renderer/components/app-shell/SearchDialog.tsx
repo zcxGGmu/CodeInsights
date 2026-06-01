@@ -19,12 +19,16 @@ import { conversationsAtom } from '@/atoms/chat-atoms'
 import { pipelineSessionsAtom } from '@/atoms/pipeline-atoms'
 import {
   agentSessionsAtom,
-  currentAgentWorkspaceIdAtom,
   agentWorkspacesAtom,
 } from '@/atoms/agent-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
+import { pipelineRecordFocusIntentAtom } from '@/atoms/pipeline-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
-import type { ConversationMeta, AgentSessionMeta, MessageSearchResult, AgentMessageSearchResult } from '@codeinsights/shared'
+import type {
+  AgentMessageSearchResult,
+  MessageSearchResult,
+  PipelineSessionRecordsSearchMatch,
+} from '@codeinsights/shared'
 
 /** 标题搜索结果项 */
 interface TitleResult {
@@ -36,7 +40,7 @@ interface TitleResult {
 }
 
 /** 内容搜索结果项（统一格式） */
-interface ContentResult {
+export interface SearchDialogContentResult {
   id: string
   title: string
   type: 'pipeline' | 'chat' | 'agent'
@@ -44,6 +48,114 @@ interface ContentResult {
   matchStart: number
   matchLength: number
   archived?: boolean
+  recordId?: string
+  recordTitle?: string
+  stage?: string
+}
+
+export interface SearchDialogContentGroup {
+  type: SearchDialogContentResult['type']
+  label: string
+  results: SearchDialogContentResult[]
+}
+
+export interface BuildSearchDialogContentResultsInput {
+  query: string
+  titleIds: ReadonlySet<string>
+  chatResults: MessageSearchResult[]
+  agentResults: AgentMessageSearchResult[]
+  pipelineResults: PipelineSessionRecordsSearchMatch[]
+}
+
+export interface SearchDialogContentRequestState {
+  requestId: number
+  latestRequestId: number
+  open: boolean
+}
+
+function resolveSnippetMatch(snippet: string, query: string): { matchStart: number; matchLength: number } {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return { matchStart: -1, matchLength: 0 }
+
+  const matchStart = snippet.toLowerCase().indexOf(normalizedQuery)
+  return {
+    matchStart,
+    matchLength: matchStart >= 0 ? query.trim().length : 0,
+  }
+}
+
+export function buildSearchDialogContentResults(
+  input: BuildSearchDialogContentResultsInput,
+): SearchDialogContentResult[] {
+  const pipelineContent: SearchDialogContentResult[] = input.pipelineResults
+    .map((result) => {
+      const match = resolveSnippetMatch(result.snippet, input.query)
+      return {
+        id: result.sessionId,
+        title: result.sessionTitle,
+        type: 'pipeline' as const,
+        snippet: result.snippet,
+        matchStart: match.matchStart,
+        matchLength: match.matchLength,
+        archived: result.archived,
+        recordId: result.recordId,
+        recordTitle: result.title,
+        stage: result.stage,
+      }
+    })
+
+  const chatContent: SearchDialogContentResult[] = input.chatResults
+    .filter((result) => !input.titleIds.has(result.conversationId))
+    .map((result) => ({
+      id: result.conversationId,
+      title: result.conversationTitle,
+      type: 'chat' as const,
+      snippet: result.snippet,
+      matchStart: result.matchStart,
+      matchLength: result.matchLength,
+      archived: result.archived,
+      recordId: result.messageId,
+    }))
+
+  const agentContent: SearchDialogContentResult[] = input.agentResults
+    .filter((result) => !input.titleIds.has(result.sessionId))
+    .map((result) => ({
+      id: result.sessionId,
+      title: result.sessionTitle,
+      type: 'agent' as const,
+      snippet: result.snippet,
+      matchStart: result.matchStart,
+      matchLength: result.matchLength,
+      archived: result.archived,
+      recordId: result.messageId,
+    }))
+
+  return [...pipelineContent, ...chatContent, ...agentContent]
+}
+
+export function buildSearchDialogContentGroups(
+  results: SearchDialogContentResult[],
+): SearchDialogContentGroup[] {
+  const labels: Record<SearchDialogContentResult['type'], string> = {
+    pipeline: 'Pipeline 记录',
+    chat: 'Chat 消息',
+    agent: 'Agent 消息',
+  }
+  const order: Array<SearchDialogContentResult['type']> = ['pipeline', 'chat', 'agent']
+
+  return order
+    .map((type) => ({
+      type,
+      label: labels[type],
+      results: results.filter((result) => result.type === type),
+    }))
+    .filter((group) => group.results.length > 0)
+}
+
+export function shouldApplySearchDialogContentResults(
+  state: SearchDialogContentRequestState,
+): boolean {
+  return state.open && state.requestId === state.latestRequestId
 }
 
 /**
@@ -108,7 +220,7 @@ export function SearchDialog(): React.ReactElement {
   const agentSessions = useAtomValue(agentSessionsAtom)
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
   const setActiveView = useSetAtom(activeViewAtom)
-  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const setPipelineRecordFocusIntent = useSetAtom(pipelineRecordFocusIntentAtom)
   const openSession = useOpenSession()
 
   const workspaceNameMap = React.useMemo(() => {
@@ -126,12 +238,14 @@ export function SearchDialog(): React.ReactElement {
   const [query, setQuery] = React.useState('')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [selectedIndex, setSelectedIndex] = React.useState(0)
-  const [contentResults, setContentResults] = React.useState<ContentResult[]>([])
+  const [contentResults, setContentResults] = React.useState<SearchDialogContentResult[]>([])
   const [contentLoading, setContentLoading] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
   const isComposingRef = React.useRef(false)
   const commitTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
+  const contentSearchSeqRef = React.useRef(0)
+  const pipelineFocusSeqRef = React.useRef(0)
 
   /**
    * 提交搜索词（微 debounce 60ms）
@@ -169,6 +283,8 @@ export function SearchDialog(): React.ReactElement {
     clearTimeout(commitTimerRef.current)
     setQuery('')
     setSearchQuery('')
+    setContentResults([])
+    setContentLoading(false)
   }, [])
 
   // 标题搜索：即时响应，纯内存过滤，基于 searchQuery 避免输入法抖动
@@ -195,65 +311,69 @@ export function SearchDialog(): React.ReactElement {
 
   // 内容搜索：debounce 300ms 后 IPC 调用，基于 searchQuery
   React.useEffect(() => {
-    if (!searchQuery || searchQuery.length < 2) {
+    if (!open || !searchQuery || searchQuery.length < 2) {
+      contentSearchSeqRef.current += 1
       setContentResults([])
       setContentLoading(false)
       return
     }
 
+    const requestId = contentSearchSeqRef.current + 1
+    contentSearchSeqRef.current = requestId
     setContentLoading(true)
-    let cancelled = false
+    setContentResults([])
 
     const timer = setTimeout(async () => {
       try {
-        const [chatResults, agentResults] = await Promise.all([
+        const [chatResults, agentResults, pipelineResult] = await Promise.all([
           window.electronAPI.searchConversationMessages(searchQuery),
           window.electronAPI.searchAgentSessionMessages(searchQuery),
+          window.electronAPI.searchPipelineSessionRecords({
+            query: searchQuery,
+            limit: 20,
+          }),
         ])
-        if (cancelled) return
+        if (!shouldApplySearchDialogContentResults({
+          requestId,
+          latestRequestId: contentSearchSeqRef.current,
+          open,
+        })) return
 
         const titleIds = new Set(titleResults.map((t) => t.id))
-
-        const chatContent: ContentResult[] = (chatResults as MessageSearchResult[])
-          .filter((r) => !titleIds.has(r.conversationId))
-          .map((r) => ({
-            id: r.conversationId,
-            title: r.conversationTitle,
-            type: 'chat' as const,
-            snippet: r.snippet,
-            matchStart: r.matchStart,
-            matchLength: r.matchLength,
-            archived: r.archived,
-          }))
-
-        const agentContent: ContentResult[] = (agentResults as AgentMessageSearchResult[])
-          .filter((r) => !titleIds.has(r.sessionId))
-          .map((r) => ({
-            id: r.sessionId,
-            title: r.sessionTitle,
-            type: 'agent' as const,
-            snippet: r.snippet,
-            matchStart: r.matchStart,
-            matchLength: r.matchLength,
-            archived: r.archived,
-          }))
-
-        setContentResults([...chatContent, ...agentContent])
+        setContentResults(buildSearchDialogContentResults({
+          query: searchQuery,
+          titleIds,
+          chatResults: chatResults as MessageSearchResult[],
+          agentResults: agentResults as AgentMessageSearchResult[],
+          pipelineResults: pipelineResult.matches,
+        }))
       } catch (error) {
         console.error('[搜索] 内容搜索失败:', error)
-        if (!cancelled) setContentResults([])
+        if (shouldApplySearchDialogContentResults({
+          requestId,
+          latestRequestId: contentSearchSeqRef.current,
+          open,
+        })) setContentResults([])
       } finally {
-        if (!cancelled) setContentLoading(false)
+        if (shouldApplySearchDialogContentResults({
+          requestId,
+          latestRequestId: contentSearchSeqRef.current,
+          open,
+        })) setContentLoading(false)
       }
     }, 300)
 
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [searchQuery, titleResults])
+    return () => { clearTimeout(timer) }
+  }, [open, searchQuery, titleResults])
 
   // 全部结果列表
   const allResults = React.useMemo(
     () => [...titleResults, ...contentResults.map((c) => ({ ...c, updatedAt: 0 }))],
     [titleResults, contentResults]
+  )
+  const contentGroups = React.useMemo(
+    () => buildSearchDialogContentGroups(contentResults),
+    [contentResults],
   )
 
   // 重置选中索引
@@ -262,13 +382,21 @@ export function SearchDialog(): React.ReactElement {
   }, [searchQuery])
 
   // 导航到对话/会话
-  const navigateToResult = React.useCallback((result: TitleResult | ContentResult) => {
+  const navigateToResult = React.useCallback((result: TitleResult | SearchDialogContentResult) => {
     setOpen(false)
     setActiveView('conversations')
 
     if (result.type === 'pipeline') {
       const session = pipelineSessions.find((s) => s.id === result.id)
       const title = session?.title ?? result.title
+      if ('recordId' in result && result.recordId) {
+        pipelineFocusSeqRef.current += 1
+        setPipelineRecordFocusIntent({
+          nonce: pipelineFocusSeqRef.current,
+          sessionId: result.id,
+          recordId: result.recordId,
+        })
+      }
       openSession('pipeline', result.id, title)
     } else if (result.type === 'chat') {
       const conv = conversations.find((c) => c.id === result.id)
@@ -279,7 +407,7 @@ export function SearchDialog(): React.ReactElement {
       const title = session?.title ?? result.title
       openSession('agent', result.id, title)
     }
-  }, [setOpen, setActiveView, openSession, pipelineSessions, conversations, agentSessions])
+  }, [setOpen, setActiveView, openSession, pipelineSessions, conversations, agentSessions, setPipelineRecordFocusIntent])
 
   // 键盘导航
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
@@ -314,6 +442,7 @@ export function SearchDialog(): React.ReactElement {
       setQuery('')
       setSearchQuery('')
       setContentResults([])
+      setContentLoading(false)
       setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
@@ -417,58 +546,77 @@ export function SearchDialog(): React.ReactElement {
           {(contentResults.length > 0 || (contentLoading && searchQuery.length >= 2)) && (
             <div className="py-1 border-t border-border/30 animate-in fade-in duration-150">
               <div className="px-4 pt-2 pb-1 flex items-center gap-2 text-[11px] font-medium text-foreground/40 select-none">
-                <span>消息内容匹配</span>
+                <span>内容匹配</span>
                 {contentLoading && <Loader2 size={12} className="animate-spin text-foreground/30" />}
               </div>
-              {contentResults.map((result, i) => {
-                const globalIdx = titleResults.length + i
-                return (
-                  <button
-                    key={`content-${result.id}`}
-                    data-index={globalIdx}
-                    onClick={() => navigateToResult(result)}
-                    onMouseEnter={() => setSelectedIndex(globalIdx)}
-                    className={cn(
-                      'w-full flex flex-col gap-0.5 px-4 py-2 text-left transition-colors',
-                      selectedIndex === globalIdx
-                        ? 'bg-primary/10'
-                        : 'hover:bg-foreground/[0.04]',
-                      result.archived && 'opacity-60'
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {result.type === 'pipeline' ? (
-                        <GitBranch size={14} className="flex-shrink-0 text-amber-600/70" />
-                      ) : result.type === 'chat' ? (
-                        <MessageSquare size={14} className="flex-shrink-0 text-foreground/40" />
-                      ) : (
-                        <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
-                      )}
-                      <span className="flex-1 min-w-0 truncate text-[13px] text-foreground/80">
-                        {result.title}
-                      </span>
-                      {result.type === 'agent' && (() => {
-                        const wsName = getAgentWorkspaceName(result.id)
-                        return wsName ? (
-                          <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-foreground/[0.06] text-[10px] leading-4 text-foreground/40 font-medium truncate max-w-[80px]">
-                            {wsName}
-                          </span>
-                        ) : null
-                      })()}
-                      {result.archived && (
-                        <Archive size={12} className="flex-shrink-0 text-foreground/30" />
-                      )}
+              {(() => {
+                let contentOffset = 0
+                return contentGroups.map((group) => {
+                  const groupOffset = contentOffset
+                  contentOffset += group.results.length
+                  return (
+                    <div key={group.type}>
+                      <div className="px-4 pb-1 pt-1 text-[10px] font-semibold text-foreground/35">
+                        {group.label}
+                      </div>
+                      {group.results.map((result, i) => {
+                        const globalIdx = titleResults.length + groupOffset + i
+                        return (
+                          <button
+                            key={`content-${result.type}-${result.id}-${result.recordId ?? 'session'}`}
+                            data-index={globalIdx}
+                            onClick={() => navigateToResult(result)}
+                            onMouseEnter={() => setSelectedIndex(globalIdx)}
+                            className={cn(
+                              'w-full flex flex-col gap-0.5 px-4 py-2 text-left transition-colors',
+                              selectedIndex === globalIdx
+                                ? 'bg-primary/10'
+                                : 'hover:bg-foreground/[0.04]',
+                              result.archived && 'opacity-60'
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              {result.type === 'pipeline' ? (
+                                <GitBranch size={14} className="flex-shrink-0 text-amber-600/70" />
+                              ) : result.type === 'chat' ? (
+                                <MessageSquare size={14} className="flex-shrink-0 text-foreground/40" />
+                              ) : (
+                                <Bot size={14} className="flex-shrink-0 text-blue-500/70" />
+                              )}
+                              <span className="flex-1 min-w-0 truncate text-[13px] text-foreground/80">
+                                {result.title}
+                              </span>
+                              {result.type === 'pipeline' && result.recordTitle ? (
+                                <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-amber-500/10 text-[10px] leading-4 text-amber-700 font-medium truncate max-w-[90px]">
+                                  {result.recordTitle}
+                                </span>
+                              ) : null}
+                              {result.type === 'agent' && (() => {
+                                const wsName = getAgentWorkspaceName(result.id)
+                                return wsName ? (
+                                  <span className="flex-shrink-0 px-1.5 py-0 rounded-full bg-foreground/[0.06] text-[10px] leading-4 text-foreground/40 font-medium truncate max-w-[80px]">
+                                    {wsName}
+                                  </span>
+                                ) : null
+                              })()}
+                              {result.archived && (
+                                <Archive size={12} className="flex-shrink-0 text-foreground/30" />
+                              )}
+                            </div>
+                            <div className="pl-[22px] text-[12px] text-foreground/50 truncate">
+                              <HighlightSnippet
+                                snippet={result.snippet}
+                                matchStart={result.matchStart}
+                                matchLength={result.matchLength}
+                              />
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
-                    <div className="pl-[22px] text-[12px] text-foreground/50 truncate">
-                      <HighlightSnippet
-                        snippet={result.snippet}
-                        matchStart={result.matchStart}
-                        matchLength={result.matchLength}
-                      />
-                    </div>
-                  </button>
-                )
-              })}
+                  )
+                })
+              })()}
             </div>
           )}
         </div>

@@ -112,8 +112,12 @@ import type {
   PipelineRecord,
   PipelineRecordsTailInput,
   PipelineRecordsTailResult,
+  PipelineRecordsSummaryInput,
+  PipelineRecordsSummaryResult,
   PipelineRecordsSearchInput,
   PipelineRecordsSearchResult,
+  PipelineSessionRecordsSearchInput,
+  PipelineSessionRecordsSearchResult,
   PipelineRunPreflightInput,
   PipelinePreflightResult,
   PipelineReportExport,
@@ -380,8 +384,14 @@ export interface ElectronAPI {
   /** 获取 Pipeline 增量记录 */
   getPipelineRecordsTail: (input: PipelineRecordsTailInput) => Promise<PipelineRecordsTailResult>
 
+  /** 获取 Pipeline 记录摘要 */
+  getPipelineRecordsSummary: (input: PipelineRecordsSummaryInput) => Promise<PipelineRecordsSummaryResult>
+
   /** 搜索 Pipeline 记录 */
   searchPipelineRecords: (input: PipelineRecordsSearchInput) => Promise<PipelineRecordsSearchResult>
+
+  /** 搜索 Pipeline 会话内容 */
+  searchPipelineSessionRecords: (input: PipelineSessionRecordsSearchInput) => Promise<PipelineSessionRecordsSearchResult>
 
   /** 读取 Pipeline 阶段产物正文 */
   readPipelineArtifactContent: (input: PipelineArtifactContentInput) => Promise<string>
@@ -1214,8 +1224,16 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(PIPELINE_IPC_CHANNELS.GET_RECORDS_TAIL, input)
   },
 
+  getPipelineRecordsSummary: (input: PipelineRecordsSummaryInput) => {
+    return ipcRenderer.invoke(PIPELINE_IPC_CHANNELS.GET_RECORDS_SUMMARY, input)
+  },
+
   searchPipelineRecords: (input: PipelineRecordsSearchInput) => {
     return ipcRenderer.invoke(PIPELINE_IPC_CHANNELS.SEARCH_RECORDS, input)
+  },
+
+  searchPipelineSessionRecords: (input: PipelineSessionRecordsSearchInput) => {
+    return ipcRenderer.invoke(PIPELINE_IPC_CHANNELS.SEARCH_SESSION_RECORDS, input)
   },
 
   readPipelineArtifactContent: (input: PipelineArtifactContentInput) => {

@@ -3,7 +3,6 @@ import { useAtomValue, useSetAtom } from 'jotai'
 import { agentChannelIdAtom, agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import type {
-  PipelineRecord,
   PipelineSessionMeta,
   PipelineStateSnapshot,
 } from '@codeinsights/shared'
@@ -104,6 +103,11 @@ export function PipelineView({
   const {
     records,
     recordsFocusRequest,
+    latestUserInput,
+    latestErrorRecord,
+    hasOlderRecords,
+    loadingOlderRecords,
+    loadOlderRecords,
     requestStageFocus,
     requestRecordFocus,
   } = usePipelineRecordsTail(sessionId, refreshVersion)
@@ -128,14 +132,7 @@ export function PipelineView({
     repositoryPreflight.result,
     preflightRefreshState.acknowledgement,
   ) || preflightRefreshState.refreshRequired
-  const currentTask = React.useMemo(() => {
-    return [...records].reverse().find((record) => record.type === 'user_input')?.content
-  }, [records])
-  const latestErrorRecord = React.useMemo(() => {
-    return [...records]
-      .reverse()
-      .find((record): record is Extract<PipelineRecord, { type: 'error' }> => record.type === 'error')
-  }, [records])
+  const currentTask = latestUserInput
   const latestRecordError = latestErrorRecord?.error
   const liveOutput = state
     ? getPipelineLiveOutput(liveOutputMap, sessionId, state.currentNode)
@@ -653,6 +650,9 @@ export function PipelineView({
                 sessionTitle={session?.title}
                 showLiveOutput={showLiveOutput}
                 version={session?.version ?? state?.version}
+                hasOlderRecords={hasOlderRecords}
+                loadingOlderRecords={loadingOlderRecords}
+                onLoadOlderRecords={loadOlderRecords}
               />
             </div>
             <PipelineGateSidePanel

@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import type { PipelineRecord } from '@codeinsights/shared'
 import {
   mergePipelineRecordsTail,
+  prependPipelineRecordsTail,
   resetPipelineRecordsTailLoadState,
+  shouldApplyPipelineRecordsOlderLoad,
   shouldApplyPipelineRecordsTailLoad,
 } from './pipeline-record-tail-model'
 
@@ -50,6 +52,17 @@ describe('pipeline-record-tail-model', () => {
     expect(merged.map((record) => record.id)).toEqual(['record-1', 'record-2', 'record-3'])
   })
 
+  test('更早 records 合并按 id 去重并前置', () => {
+    const prev = [userRecord('record-3'), userRecord('record-4')]
+    const merged = prependPipelineRecordsTail(prev, [
+      userRecord('record-1'),
+      userRecord('record-3'),
+      userRecord('record-2'),
+    ])
+
+    expect(merged.map((record) => record.id)).toEqual(['record-1', 'record-2', 'record-3', 'record-4'])
+  })
+
   test('切换 session 后重置 cursor 并让旧 tail load 失效', () => {
     const reset = resetPipelineRecordsTailLoadState({
       cursor: 12,
@@ -66,5 +79,28 @@ describe('pipeline-record-tail-model', () => {
       afterIndex: 12,
       currentCursor: reset.cursor,
     })).toBe(false)
+  })
+
+  test('更早 records 请求只允许当前 session 的最新 load 落地', () => {
+    expect(shouldApplyPipelineRecordsOlderLoad({
+      loadId: 2,
+      latestLoadId: 3,
+      loadSessionId: 'session-a',
+      currentSessionId: 'session-a',
+    })).toBe(false)
+
+    expect(shouldApplyPipelineRecordsOlderLoad({
+      loadId: 3,
+      latestLoadId: 3,
+      loadSessionId: 'session-a',
+      currentSessionId: 'session-b',
+    })).toBe(false)
+
+    expect(shouldApplyPipelineRecordsOlderLoad({
+      loadId: 3,
+      latestLoadId: 3,
+      loadSessionId: 'session-a',
+      currentSessionId: 'session-a',
+    })).toBe(true)
   })
 })

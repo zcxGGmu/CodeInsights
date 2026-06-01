@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
+import { TypeScriptPipelineTailService } from '../src/main/lib/native-runtime/ts-pipeline-tail-service'
 
 export interface BenchmarkOptions {
   records: number
@@ -147,6 +148,7 @@ async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary
   const startedAt = new Date().toISOString()
   const artifactDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-benchmark-'))
   const eventSearchService = new TypeScriptEventSearchService()
+  const pipelineTailService = new TypeScriptPipelineTailService()
 
   try {
     const fixtures = generateFixtures(artifactDir, options)
@@ -198,7 +200,13 @@ async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary
       'pipeline-tail-large-records',
       { records: options.records, bytes: fixtures.pipelineBytes },
       options.iterations,
-      () => tailJsonlByFullParse(fixtures.pipelineJsonlPath, Math.max(0, options.records - 200), 200),
+      () => pipelineTailService.readTail({
+        requestId: 'benchmark-pipeline-tail',
+        filePath: fixtures.pipelineJsonlPath,
+        sessionId: 'pipeline-session-demo',
+        direction: 'latest',
+        limit: 200,
+      }).records.length,
     ))
 
     cases.push(await measureCase(
@@ -378,16 +386,6 @@ async function measureCase(
     eventLoopDelayMs: Math.max(...eventLoopDelays),
     memoryDeltaBytes: maxMemoryDeltaBytes,
   }
-}
-
-function tailJsonlByFullParse(filePath: string, afterIndex: number, limit: number): number {
-  const raw = readFileSync(filePath, 'utf-8')
-  const records = raw
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as unknown)
-
-  return records.slice(afterIndex, afterIndex + limit).length
 }
 
 function searchWorkspacePathList(filePath: string, query: string): number {

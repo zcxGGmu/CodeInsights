@@ -14,9 +14,12 @@ import {
   buildNativeRuntimeStatus,
 } from './native-runtime-diagnostics'
 import { TypeScriptEventSearchService } from './ts-event-search-service'
+import { TypeScriptPipelineTailService } from './ts-pipeline-tail-service'
 import type { NativeRuntimeAdapter } from './native-runtime-types'
+import { getPipelineSessionRecordsPath } from '../config-paths'
 
 const eventSearchService = new TypeScriptEventSearchService()
+const pipelineTailService = new TypeScriptPipelineTailService()
 
 function unsupportedOperation(operation: string): Error {
   return new Error(`Native Runtime ${operation} 尚未接入 TypeScript facade`)
@@ -24,6 +27,10 @@ function unsupportedOperation(operation: string): Error {
 
 export function getTypeScriptEventSearchService(): TypeScriptEventSearchService {
   return eventSearchService
+}
+
+export function getTypeScriptPipelineTailService(): TypeScriptPipelineTailService {
+  return pipelineTailService
 }
 
 /**
@@ -47,8 +54,34 @@ export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
     throw unsupportedOperation('search')
   }
 
-  async tailJsonl(_input: NativeRuntimeTailInput): Promise<NativeRuntimeTailResult> {
-    throw unsupportedOperation('tailJsonl')
+  async tailJsonl(input: NativeRuntimeTailInput): Promise<NativeRuntimeTailResult> {
+    if (input.fileKind !== 'pipeline-records') {
+      throw unsupportedOperation('tailJsonl')
+    }
+
+    const result = pipelineTailService.readTail({
+      requestId: input.requestId,
+      filePath: getPipelineSessionRecordsPath(input.sessionId),
+      sessionId: input.sessionId,
+      direction: input.cursor
+        ? input.direction === 'backward' ? 'before' : 'after'
+        : 'latest',
+      cursor: input.cursor,
+      limit: input.limit,
+    })
+
+    return {
+      requestId: input.requestId,
+      fileKind: input.fileKind,
+      sessionId: input.sessionId,
+      records: result.records,
+      nextCursor: input.direction === 'backward'
+        ? result.previousCursor
+        : result.nextCursor,
+      hasMore: result.hasMore,
+      implementation: 'typescript',
+      readAt: result.readAt,
+    }
   }
 
   async indexWorkspace(

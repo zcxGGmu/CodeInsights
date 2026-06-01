@@ -12,6 +12,13 @@ export interface PipelineRecordsTailCursorState {
   latestLoadId: number
 }
 
+export interface PipelineRecordsOlderLoadState {
+  loadId: number
+  latestLoadId: number
+  loadSessionId: string
+  currentSessionId: string
+}
+
 export function resetPipelineRecordsTailLoadState({
   latestLoadId,
 }: PipelineRecordsTailCursorState): PipelineRecordsTailCursorState {
@@ -32,6 +39,15 @@ export function shouldApplyPipelineRecordsTailLoad({
   return true
 }
 
+export function shouldApplyPipelineRecordsOlderLoad({
+  loadId,
+  latestLoadId,
+  loadSessionId,
+  currentSessionId,
+}: PipelineRecordsOlderLoadState): boolean {
+  return loadId === latestLoadId && loadSessionId === currentSessionId
+}
+
 export function mergePipelineRecordsTail(
   prev: PipelineRecord[],
   recordsBatch: PipelineRecord[],
@@ -44,4 +60,13 @@ export function mergePipelineRecordsTail(
   const existingIds = new Set(prev.map((record) => record.id))
   const nextRecords = recordsBatch.filter((record) => !existingIds.has(record.id))
   return nextRecords.length > 0 ? [...prev, ...nextRecords] : prev
+}
+
+export function prependPipelineRecordsTail(
+  prev: PipelineRecord[],
+  recordsBatch: PipelineRecord[],
+): PipelineRecord[] {
+  const existingIds = new Set(prev.map((record) => record.id))
+  const nextRecords = recordsBatch.filter((record) => !existingIds.has(record.id))
+  return nextRecords.length > 0 ? [...nextRecords, ...prev] : prev
 }

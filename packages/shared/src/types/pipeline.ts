@@ -641,10 +641,14 @@ export interface PipelineResumeInput {
   response?: PipelineGateResponse
 }
 
+export type PipelineRecordsTailDirection = 'latest' | 'before' | 'after'
+
 /** Pipeline 记录增量读取输入 */
 export interface PipelineRecordsTailInput {
   sessionId: string
   afterIndex?: number
+  cursor?: string
+  direction?: PipelineRecordsTailDirection
   limit?: number
 }
 
@@ -654,6 +658,21 @@ export interface PipelineRecordsTailResult {
   records: PipelineRecord[]
   nextIndex: number
   hasMore: boolean
+  previousCursor?: string
+  nextCursor?: string
+  cursorInvalid?: boolean
+}
+
+/** Pipeline 记录摘要读取输入 */
+export interface PipelineRecordsSummaryInput {
+  sessionId: string
+}
+
+/** Pipeline 记录摘要，用于避免从截断 records window 推导关键状态 */
+export interface PipelineRecordsSummaryResult {
+  sessionId: string
+  latestUserInput?: string
+  latestErrorRecord?: Extract<PipelineRecord, { type: 'error' }>
 }
 
 export type PipelineRecordSearchStage = 'all' | 'task' | PipelineNodeKind
@@ -687,6 +706,36 @@ export interface PipelineRecordsSearchResult {
   matches: PipelineRecordsSearchMatch[]
   total: number
   nextOffset: number
+  hasMore: boolean
+}
+
+/** Pipeline 全局内容搜索输入 */
+export interface PipelineSessionRecordsSearchInput {
+  query: string
+  limit?: number
+  includeArchived?: boolean
+}
+
+/** Pipeline 全局内容搜索命中项 */
+export interface PipelineSessionRecordsSearchMatch {
+  sessionId: string
+  sessionTitle: string
+  archived?: boolean
+  recordId: string
+  recordType: PipelineRecord['type']
+  stage: PipelineRecordSearchStage
+  title: string
+  snippet: string
+  matchStart: number
+  matchLength: number
+  createdAt: number
+}
+
+/** Pipeline 全局内容搜索结果 */
+export interface PipelineSessionRecordsSearchResult {
+  query: string
+  matches: PipelineSessionRecordsSearchMatch[]
+  total: number
   hasMore: boolean
 }
 
@@ -934,7 +983,9 @@ export const PIPELINE_IPC_CHANNELS = {
   CREATE_SESSION: 'pipeline:create-session',
   GET_RECORDS: 'pipeline:get-records',
   GET_RECORDS_TAIL: 'pipeline:get-records-tail',
+  GET_RECORDS_SUMMARY: 'pipeline:get-records-summary',
   SEARCH_RECORDS: 'pipeline:search-records',
+  SEARCH_SESSION_RECORDS: 'pipeline:search-session-records',
   READ_ARTIFACT_CONTENT: 'pipeline:read-artifact-content',
   GET_PATCH_WORK_MANIFEST: 'pipeline-v2:get-patch-work-manifest',
   GET_CONTRIBUTION_TASK_SUMMARY: 'pipeline-v2:get-contribution-task-summary',
