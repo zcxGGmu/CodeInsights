@@ -9,10 +9,10 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-01
-> 最新开发基线：`58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`。
-> 最新已确认恢复入口：`58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
-> 当前结论：Rust / Go 优化重构 Phase 0 和 Phase 1 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，并在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade。尚未实现 Pipeline cursor tail、workspace index、SearchDialog Pipeline 内容接入、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
-> 当前策略：下一阶段先做 Phase 2 Pipeline records cursor / tail 与 SearchDialog Pipeline 内容接入，继续复用 Phase 1 EventSearchService 和 Phase 0 benchmark 基线；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
+> 最新开发基线：`25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`。
+> 最新已确认恢复入口：`25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1 和 Phase 2 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，并完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入。尚未实现 workspace index、Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
+> 当前策略：下一阶段从 Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 开始，继续保持 TypeScript fallback 和 JSON / JSONL 事实源不变；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
 
@@ -23,7 +23,7 @@
 - [x] 已补齐 Rust / Go 下次启动提示词入口：`docs/improve/rust-go/next-session-prompt.md`。
 - [x] Phase 0：基线、契约与 benchmark。
 - [x] Phase 1：TypeScript fallback 与 EventSearchService 重构。
-- [ ] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
+- [x] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [ ] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
 - [ ] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
 - [ ] Phase 5：Rust search sidecar 试点。
@@ -38,9 +38,9 @@
 - [x] 主进程 `NativeRuntimeAdapter` TypeScript interface 与 diagnostics 空实现已完成。
 - [x] Contract fixtures 和 benchmark runner 已完成；基线数字见 Phase 0 Review。
 - [x] EventSearchService 已统一 Chat / Agent / Pipeline 搜索 facade，并保留旧 IPC / preload / renderer 行为兼容。
-- [ ] Pipeline records tail 尚未改为 cursor / offset 读取。
+- [x] Pipeline records tail 已改为 TypeScript cursor / byte-offset tail，保留旧 afterIndex 兼容路径。
 - [ ] Workspace 文件索引尚未建立可取消、可重建的缓存层。
-- [ ] SearchDialog 尚未接入 Pipeline 内容搜索、索引状态、分页和 stale result 丢弃。
+- [x] SearchDialog 已接入 Pipeline 内容搜索，并具备 Pipeline / Chat / Agent 分组、stale result 丢弃和 Pipeline record 聚焦。
 - [ ] Native Runtime Diagnostics 设置页尚未实现。
 - [ ] Rust sidecar、Rust optional package、native-cache schema 和 packaged smoke 尚未实现。
 - [ ] Go supervisor 未进入主线，必须等 Phase 9 触发条件成立。
@@ -51,10 +51,10 @@
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；下一步从 Phase 2 Pipeline records cursor / tail 与 SearchDialog Pipeline 内容接入开始”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `58cc241d feat(rust-go): 完成 Phase 1 TypeScript 搜索 fallback 重构` 或其后的 Rust / Go 状态同步提交。
-4. 如果开始 Phase 2，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项；用户已明确计划写清后无需等待确认。
-5. 不要直接写 Rust / Go。Phase 2 仍然只做 TypeScript fallback 的 Pipeline cursor tail、SearchDialog Pipeline 内容搜索、旧行为回归测试和 benchmark 对比。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；下一步从 Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 开始”。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入` 或其后的 Rust / Go 状态同步提交。
+4. 如果开始 Phase 3，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项；用户已明确计划写清后无需等待确认。
+5. 不要直接写 Rust / Go。Phase 3 仍然先做 TypeScript fallback 的 workspace 文件索引、ignore 规则、watcher invalidation、SearchDialog workspace file source 和 benchmark 对比。
 
 ## 使用规则
 
@@ -349,12 +349,12 @@ git status --short --branch
 
 ### 阶段状态
 
-- [ ] 阶段开始
-- [ ] 测试先行完成
-- [ ] 实现完成
-- [ ] 验证完成
-- [ ] 阶段 Review 完成
-- [ ] 阶段提交完成
+- [x] 阶段开始
+- [x] 测试先行完成
+- [x] 实现完成
+- [x] 验证完成
+- [x] 阶段 Review 完成
+- [x] 阶段提交完成
 
 ### 目标
 
@@ -362,46 +362,48 @@ git status --short --branch
 
 ### 入口条件
 
-- [ ] Phase 1 已完成并提交。
-- [ ] Pipeline records fixture 已覆盖大历史和坏行。
-- [ ] SearchDialog 当前行为有回归测试。
-- [ ] 已确认 cursor 格式只作为 service 内部或 shared DTO，不泄露本地绝对路径。
+- [x] Phase 1 已完成并提交。
+- [x] Pipeline records fixture 已覆盖大历史和坏行。
+- [x] SearchDialog 当前行为有回归测试。
+- [x] 已确认 cursor 格式只作为 service 内部或 shared DTO，不泄露本地绝对路径。
 
 ### 后端任务
 
-- [ ] 为 Pipeline JSONL records 建立 byte offset / logical cursor 读取策略。
-- [ ] 增加 cursor schema version，避免后续格式变化导致旧 cursor 误用。
-- [ ] `getPipelineRecordsTail()` 内部转调 cursor tail service。
-- [ ] 对 append 中的部分写入、坏行、空行做容错。
-- [ ] 增加 tail 方向：latest、before cursor、after cursor。
-- [ ] 保证新增 records 读取复杂度不随历史总量线性增长。
+- [x] 为 Pipeline JSONL records 建立 byte offset / logical cursor 读取策略。
+- [x] 增加 cursor schema version，避免后续格式变化导致旧 cursor 误用。
+- [x] `getPipelineRecordsTail()` 内部转调 cursor tail service。
+- [x] 对 append 中的部分写入、坏行、空行做容错。
+- [x] 增加 tail 方向：latest、before cursor、after cursor。
+- [x] 保证新增 records 读取复杂度不随历史总量线性增长。
 
 ### 前端任务
 
-- [ ] SearchDialog 增加 Pipeline source 分组。
-- [ ] 搜索结果展示 session title、stage、record kind、时间和 snippet。
-- [ ] 支持点击 Pipeline 搜索结果打开对应 session，并尽量定位到 record。
-- [ ] PipelineRecords 使用 cursor 加载更多，避免一次性渲染大列表。
-- [ ] 快速切换 session 时丢弃旧 records 请求结果。
+- [x] SearchDialog 增加 Pipeline source 分组。
+- [x] 搜索结果展示 session title、stage、record kind、时间和 snippet。
+- [x] 支持点击 Pipeline 搜索结果打开对应 session，并尽量定位到 record。
+- [x] PipelineRecords 使用 cursor 加载更多，避免一次性渲染大列表。
+- [x] 快速切换 session 时丢弃旧 records 请求结果。
 
 ### 测试任务
 
-- [ ] Pipeline records cursor tail 单测覆盖 50000 records fixture。
-- [ ] 覆盖 cursor schema mismatch、文件截断、append 后继续 tail。
-- [ ] SearchDialog renderer 测试覆盖 Pipeline 结果分组和点击行为。
-- [ ] 覆盖 requestId / generation：旧 session 结果不能覆盖新 session。
-- [ ] 覆盖空结果、搜索失败、fallback 状态。
+- [x] Pipeline records cursor tail 单测覆盖 50000 records fixture。
+- [x] 覆盖 cursor schema mismatch、文件截断、append 后继续 tail。
+- [x] SearchDialog renderer 测试覆盖 Pipeline 结果分组和点击行为。
+- [x] 覆盖 requestId / generation：旧 session 结果不能覆盖新 session。
+- [x] 覆盖空结果、搜索失败、fallback 状态。
 
 ### 触达文件
 
-- [ ] `apps/electron/src/main/lib/pipeline-session-manager.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/ts-event-search-service.ts`
-- [ ] `apps/electron/src/main/ipc/pipeline-handlers.ts`
-- [ ] `apps/electron/src/preload/index.ts`
-- [ ] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
-- [ ] `apps/electron/src/renderer/components/pipeline/PipelineRecords.tsx`
-- [ ] `apps/electron/src/renderer/hooks/usePipelineRecordsTail.ts`
-- [ ] `packages/shared/src/types/native-runtime.ts`
+- [x] `apps/electron/src/main/lib/pipeline-session-manager.ts`
+- [skip] `apps/electron/src/main/lib/native-runtime/ts-event-search-service.ts`：Phase 1 facade 已可复用，本阶段无需改动。
+- [x] `apps/electron/src/main/lib/native-runtime/ts-pipeline-tail-service.ts`
+- [x] `apps/electron/src/main/ipc/pipeline-handlers.ts`
+- [x] `apps/electron/src/preload/index.ts`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/PipelineRecords.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/usePipelineRecordsTail.ts`
+- [skip] `packages/shared/src/types/native-runtime.ts`：本阶段新增 Pipeline tail / summary / search DTO，落点为 `packages/shared/src/types/pipeline.ts`。
+- [x] `packages/shared/src/types/pipeline.ts`
 
 ### 验证命令
 
@@ -410,29 +412,46 @@ bun test apps/electron/src/main/lib/pipeline-session-manager.test.ts
 bun test apps/electron/src/main/lib/native-runtime
 bun test apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx
 bun test apps/electron/src/renderer/components/pipeline
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+bun test packages/shared/src/types/native-runtime.test.ts
+bun run --filter='@codeinsights/shared' typecheck
 bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:preload
 bun run --filter='@codeinsights/electron' build:renderer
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+bun install --frozen-lockfile --dry-run
 git diff --check
-git status --short
+git status --short --branch
 ```
 
 ### 完成定义
 
-- [ ] Pipeline records tail 支持 cursor，历史越大时 tail 性能不再明显线性退化。
-- [ ] SearchDialog 可搜索 Chat / Agent / Pipeline 三类内容。
-- [ ] 快速输入、切换 session、关闭弹窗均不会出现 stale result。
-- [ ] Review 中记录大 records fixture 的 tail 基线对比。
+- [x] Pipeline records tail 支持 cursor，历史越大时 tail 性能不再明显线性退化。
+- [x] SearchDialog 可搜索 Chat / Agent / Pipeline 三类内容。
+- [x] 快速输入、切换 session、关闭弹窗均不会出现 stale result。
+- [x] Review 中记录大 records fixture 的 tail 基线对比。
 
 ### 禁止事项
 
-- [ ] 不为了定位 record 读取整个 Pipeline JSONL。
-- [ ] 不把 cursor 设计成绝对文件路径或不可脱敏内容。
-- [ ] 不在 renderer 中解析 JSONL。
-- [ ] 不改变 Pipeline record 的持久化事实格式。
+- [x] 不为了定位 record 读取整个 Pipeline JSONL。
+- [x] 不把 cursor 设计成绝对文件路径或不可脱敏内容。
+- [x] 不在 renderer 中解析 JSONL。
+- [x] 不改变 Pipeline record 的持久化事实格式。
 
 ### 阶段 Review
 
-待 Phase 2 完成后追加。
+- 阶段提交：已提交 `25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`。
+- 实现完成：新增 `ts-pipeline-tail-service.ts`，Pipeline records tail 支持 `latest` / `before` / `after` cursor，cursor 为 base64url JSON，包含 schema version、sessionId、byteOffset、recordId、createdAt，不包含绝对路径；保留旧 `afterIndex` 路径以兼容旧调用。
+- 搜索接入：新增 Pipeline 全局内容搜索 IPC / preload / service 入口，SearchDialog 现在展示 Pipeline / Chat / Agent 三组内容结果；Pipeline 内容命中点击后打开对应 session 并通过 Jotai focus intent 尽量定位到 record。
+- 安全与 review 修复：Pipeline manager 对 records tail / records search / summary 做运行时输入校验，未知 session 不参与路径拼接；cursor 增加 anchor 校验，截断后重写到更大文件也会标记 `cursorInvalid` 并安全回退；`loadOlderRecords()` 增加 session generation 防护；NativeRuntime `tailJsonl(backward)` 的 `nextCursor` 映射为请求方向上的下一 cursor。
+- 状态 read model：新增 `PipelineRecordsSummary` IPC，PipelineView 不再用 latest 300 条截断 window 推导 `currentTask` 和最新 error，避免长历史会话重启 / 错误定位回归。
+- 版本与锁文件：`@codeinsights/electron` 升到 `0.0.133`，`@codeinsights/shared` 升到 `0.1.60`，`bun.lock` 已同步；未新增依赖。
+- Benchmark 对比：同为 macOS arm64 / Bun 1.3.13 / 50k records / 100k workspace paths / 500MB log / iterations 3。Phase 2 `pipeline-tail-large-records` P50 2.662ms / P95 9.663ms / P99 9.663ms / event loop delay 9.732ms / memory 491,520 bytes；Phase 0 对应为 P50 33.376ms / P95 34.611ms / P99 34.611ms / event loop delay 34.644ms / memory 147,456 bytes；Phase 1 对应为 P50 68.114ms（未优化路径）。
+- Benchmark 备注：本轮完整 benchmark 中 Chat / workspace / large-log 数字受同机负载波动影响且不是 Phase 2 优化目标；本阶段性能结论只使用 `pipeline-tail-large-records`。
+- 验证通过：`bun test apps/electron/src/main/lib/pipeline-session-manager.test.ts apps/electron/src/main/lib/native-runtime apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx apps/electron/src/renderer/components/pipeline/PipelineRecords.test.ts apps/electron/src/renderer/components/pipeline/pipeline-record-tail-model.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts packages/shared/src/types/native-runtime.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 边界确认：本阶段未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未改变 Pipeline JSONL 事实源格式，未在 renderer 中读取 JSONL，未 push，未创建 PR。
+- 后续入口：Phase 3 应从 Workspace 文件索引 TS cache 与 watcher invalidation 开始；继续先做 TypeScript fallback，不要直接写 Rust / Go。
 
 ## Phase 3：Workspace 文件索引 TS Cache 与 Watcher Invalidation
 

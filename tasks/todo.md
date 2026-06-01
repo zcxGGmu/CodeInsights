@@ -21,7 +21,7 @@ Phase 2 范围：
 - [x] 给 SearchDialog / Pipeline records 增加 request generation 或 requestId 防护，避免快速输入、关闭弹窗、快速切换 session 后旧结果覆盖新结果。
 - [x] 更新 benchmark runner 或新增 Phase 2 case，记录 Pipeline tail 相对 Phase 0 / Phase 1 的 P50 / P95 / P99、event loop delay 和内存变化。
 - [x] 递增受影响 package patch 版本并同步 `bun.lock`。
-- [ ] 阶段完成后同步 Rust / Go development checklist、`next-session-prompt.md`、本节 Review 和必要 lessons，并单独提交 Phase 2 实现；随后单独提交状态同步。
+- [x] 阶段完成后同步 Rust / Go development checklist、`next-session-prompt.md`、本节 Review 和必要 lessons，并单独提交 Phase 2 实现；随后单独提交状态同步。
 
 拟触达文件：
 
@@ -44,10 +44,10 @@ Phase 2 范围：
 - [x] `apps/electron/package.json`
 - [x] `packages/shared/package.json`（仅 shared DTO 变化时）
 - [x] `bun.lock`
-- [ ] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（阶段完成后同步）
-- [ ] `docs/improve/rust-go/next-session-prompt.md`（阶段完成后同步）
-- [ ] `tasks/todo.md`
-- [ ] `tasks/lessons.md`（仅出现新纠正或新增长期规则时更新）
+- [x] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（阶段完成后同步）
+- [x] `docs/improve/rust-go/next-session-prompt.md`（阶段完成后同步）
+- [x] `tasks/todo.md`
+- [x] `tasks/lessons.md`（记录 cursor anchor 和截断 window 不驱动 durable 状态规则）
 
 测试先行计划：
 
@@ -114,6 +114,16 @@ Code review 阻塞项修复计划：
 - [x] 修正 NativeRuntime `tailJsonl(backward)` 的方向 cursor 映射。
 - [x] 确保 Pipeline 内容命中即使标题也命中，仍保留 record 精确聚焦能力。
 - [x] 修复后补对应回归测试并重跑 Phase 2 验证命令。
+
+- 阶段实现提交：`25e3e6d1 feat(rust-go): 完成 Phase 2 Pipeline cursor tail 与搜索接入`。
+- 实现完成：新增 TypeScript Pipeline cursor tail service，支持 `latest` / `before` / `after`、schema version cursor、坏行 / 空行 / 部分写入容错、anchor 校验和截断安全回退；旧 `afterIndex` tail 路径保留兼容。
+- SearchDialog 已接入 Pipeline 内容搜索，内容结果按 Pipeline / Chat / Agent 分组；Pipeline 命中点击后打开对应 session，并通过 `pipelineRecordFocusIntentAtom` 触发 record 聚焦。
+- Pipeline records UI 改为首屏 latest window + “加载更早记录”；旧请求覆盖由 request / session generation 防护；`currentTask` 和最新 error 改由独立 `PipelineRecordsSummary` read model 提供，不再依赖截断 records window。
+- Review blocker 已修复：manager 运行时校验阻止未知 sessionId 参与路径拼接；cursor 校验 `recordId` / `createdAt` anchor；NativeRuntime backward cursor 映射为请求方向上的下一 cursor；Pipeline 内容命中不再被标题命中去重掉。
+- Benchmark：Phase 2 `pipeline-tail-large-records` P50 2.662ms / P95 9.663ms / P99 9.663ms / event loop delay 9.732ms / memory 491,520 bytes。Phase 0 对应 P50 33.376ms / P95 34.611ms / P99 34.611ms / event loop delay 34.644ms；Phase 1 对应 P50 68.114ms（未优化路径）。
+- 验证通过：`bun test apps/electron/src/main/lib/pipeline-session-manager.test.ts apps/electron/src/main/lib/native-runtime apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx apps/electron/src/renderer/components/pipeline/PipelineRecords.test.ts apps/electron/src/renderer/components/pipeline/pipeline-record-tail-model.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts packages/shared/src/types/native-runtime.test.ts`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 边界确认：未写 Rust / Go，未安装依赖，未创建 native binary，未新增 optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未改变 Pipeline JSONL 事实源格式，未在 renderer 中读取 JSONL，未 push，未创建 PR。
+- 后续入口：Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation。
 
 ## 2026-06-01 Rust/Go Phase 1 TypeScript Fallback 与 EventSearchService 重构计划
 

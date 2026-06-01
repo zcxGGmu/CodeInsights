@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-01 Rust / Go Pipeline cursor tail 安全边界
+
+- Pipeline / JSONL cursor 不能只校验 byte offset 和 schema version；只要 cursor 携带 recordId / createdAt，就必须用它校验 anchor record。文件截断后重新写入到超过旧 offset 时，旧 cursor 也要判为 `cursorInvalid` 并回退到安全窗口。
+- PipelineRecords 首屏只加载 latest window 后，不能继续从当前 records 数组推导 `currentTask`、latest error、重启按钮和错误定位这类 durable 状态；这些状态必须来自独立 read model、session meta 或专门的小查询。
+- 任意新增 IPC 即使有 shared TypeScript 类型，也要在 main / manager 边界做运行时校验；未知 sessionId 不能参与 `getPipelineSessionRecordsPath()` 这类路径拼接，`limit` / `cursor` / `direction` / `query` 也要校验类型和长度。
+
 ## 2026-06-01 Rust / Go 阶段收尾状态同步
 
 - Rust / Go 优化重构从 Phase 1 起，阶段计划写入 `tasks/todo.md` 后不再等待用户确认；只要范围、禁止事项和验证命令已写清，就直接按 TDD 开始实现。只有遇到计划外架构变更、需要安装依赖、需要写 Rust / Go、需要 native binary、需要修改根 `README.md` / `AGENTS.md` 或用户明确要求暂停时，才停下来重新规划或请示。
