@@ -1,5 +1,39 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-01 Rust/Go 最新状态同步计划
+
+范围确认：本轮响应“更新文档最新开发状态、标清完成/未完成、给下次启动提示词，并记住阶段完成后自动同步”的要求。只同步 Rust / Go 文档、下次启动提示词、任务记录和 lessons；不改业务代码，不安装依赖，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+执行计划：
+
+- [x] 检查当前分支、工作树和最近提交，确认当前真实恢复基线。
+- [x] 更新 Rust / Go 开发跟踪清单的最新状态、完成项、未完成项和下次启动入口。
+- [x] 新增 `docs/improve/rust-go/next-session-prompt.md`，给下一次 Codex 会话提供可恢复提示词。
+- [x] 更新 `tasks/lessons.md`，再次固化“阶段完成后自动同步状态文档和提示词”的习惯。
+- [x] 修正上一轮纪律同步任务记录中已完成但未勾选的提交项。
+- [x] 运行文档校验：关键状态搜索、行尾空白、code fence、占位词、`git diff --check`。
+- [x] 在本节追加 Review，记录同步结果、验证结果、未完成项和实际提交边界。
+- [x] 单独提交本轮状态同步。
+
+边界：
+
+- [x] 不修改业务代码。
+- [x] 不安装依赖。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不 push、不创建 PR。
+- [x] 不把未实现的 Rust / Go 功能标记为完成。
+
+### Review
+
+- 启动检查：`git status --short --branch` 显示当前分支 `rust-go-refactor` 且工作树干净；`git log -8 --oneline` 确认最近提交为 `fe34b231 docs(tasks): 固化阶段完成即提交纪律` 和 `8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`。
+- Rust / Go checklist 已更新：最新开发基线写为 `8131b66b`，最新已确认恢复入口写为 `fe34b231`；已完成项明确为方案、深化方案、开发跟踪清单、阶段提交纪律和下次启动提示词；未完成项明确为 Phase 0-9 及 NativeRuntime / EventSearchService / Pipeline cursor tail / workspace index / SearchDialog / diagnostics / Rust sidecar / Go supervisor。
+- 已新增 `docs/improve/rust-go/next-session-prompt.md`，包含当前真实进度、已完成 / 未完成清单、关键边界和可直接复制给下一次 Codex 的提示词。
+- 已更新 `tasks/lessons.md`，补充 Rust / Go 这类新建 `docs/improve/<topic>/` 的阶段化工作首次状态同步时必须补齐 `next-session-prompt.md`，后续每阶段完成后默认同步 checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons。
+- 已修正上一轮“阶段提交习惯固化计划”的未勾选提交项，回填实际提交 `fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
+- 验证通过：关键状态 `rg` 搜索；Rust / Go 文档占位词扫描无命中；行尾空白 `awk` 检查；Markdown code fence 成对检查；`git diff --check -- docs/improve/rust-go tasks/todo.md tasks/lessons.md`。
+- 边界确认：本轮未修改业务代码，未安装依赖，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR，未把任何未实现 Rust / Go 功能标记为完成。
+- 阶段提交：本节由本轮状态同步提交承载，实际提交号在最终回复中给出。
+
 ## 2026-06-01 阶段提交习惯固化计划
 
 范围确认：本轮响应“提交当前代码变更，并记住每完成一阶段任务就提交一次”的要求。当前工作树启动检查为干净，最近提交为 `8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`；本轮只同步长期协作纪律到 `tasks/lessons.md` 和本任务记录，不改业务代码，不修改根 `README.md` / 根 `AGENTS.md`。
@@ -9,7 +43,7 @@
 - [x] 检查当前分支、工作树和最近提交，确认是否存在未提交代码变更。
 - [x] 更新 `tasks/lessons.md`，把“阶段完成即提交，重启 Codex 会话后也主动检查并延续”的规则写得更明确。
 - [x] 运行文档格式校验和 `git diff --check`。
-- [ ] 单独提交本轮纪律同步，提交信息使用详细中文。
+- [x] 单独提交本轮纪律同步，提交信息使用详细中文。
 - [x] 在本节追加 Review，记录实际提交、验证结果和当前工作树状态。
 
 边界：
@@ -25,7 +59,7 @@
 - 本轮同步：已在 `tasks/lessons.md` 中补充“每完成一阶段任务就单独提交、重启 Codex 会话后也主动检查并延续、不把多个完成阶段拖到最后合并提交”的长期规则。
 - 边界确认：本轮未修改业务代码，未安装依赖，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
 - 验证通过：`awk` 行尾空白检查；`git diff --check -- tasks/todo.md tasks/lessons.md`。
-- 阶段提交：本节由本轮纪律同步提交承载，实际提交号在最终回复中给出。
+- 阶段提交：已提交 `fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
 
 ## 2026-06-01 Rust/Go 开发跟踪清单生成计划
 

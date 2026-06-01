@@ -82,6 +82,7 @@
 - 仓库内文档无法可靠写入“自身提交 hash”时，要明确区分“最新开发基线”和“本轮文档同步提交”；support 文档记录真实开发基线，最终回复里的可复制提示词再补上本轮提交后的实际 HEAD。
 - 对 opencode / Codex runtime 这类分 Phase 开发，阶段实现提交后若用户要求“更新最新开发状态并给下次启动提示词”，必须立刻做状态同步提交：写清已完成 Phase、未完成 Phase、下一阶段入口、真实开发基线提交号和本轮验证结果；后续无需用户再次提醒。
 - 用户再次要求“更新文档最新开发状态、标清完成/未完成、给下次启动提示词”时，要把它当成默认收尾动作：同步 support README、development checklist、next-session prompt、`tasks/todo.md` Review 和 `tasks/lessons.md`，并提交这次状态同步，不再等待用户提醒“记住这个习惯”。
+- 对 Rust / Go 优化这类新建 `docs/improve/<topic>/` 的阶段化工作，如果目录还没有 `next-session-prompt.md`，第一次状态同步时必须补齐；后续每个阶段完成后默认同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要的 lessons，并单独提交状态同步。
 
 ## 2026-05-26 Codex native auth 中转配置
 

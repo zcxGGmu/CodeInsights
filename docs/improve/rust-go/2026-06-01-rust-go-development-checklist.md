@@ -9,9 +9,9 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-01
-> 最新开发基线：暂无 Rust / Go 功能开发提交；当前只有优化方案与开发跟踪清单文档。
-> 最新恢复入口：当前以 `docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md` 和本文为恢复入口；若本轮产生文档提交，以最终回复或下一轮状态同步中的真实 HEAD 为准。
-> 当前结论：Rust / Go 优化方案已完成并深化；本清单用于后续按阶段迭代。当前尚未开始实现 `NativeRuntimeAdapter`、TS fallback 重构、Rust sidecar、Go supervisor 或任何 native binary。
+> 最新开发基线：`8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`。这是文档与计划基线，不包含功能实现。
+> 最新已确认恢复入口：`fe34b231 docs(tasks): 固化阶段完成即提交纪律`。若本轮状态同步提交已产生，以最终回复中的最新 HEAD 为准。
+> 当前结论：Rust / Go 优化方案与开发跟踪清单已完成，阶段提交纪律已固化；当前尚未开始实现 `NativeRuntimeAdapter`、TS fallback 重构、Rust sidecar、Go supervisor 或任何 native binary。
 > 当前策略：先做 TypeScript 抽象、contract fixtures、benchmark 和 UI 状态收敛；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
@@ -19,6 +19,8 @@
 - [x] Rust / Go 优化重构方案文档已生成：`docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md`。
 - [x] Rust / Go 优化方案已按工程实践深化：目标、不变量、分层、后端、前端、数据契约、BDD、验证、风险与 MVP 已补齐。
 - [x] Rust / Go 开发跟踪清单已生成：`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`。
+- [x] 阶段提交纪律已固化：`fe34b231 docs(tasks): 固化阶段完成即提交纪律`。
+- [x] 已补齐 Rust / Go 下次启动提示词入口：`docs/improve/rust-go/next-session-prompt.md`。
 - [ ] Phase 0：基线、契约与 benchmark。
 - [ ] Phase 1：TypeScript fallback 与 EventSearchService 重构。
 - [ ] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
@@ -40,14 +42,15 @@
 - [ ] Native Runtime Diagnostics 设置页尚未实现。
 - [ ] Rust sidecar、Rust optional package、native-cache schema 和 packaged smoke 尚未实现。
 - [ ] Go supervisor 未进入主线，必须等 Phase 9 触发条件成立。
+- [ ] 根 `README.md` / 根 `AGENTS.md` 未同步；需要用户明确允许后才可修改。
 
 ### 下次启动入口
 
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案和本文，确认当前状态仍是“方案与清单完成，功能尚未实现”。
-3. 运行 `git status --short --branch`，确认当前工作树中是否存在未提交的文档或阶段成果。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态仍是“方案与清单完成，功能尚未实现；下一步从 Phase 0 开始”。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史至少包含 `fe34b231 docs(tasks): 固化阶段完成即提交纪律` 和 `8131b66b docs(rust-go): 新增优化方案和开发跟踪清单`，或包含其后的 Rust / Go 状态同步提交。
 4. 如果开始 Phase 0，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项。
 5. 不要直接写 Rust / Go。先做 benchmark、shared 契约、TS fallback 和 fixture parity。
 
@@ -1126,5 +1129,5 @@ git status --short
 可直接复制给下一次 Codex：
 
 ```text
-请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md 和 docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md。当前状态是：优化方案与开发跟踪清单已完成，功能尚未实现；下一步应从 Phase 0“基线、契约与 benchmark”开始，不要直接写 Rust / Go。请先运行 git status --short --branch，确认工作树状态，然后在 tasks/todo.md 写 Phase 0 计划，遵守不修改根 README.md / AGENTS.md、不中途安装依赖、不创建 native binary、先测试和 benchmark 后实现的边界。
+请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：优化方案与开发跟踪清单已完成，阶段提交纪律已固化，但功能尚未实现；最新已确认开发基线是 8131b66b docs(rust-go): 新增优化方案和开发跟踪清单，最新已确认恢复入口是 fe34b231 docs(tasks): 固化阶段完成即提交纪律。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 0“基线、契约与 benchmark”开始，不要直接写 Rust / Go；先在 tasks/todo.md 写 Phase 0 计划，遵守不修改根 README.md / AGENTS.md、不中途安装依赖、不创建 native binary、先测试和 benchmark 后实现的边界。
 ```
