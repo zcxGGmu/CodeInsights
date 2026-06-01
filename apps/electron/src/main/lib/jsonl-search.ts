@@ -1,5 +1,6 @@
-import { createReadStream, existsSync } from 'node:fs'
-import { createInterface } from 'node:readline'
+import {
+  findFirstJsonlEventMatch,
+} from './native-runtime/jsonl-event-reader'
 
 export interface SearchSnippetResult {
   snippet: string
@@ -42,36 +43,8 @@ export async function findFirstJsonlMatch<TParsed, TResult>(
   filePath: string,
   buildResult: (parsed: TParsed) => TResult | null | Promise<TResult | null>,
 ): Promise<TResult | null> {
-  if (!existsSync(filePath)) {
-    return null
-  }
-
-  const stream = createReadStream(filePath, { encoding: 'utf-8' })
-  const reader = createInterface({
-    input: stream,
-    crlfDelay: Infinity,
-  })
-
-  try {
-    for await (const line of reader) {
-      if (!line.trim()) continue
-
-      let parsed: TParsed
-      try {
-        parsed = JSON.parse(line) as TParsed
-      } catch {
-        continue
-      }
-
-      const result = await buildResult(parsed)
-      if (result != null) {
-        return result
-      }
-    }
-
-    return null
-  } finally {
-    reader.close()
-    stream.destroy()
-  }
+  return findFirstJsonlEventMatch<TParsed, TResult>(
+    filePath,
+    ({ record }) => buildResult(record),
+  )
 }

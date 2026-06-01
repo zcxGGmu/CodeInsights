@@ -22,7 +22,7 @@ import {
   getSdkConfigDir,
 } from './config-paths'
 import { ensurePluginManifest, getAgentWorkspace } from './agent-workspace-manager'
-import { buildSearchSnippet, findFirstJsonlMatch } from './jsonl-search'
+import { getTypeScriptEventSearchService } from './native-runtime/native-runtime-service'
 import {
   getMaterializedAgentRuntimeCwd,
   hasMaterializedAgentRuntime,
@@ -1145,6 +1145,67 @@ export function autoArchiveAgentSessions(daysThreshold: number): number {
   return count
 }
 
+function getSearchableAgentRole(parsed: Record<string, unknown>): AgentMessageSearchResult['role'] {
+  const message = parsed.message
+  const roleCandidate = typeof parsed.role === 'string'
+    ? parsed.role
+    : typeof message === 'object'
+      && message !== null
+      && typeof (message as { role?: unknown }).role === 'string'
+      ? (message as { role: string }).role
+      : 'assistant'
+
+  if (
+    roleCandidate === 'user'
+    || roleCandidate === 'assistant'
+    || roleCandidate === 'status'
+    || roleCandidate === 'tool'
+  ) {
+    return roleCandidate
+  }
+
+  return 'assistant'
+}
+
+function getSearchableAgentMessageId(parsed: Record<string, unknown>): string {
+  if (typeof parsed.id === 'string' && parsed.id) return parsed.id
+  if (typeof parsed.uuid === 'string' && parsed.uuid) return parsed.uuid
+
+  const message = parsed.message
+  if (
+    typeof message === 'object'
+    && message !== null
+    && typeof (message as { id?: unknown }).id === 'string'
+  ) {
+    return (message as { id: string }).id
+  }
+
+  return ''
+}
+
+function getSearchableAgentText(parsed: Record<string, unknown>): string | null {
+  if (typeof parsed.content === 'string') {
+    return parsed.content
+  }
+
+  const message = parsed.message
+  if (
+    typeof message === 'object'
+    && message !== null
+    && Array.isArray((message as { content?: unknown }).content)
+  ) {
+    const content = (message as { content: Array<{ type?: string; text?: string }> }).content
+    const text = content
+      .filter((block) => block.type === 'text' && typeof block.text === 'string')
+      .map((block) => block.text as string)
+      .join('\n')
+
+    return text || null
+  }
+
+  return null
+}
+
 /**
  * 搜索 Agent 会话消息内容
  *
@@ -1158,80 +1219,29 @@ export async function searchAgentSessionMessages(query: string): Promise<AgentMe
   if (!query || query.length < 2) return []
 
   const index = readIndex()
-  const results: AgentMessageSearchResult[] = []
-  const queryLower = query.toLowerCase()
-  const maxResults = 30
+  const searchService = getTypeScriptEventSearchService()
+  const result = await searchService.searchFirstMatchPerSource<Record<string, unknown>, AgentMessageSearchResult>({
+    requestId: `agent-search-${Date.now()}`,
+    query,
+    limit: 30,
+    sources: index.sessions.map((session) => ({
+      sourceKind: 'agent_message',
+      sourceId: session.id,
+      title: session.title,
+      filePath: getAgentSessionMessagesPath(session.id),
+      updatedAt: session.updatedAt,
+      getRecordId: getSearchableAgentMessageId,
+      getRecordText: getSearchableAgentText,
+      toLegacyResult: ({ source, record, snippet }) => ({
+        sessionId: source.sourceId,
+        sessionTitle: source.title,
+        messageId: getSearchableAgentMessageId(record),
+        role: getSearchableAgentRole(record),
+        archived: session.archived,
+        ...snippet,
+      }),
+    })),
+  })
 
-  for (const session of index.sessions) {
-    if (results.length >= maxResults) break
-
-    const filePath = getAgentSessionMessagesPath(session.id)
-    try {
-      const match = await findFirstJsonlMatch<Record<string, unknown>, AgentMessageSearchResult>(
-        filePath,
-        async (parsed) => {
-          // 兼容旧 AgentMessage 和新 SDKMessage 格式
-          const roleCandidate = typeof parsed.role === 'string'
-            ? parsed.role
-            : typeof parsed.message === 'object' && parsed.message !== null && typeof (parsed.message as { role?: unknown }).role === 'string'
-              ? (parsed.message as { role: string }).role
-              : 'assistant'
-          const role: AgentMessageSearchResult['role'] =
-            roleCandidate === 'user'
-            || roleCandidate === 'assistant'
-            || roleCandidate === 'status'
-            || roleCandidate === 'tool'
-              ? roleCandidate
-              : 'assistant'
-          const messageId =
-            (typeof parsed.id === 'string' && parsed.id)
-            || (typeof parsed.uuid === 'string' && parsed.uuid)
-            || (
-              typeof parsed.message === 'object'
-              && parsed.message !== null
-              && typeof (parsed.message as { id?: unknown }).id === 'string'
-              ? (parsed.message as { id: string }).id
-              : ''
-            )
-
-          let textContent = ''
-          if (typeof parsed.content === 'string') {
-            // 旧 AgentMessage 格式: {role, content: "..."}
-            textContent = parsed.content
-          } else if (
-            typeof parsed.message === 'object'
-            && parsed.message !== null
-            && Array.isArray((parsed.message as { content?: unknown }).content)
-          ) {
-            // 新 SDKMessage 格式: {type, message: {content: [{type:"text", text:"..."}]}}
-            textContent = ((parsed.message as { content: Array<{ type?: string; text?: string }> }).content)
-              .filter((block) => block.type === 'text' && typeof block.text === 'string')
-              .map((block) => block.text as string)
-              .join('\n')
-          }
-          if (!textContent) return null
-
-          const snippet = buildSearchSnippet(textContent, query, queryLower)
-          if (!snippet) return null
-
-          return {
-            sessionId: session.id,
-            sessionTitle: session.title,
-            messageId,
-            role,
-            archived: session.archived,
-            ...snippet,
-          }
-        },
-      )
-
-      if (match) {
-        results.push(match)
-      }
-    } catch {
-      // 跳过读取失败的文件
-    }
-  }
-
-  return results
+  return result.results
 }

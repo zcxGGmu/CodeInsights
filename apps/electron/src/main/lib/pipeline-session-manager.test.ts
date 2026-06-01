@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -245,6 +245,33 @@ describe('pipeline-session-manager', () => {
     expect(result.matches).toHaveLength(1)
     expect(result.matches[0]?.snippet.length).toBeLessThan(180)
     expect(JSON.stringify(result)).not.toContain(longContent)
+  })
+
+  test('searchPipelineRecordsPage 跳过坏 JSONL 行并继续返回命中', async () => {
+    const session = createPipelineSession('坏行搜索测试', 'channel-1', 'workspace-1')
+
+    appendFileSync(
+      join(tempConfigDir, 'pipeline-sessions', `${session.id}.jsonl`),
+      '{bad json\n',
+      'utf-8',
+    )
+    appendPipelineRecord(session.id, {
+      id: 'valid-output',
+      sessionId: session.id,
+      type: 'node_output',
+      node: 'developer',
+      summary: '构建失败',
+      content: '坏行后仍然可以搜索构建失败',
+      createdAt: 1,
+    })
+
+    const result = await searchPipelineRecordsPage({
+      sessionId: session.id,
+      query: '构建失败',
+      limit: 20,
+    })
+
+    expect(result.matches.map((match) => match.recordId)).toEqual(['valid-output'])
   })
 
   test('searchPipelineRecordsPage 的 tab 归属与前端阶段产物 fallback 规则一致', async () => {

@@ -59,7 +59,7 @@ describe('native runtime shared contract', () => {
 
     expect(searchInput.scope).toContain('pipeline')
     expect(searchInput.requestId).toBe(searchResult.requestId)
-    expect(searchResult.matches[0]?.sourceKind).toBe('pipeline')
+    expect(searchResult.matches[0]?.sourceKind).toBe('pipeline_record')
     expect(searchResult.matches[0]?.matchedRanges[0]).toEqual({ start: 12, length: 3 })
 
     expect(tailInput.fileKind).toBe('pipeline-records')

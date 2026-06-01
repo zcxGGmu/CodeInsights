@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 
 export interface BenchmarkOptions {
   records: number
@@ -145,6 +146,7 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
 async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary> {
   const startedAt = new Date().toISOString()
   const artifactDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-benchmark-'))
+  const eventSearchService = new TypeScriptEventSearchService()
 
   try {
     const fixtures = generateFixtures(artifactDir, options)
@@ -154,14 +156,42 @@ async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary
       'chat-search-large-history',
       { records: options.records, bytes: fixtures.chatBytes },
       options.iterations,
-      () => scanJsonlForQuery(fixtures.chatJsonlPath, '关键字'),
+      async () => {
+        const result = await eventSearchService.searchMatchesInSource<BenchmarkMessageRecord, number>({
+          requestId: 'benchmark-chat-search',
+          query: '关键字',
+          filePath: fixtures.chatJsonlPath,
+          sourceKind: 'chat_message',
+          sourceId: 'chat-session-demo',
+          title: 'Chat benchmark',
+          limit: 100,
+          getRecordId: (record) => record.id,
+          getRecordText: (record) => record.content,
+          toLegacyResult: () => 1,
+        })
+        return result.total
+      },
     ))
 
     cases.push(await measureCase(
       'agent-runtime-search',
       { records: options.records, bytes: fixtures.agentBytes },
       options.iterations,
-      () => scanJsonlForQuery(fixtures.agentJsonlPath, 'tool_result'),
+      async () => {
+        const result = await eventSearchService.searchMatchesInSource<BenchmarkAgentRecord, number>({
+          requestId: 'benchmark-agent-search',
+          query: 'tool_result',
+          filePath: fixtures.agentJsonlPath,
+          sourceKind: 'agent_message',
+          sourceId: 'agent-session-demo',
+          title: 'Agent benchmark',
+          limit: 100,
+          getRecordId: (record) => String(record.seq),
+          getRecordText: (record) => `${record.type}\n${record.content}`,
+          toLegacyResult: () => 1,
+        })
+        return result.total
+      },
     ))
 
     cases.push(await measureCase(
@@ -209,6 +239,17 @@ interface GeneratedFixtures {
   workspaceListPath: string
   workspaceBytes: number
   largeLogPath: string
+}
+
+interface BenchmarkMessageRecord {
+  id: string
+  content: string
+}
+
+interface BenchmarkAgentRecord {
+  seq: number
+  type: string
+  content: string
 }
 
 function generateFixtures(rootDir: string, options: BenchmarkOptions): GeneratedFixtures {
@@ -310,7 +351,7 @@ async function measureCase(
   name: string,
   dataScale: BenchmarkDataScale,
   iterations: number,
-  run: () => number,
+  run: () => number | Promise<number>,
 ): Promise<BenchmarkCaseInput> {
   const samplesMs: number[] = []
   const eventLoopDelays: number[] = []
@@ -324,7 +365,7 @@ async function measureCase(
     })
 
     const startedAt = performance.now()
-    run()
+    await run()
     samplesMs.push(performance.now() - startedAt)
     eventLoopDelays.push(await delay)
     maxMemoryDeltaBytes = Math.max(0, process.memoryUsage.rss() - memoryBefore, maxMemoryDeltaBytes)
@@ -337,25 +378,6 @@ async function measureCase(
     eventLoopDelayMs: Math.max(...eventLoopDelays),
     memoryDeltaBytes: maxMemoryDeltaBytes,
   }
-}
-
-function scanJsonlForQuery(filePath: string, query: string): number {
-  const queryLower = query.toLowerCase()
-  const raw = readFileSync(filePath, 'utf-8')
-  let matches = 0
-
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue
-    const parsed = JSON.parse(line) as { content?: string; type?: string }
-    if (
-      parsed.content?.toLowerCase().includes(queryLower)
-      || parsed.type?.toLowerCase().includes(queryLower)
-    ) {
-      matches += 1
-    }
-  }
-
-  return matches
 }
 
 function tailJsonlByFullParse(filePath: string, afterIndex: number, limit: number): number {

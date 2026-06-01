@@ -16,7 +16,7 @@ import {
 } from './config-paths'
 import { deleteConversationAttachments, deleteAttachment } from './attachment-service'
 import type { ConversationMeta, ChatMessage, RecentMessagesResult, MessageSearchResult } from '@codeinsights/shared'
-import { buildSearchSnippet, findFirstJsonlMatch } from './jsonl-search'
+import { getTypeScriptEventSearchService } from './native-runtime/native-runtime-service'
 
 /**
  * 对话索引文件格式
@@ -408,40 +408,30 @@ export async function searchConversationMessages(query: string): Promise<Message
   if (!query || query.length < 2) return []
 
   const index = readIndex()
-  const results: MessageSearchResult[] = []
-  const queryLower = query.toLowerCase()
-  const maxResults = 30
+  const searchService = getTypeScriptEventSearchService()
+  const result = await searchService.searchFirstMatchPerSource<ChatMessage, MessageSearchResult>({
+    requestId: `chat-search-${Date.now()}`,
+    query,
+    limit: 30,
+    sources: index.conversations.map((conv) => ({
+      sourceKind: 'chat_message',
+      sourceId: conv.id,
+      title: conv.title,
+      filePath: getConversationMessagesPath(conv.id),
+      updatedAt: conv.updatedAt,
+      getRecordId: (message) => message.id,
+      getRecordText: (message) => message.content,
+      getRecordCreatedAt: (message) => message.createdAt,
+      toLegacyResult: ({ source, record, snippet }) => ({
+        conversationId: source.sourceId,
+        conversationTitle: source.title,
+        messageId: record.id,
+        role: record.role,
+        archived: conv.archived,
+        ...snippet,
+      }),
+    })),
+  })
 
-  for (const conv of index.conversations) {
-    if (results.length >= maxResults) break
-
-    const filePath = getConversationMessagesPath(conv.id)
-    try {
-      const match = await findFirstJsonlMatch<ChatMessage, MessageSearchResult>(
-        filePath,
-        async (msg) => {
-          if (!msg.content) return null
-          const snippet = buildSearchSnippet(msg.content, query, queryLower)
-          if (!snippet) return null
-
-          return {
-            conversationId: conv.id,
-            conversationTitle: conv.title,
-            messageId: msg.id,
-            role: msg.role,
-            archived: conv.archived,
-            ...snippet,
-          }
-        },
-      )
-
-      if (match) {
-        results.push(match)
-      }
-    } catch {
-      // 跳过读取失败的文件
-    }
-  }
-
-  return results
+  return result.results
 }

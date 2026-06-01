@@ -4,7 +4,7 @@
   "matches": [
     {
       "id": "match-pipeline-001",
-      "sourceKind": "pipeline",
+      "sourceKind": "pipeline_record",
       "title": "Pipeline 记录",
       "snippet": "planner 输出包含关键字和测试建议",
       "matchedRanges": [

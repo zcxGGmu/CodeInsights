@@ -31,6 +31,7 @@ import {
   getPipelineSessionsIndexPath,
 } from './config-paths'
 import { readJsonFileSafe, writeJsonFileAtomic } from './safe-file'
+import { getTypeScriptEventSearchService } from './native-runtime/native-runtime-service'
 
 interface PipelineSessionsIndex {
   version: number
@@ -215,7 +216,14 @@ async function forEachPipelineRecord(
   for await (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed) continue
-    await handleRecord(JSON.parse(trimmed) as PipelineRecord)
+    let record: PipelineRecord
+    try {
+      record = JSON.parse(trimmed) as PipelineRecord
+    } catch {
+      // 搜索和索引读取应容忍坏行，避免单条损坏记录阻断整个会话检索。
+      continue
+    }
+    await handleRecord(record)
   }
 }
 
@@ -479,29 +487,29 @@ export async function searchPipelineRecordsPage(
   }
 
   const stageArtifactNodes = await collectStageArtifactNodes(input.sessionId)
-  const matches: PipelineRecordsSearchMatch[] = []
-  let total = 0
-
-  await forEachPipelineRecord(input.sessionId, (record) => {
-    if (!recordMatchesSearchStage(record, stage)) return
-
-    const searchText = stringifyRecordForSearch(record)
-    if (!searchText.toLowerCase().includes(normalized)) return
-
-    if (total >= offset && matches.length < limit) {
-      matches.push(toSearchMatch(record, input.query, searchText, stageArtifactNodes))
-    }
-    total += 1
+  const searchService = getTypeScriptEventSearchService()
+  const searchResult = await searchService.searchMatchesInSource<PipelineRecord, PipelineRecordsSearchMatch>({
+    requestId: `pipeline-search-${input.sessionId}-${Date.now()}`,
+    query: normalized,
+    filePath: getPipelineSessionRecordsPath(input.sessionId),
+    sourceKind: 'pipeline_record',
+    sourceId: input.sessionId,
+    title: getPipelineSessionMeta(input.sessionId)?.title ?? 'Pipeline 会话',
+    offset,
+    limit,
+    filterRecord: (record) => recordMatchesSearchStage(record, stage),
+    getRecordId: (record) => record.id,
+    getRecordText: (record) => stringifyRecordForSearch(record),
+    getRecordCreatedAt: (record) => record.createdAt,
+    toLegacyResult: ({ record, text }) => toSearchMatch(record, input.query, text, stageArtifactNodes),
   })
-
-  const nextOffset = offset + matches.length
 
   return {
     sessionId: input.sessionId,
     query: input.query,
-    matches,
-    total,
-    nextOffset,
-    hasMore: nextOffset < total,
+    matches: searchResult.matches,
+    total: searchResult.total,
+    nextOffset: searchResult.nextOffset,
+    hasMore: searchResult.hasMore,
   }
 }

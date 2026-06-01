@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentSessionMeta } from '@codeinsights/shared'
+import type { AgentSessionMeta, SDKMessage } from '@codeinsights/shared'
 
 mock.module('electron', () => ({
   app: {
@@ -325,5 +325,100 @@ describe('agent-session-manager runtime metadata', () => {
     expect(stored?.sdkSessionId).toBeUndefined()
     expect(stored?.forkSourceSdkSessionId).toBeUndefined()
     expect(stored?.resumeAtMessageUuid).toBeUndefined()
+  })
+})
+
+describe('agent-session-manager search', () => {
+  test('搜索兼容旧 AgentMessage 和新 SDKMessage 格式', async () => {
+    const {
+      appendAgentMessage,
+      appendSDKMessages,
+      createAgentSession,
+      searchAgentSessionMessages,
+    } = await loadSessionManager()
+    const legacy = createAgentSession('旧格式搜索')
+    const sdk = createAgentSession('SDK 格式搜索')
+
+    appendAgentMessage(legacy.id, {
+      id: 'legacy-hit',
+      role: 'assistant',
+      content: '旧格式包含关键字',
+      createdAt: 1,
+    })
+    appendSDKMessages(sdk.id, [
+      {
+        type: 'assistant',
+        message: {
+          id: 'sdk-hit',
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'SDK 文本包含关键字' },
+            { type: 'tool_use', id: 'tool-1', name: 'Read', input: {} },
+          ],
+        },
+        session_id: 'sdk-session',
+      } satisfies SDKMessage,
+    ])
+
+    const results = await searchAgentSessionMessages('关键字')
+
+    expect(results.map((result) => result.messageId)).toEqual(['legacy-hit', 'sdk-hit'])
+    expect(results.map((result) => result.role)).toEqual(['assistant', 'assistant'])
+    expect(results.every((result) => result.matchLength === 3)).toBe(true)
+  })
+
+  test('搜索保持每个 Agent 会话第一条命中和最多 30 条的旧行为', async () => {
+    const {
+      appendAgentMessage,
+      createAgentSession,
+      searchAgentSessionMessages,
+    } = await loadSessionManager()
+
+    for (let index = 0; index < 35; index += 1) {
+      const session = createAgentSession(`Agent 搜索 ${index}`)
+      appendAgentMessage(session.id, {
+        id: `agent-first-${index}`,
+        role: 'user',
+        content: `第一条包含关键字 ${index}`,
+        createdAt: 1,
+      })
+      appendAgentMessage(session.id, {
+        id: `agent-second-${index}`,
+        role: 'assistant',
+        content: `第二条也包含关键字 ${index}`,
+        createdAt: 2,
+      })
+    }
+
+    const results = await searchAgentSessionMessages('关键字')
+
+    expect(results).toHaveLength(30)
+    expect(results[0]?.messageId).toBe('agent-first-0')
+    expect(results.some((result) => result.messageId.startsWith('agent-second'))).toBe(false)
+  })
+
+  test('未知 role 仍回退为 assistant', async () => {
+    const {
+      createAgentSession,
+      searchAgentSessionMessages,
+    } = await loadSessionManager()
+    const session = createAgentSession('未知 role 搜索')
+    writeFileSync(
+      join(tempConfigDir, 'agent-sessions', `${session.id}.jsonl`),
+      JSON.stringify({
+        id: 'unknown-role-hit',
+        role: 'custom-role',
+        content: '包含关键字',
+        createdAt: 1,
+      }) + '\n',
+      'utf-8',
+    )
+
+    const results = await searchAgentSessionMessages('关键字')
+
+    expect(results[0]).toMatchObject({
+      messageId: 'unknown-role-hit',
+      role: 'assistant',
+    })
   })
 })

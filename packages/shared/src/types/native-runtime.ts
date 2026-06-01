@@ -56,7 +56,13 @@ export type NativeRuntimeOperationPhase =
 
 export type NativeRuntimeSearchScope = 'chat' | 'agent' | 'pipeline' | 'workspace' | 'patch-work'
 
-export type NativeRuntimeSearchSourceKind = NativeRuntimeSearchScope
+export type NativeRuntimeSearchSourceKind =
+  | NativeRuntimeSearchScope
+  | 'chat_message'
+  | 'agent_message'
+  | 'pipeline_record'
+  | 'workspace_file'
+  | 'patch_work_file'
 
 export type NativeRuntimeTailFileKind =
   | 'chat-messages'
