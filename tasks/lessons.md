@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-02 Rust / Go Native Runtime diagnostics 前端边界
+
+- Native Runtime diagnostics 即使当前只是 TypeScript fallback，也要按未来 native 失败路径处理：IPC / event 推送前统一移除 `binaryPath`，并脱敏 Bearer、Authorization、credentialed URL、home path 和 stderr-like 文本；普通搜索 UI 只展示简短状态，protocol / cache schema / binary path 这类技术细节只允许出现在已脱敏 diagnostics 面板。
+- 手动 rebuild workspace index 的 renderer API 只能传 `workspaceId` / `requestId`；main process 必须从已登记 Agent workspace 派生 `workspace-files/` 和 attached directories。不要为了“方便重建”让 renderer 传 `rootPath`、cache path 或任意 native command。
+- Native Runtime 的全局事件监听要沿用 Agent / Pipeline listener 模式，在 renderer 顶层挂载并用 Jotai store 写入 atoms；测试必须覆盖 detach 后不再写状态，避免重复挂载、设置页卸载或弹窗关闭污染全局 operation / status。
+
 ## 2026-06-01 Rust / Go Workspace index 路径白名单与容量上限
 
 - `SEARCH_WORKSPACE_FILES` 这类历史上接收 renderer 路径的 IPC，接入 cache / index 后不能只复用旧签名；main 端必须从已登记 workspace / session / attached directories 派生白名单并用 realpath 对齐，renderer 传入路径只能作为待匹配 intent，不能作为扫描事实源。

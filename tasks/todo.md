@@ -1,5 +1,129 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-02 Rust/Go Phase 4 前端可见体验、Jotai 状态与 Diagnostics 计划
+
+范围确认：Phase 0、Phase 1、Phase 2 和 Phase 3 已完成。最新开发基线为 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`，最新状态同步恢复入口为 `0128727a docs(rust-go): 同步 Phase 3 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript / React / Jotai / IPC 可见体验，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD / BDD 实现。
+
+启动基线：
+
+- [x] 已读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、开发跟踪清单和下次启动提示词。
+- [x] 已运行 `git status --short --branch`：当前分支为 `rust-go-refactor`，启动时工作树干净。
+- [x] 已运行 `git log -5 --oneline`：最新提交为 `0128727a docs(rust-go): 同步 Phase 3 后续开发状态与下次启动入口`，本轮以 `0128727a` 作为最新已确认恢复入口，以 `4ec586fc` 作为最新已确认开发基线。
+- [x] 已确认 Phase 4 入口条件：Phase 1 到 Phase 3 的 TS fallback 服务已稳定，diagnostics DTO 已包含 status / capability / fallbackReason / lastError，SearchDialog 已具备 requestId / generation 防护基础。
+
+Phase 4 范围：
+
+- [x] 新增 Native Runtime IPC / preload 最小闭环：status、diagnostics、rebuildIndex、clearCache、operation progress、status changed；不暴露 binary path 或任意 native command。
+- [x] 主进程对 Native Runtime IPC input 做运行时校验和错误规范化；renderer 只能传结构化 request，不允许直接传 shell/native 命令。
+- [x] 扩展 TypeScript native runtime facade 的 diagnostics / operation 状态：可返回脱敏 status、diagnostics、清理派生 cache、触发 workspace index rebuild，并广播状态 / operation progress。
+- [x] 新增 `native-runtime-atoms.ts`，管理 status、diagnostics、lastError、operation map、workspace indexing map、按 requestId 的搜索状态和按 sessionId 的 tail loading 状态。
+- [x] 新增 `useGlobalNativeRuntimeListeners`，在 `main.tsx` 顶层挂载，处理 status changed 与 operation progress，重复挂载 / 卸载不污染状态。
+- [x] SearchDialog 增加 source filter tabs：全部、Pipeline、Workspace、Chat、Agent；增加 fallback / rebuilding / unavailable 简短状态和 “更多结果” 展示控制，关闭弹窗后清理 pending UI state。
+- [x] PipelineRecords 增加 cursor loading / 错误重试状态；若现有组件已具备等价状态，则只补测试和轻量文案，不重写 records 读取策略。
+- [x] Settings 增加 `NativeRuntimeDiagnostics` 面板：展示简明状态、能力、cache / fallback / lastError、手动 rebuild workspace index、清理派生 cache、复制脱敏诊断。
+- [x] 递增受影响 package patch 版本并同步 `bun.lock`。
+- [x] 阶段完成后同步 Rust / Go development checklist、`next-session-prompt.md`、本节 Review 和必要 lessons，并单独提交 Phase 4 实现；随后单独提交状态同步。
+
+明确不在 Phase 4 做：
+
+- [x] 不实现 Rust sidecar、Go supervisor、Rust crate、Go module、native optional package、native-cache 持久 schema 或 packaged smoke。
+- [x] 不实现大文件 / 日志 chunk preview 的后端读取；只允许预留入口或状态，不改变文件预览事实源。
+- [x] 不改变 Chat / Agent / Pipeline / Workspace 搜索结果事实源，不把 cache 当作唯一数据源。
+- [x] 不把 native binary path、protocol version 等内部细节放进普通搜索界面；详细技术信息只放 diagnostics 面板且必须脱敏。
+- [x] 不在 renderer 中直接清理 `~/.codeinsights/native-cache/`，不暴露文件系统清理路径。
+
+拟触达文件：
+
+- [skip] `packages/shared/src/constants/native-runtime.ts`：现有 `NATIVE_RUNTIME_IPC_CHANNELS` 已位于 `types/native-runtime.ts` 并通过 shared root re-export 暴露；本阶段补了 root export 测试，避免新增子路径导出造成包结构漂移。
+- [x] `packages/shared/src/types/native-runtime.ts`
+- [x] `apps/electron/src/main/ipc/native-runtime-handlers.ts`
+- [x] `apps/electron/src/main/ipc.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [x] `apps/electron/src/preload/index.ts`
+- [x] `apps/electron/src/renderer/atoms/native-runtime-atoms.ts`
+- [x] `apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.ts`
+- [x] `apps/electron/src/renderer/main.tsx`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/PipelineRecords.tsx`（如需）
+- [x] `apps/electron/src/renderer/components/pipeline/usePipelineRecordsTail.ts`（如需）
+- [x] `apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.tsx`
+- [x] `apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.test.tsx`
+- [x] `apps/electron/src/renderer/components/settings/SettingsPanel.tsx`
+- [x] `apps/electron/src/renderer/atoms/settings-tab.ts`
+- [x] `apps/electron/package.json`
+- [x] `packages/shared/package.json`（仅 shared 契约变化时）
+- [x] `bun.lock`
+- [x] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（阶段完成后同步）
+- [x] `docs/improve/rust-go/next-session-prompt.md`（阶段完成后同步）
+- [x] `tasks/todo.md`
+- [x] `tasks/lessons.md`（如本阶段发现新的 diagnostics / 脱敏 / listener 边界）
+
+测试先行计划：
+
+- [x] 先补 Native Runtime IPC / service 单测：status / diagnostics 脱敏、invalid input、rebuildIndex force、clearCache 不触达事实源、operation progress terminal 状态。
+- [x] 先补 Jotai atom 单测：status 初始化、diagnostics refresh、operation upsert / terminal cleanup、workspaceId 隔离、sessionId tail loading 隔离、requestId 搜索状态清理。
+- [x] 先补 hook 测试：listener 挂载、卸载、重复事件、status changed、operation progress、组件卸载后不继续写状态。
+- [x] 先补 SearchDialog model / renderer 测试：source filter、快速输入 stale result 丢弃、关闭弹窗清理 pending state、fallback / unavailable / rebuilding 文案、更多结果限制。
+- [x] 先补 NativeRuntimeDiagnostics renderer 测试：loading、fallback、clear cache confirmation、rebuild 触发、复制脱敏诊断、不显示 binary path / home path / token。
+
+验证命令：
+
+```bash
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/src/main/ipc/native-runtime-handlers.test.ts
+bun test apps/electron/src/renderer/atoms/native-runtime-atoms.test.ts
+bun test apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.test.ts
+bun test apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx
+bun test apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.test.tsx
+bun test packages/shared/src/types/native-runtime.test.ts
+bun run --filter='@codeinsights/shared' typecheck
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:preload
+bun run --filter='@codeinsights/electron' build:renderer
+bun install --frozen-lockfile --dry-run
+git diff --check
+git status --short --branch
+```
+
+验证备注：
+
+- Phase 4 不运行 `cargo test` / `go test`，因为不会创建 Rust / Go 工程。
+- 如果 `PipelineRecords` 已具备 cursor loading / retry 等价状态，可跳过对应文件改动，但必须保留或补足测试说明。
+- Electron smoke 如当前测试基础设施不足，本阶段至少完成 renderer / IPC / build 验证，并在 Review 写明 smoke 剩余项进入后续阶段。
+
+禁止事项：
+
+- [x] 不直接写 Rust / Go。
+- [x] 不安装依赖。
+- [x] 不创建 native binary、Rust crate、Go module、optionalDependencies 或打包配置。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不引入本地数据库，不用 localStorage 持久化 native 状态。
+- [x] 不在 renderer 中递归扫描文件系统，不让 renderer 知道 native binary path 或 cache path。
+- [x] 不展示 token、Authorization、credentialed remote URL、完整 home path 或原始 stderr。
+- [x] 不改变现有 Chat / Agent / Pipeline IPC 返回形状，不删除旧 preload API。
+- [x] 不复制用户真实 `~/.codeinsights/` 数据进 fixture 或测试。
+- [x] 不 push、不创建 PR、不执行真实远端写。
+
+### 实现前 Check-in
+
+- [x] 已将 Phase 4 计划写入本节；用户已明确无需确认，直接进入测试与实现。
+
+### Review
+
+- 实现完成：Phase 4 已提交为 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。新增 Native Runtime IPC / preload 闭环、operation progress / status changed 广播、Jotai atoms、全局 listener、SearchDialog source filter / fallback 状态 / 更多结果、PipelineRecords tail loading / retry 和 Settings `NativeRuntimeDiagnostics` 面板。
+- 主进程边界：`rebuildNativeRuntimeIndex` 只接收 `workspaceId` / `requestId`，由 main process 从已登记 Agent workspace 派生 `workspace-files/` 与 attached directories；renderer 不能传任意扫描 root、native command、binary path 或 cache path。`clearNativeRuntimeCache` 只清理 TypeScript workspace index 派生 cache，不触达 JSON / JSONL 事实源。
+- shared 契约：`NativeRuntimeOperationProgress` / `NativeRuntimeOperationState` 补齐 `requestId`、`workspaceId`、`sessionId`；新增 `NativeRuntimeRebuildIndexInput` 与 `NativeRuntimeClearCacheInput`。未新增 `packages/shared/src/constants/native-runtime.ts`，因为现有常量已在 `types/native-runtime.ts` 并通过 shared root 暴露，已补 root export 测试。
+- 前端状态：`native-runtime-atoms.ts` 管理 status、diagnostics、lastError、operation map、workspace indexing map、SearchDialog request map 和 Pipeline tail loading map；`useGlobalNativeRuntimeListeners` 在 renderer 顶层挂载，重复挂载 / 卸载不会污染全局 atoms。
+- UI 体验：SearchDialog 增加 `全部 / Pipeline / Workspace / Chat / Agent` filter tabs、TypeScript fallback / 索引重建 / 异常 / unknown 简短状态、分组更多结果按钮，并修复过滤后内容结果键盘索引偏移；Settings 新增“运行诊断”，支持刷新 diagnostics、重建当前工作区索引、二次确认清理派生缓存和复制脱敏诊断。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime apps/electron/src/main/ipc/native-runtime-handlers.test.ts apps/electron/src/renderer/atoms/native-runtime-atoms.test.ts apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.test.ts apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.test.tsx packages/shared/src/types/native-runtime.test.ts`；`bun test apps/electron/src/renderer/components/pipeline`；`bun run --filter='@codeinsights/shared' typecheck`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' build:preload`；`bun run --filter='@codeinsights/electron' build:renderer`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。`build:renderer` 仅有既有大 chunk 警告。
+- 未完成 / 后续：未跑 Electron browser smoke；本阶段以 IPC / renderer model / build 验证收口，真实 Electron 交互 smoke 和 packaged smoke 留到 Phase 8。Rust sidecar、Go supervisor、native binary、native optional package、大文件 / 日志 chunk preview 均未实现。
+- 安全与隐私结论：diagnostics / status / operation 推送会移除 `binaryPath` 并脱敏 Bearer、Authorization、credentialed URL 和 home path；普通搜索界面只显示简短索引状态，不展示 protocol version、cache schema、binary path 或 stderr。
+- 文档边界：未修改根 `README.md` / 根 `AGENTS.md`；未安装依赖；未写 Rust / Go；未 push；未创建 PR。
+- 下一阶段入口：Phase 5 “Rust search sidecar 试点”。进入 Phase 5 前必须先做依赖搜索和 decision record，明确性能收益门槛、packaged smoke 计划和 fallback / missing binary 行为。
+
 ## 2026-06-01 Rust/Go Phase 3 状态同步计划
 
 范围确认：Phase 3 实现提交已完成，提交为 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`。本轮只做阶段收尾状态同步：更新 Rust / Go development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，并单独提交。继续不修改根 `README.md` / 根 `AGENTS.md`，不写 Rust / Go，不安装依赖，不创建 native binary。

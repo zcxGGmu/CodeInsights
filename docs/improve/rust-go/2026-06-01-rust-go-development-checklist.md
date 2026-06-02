@@ -8,11 +8,11 @@
 
 ## 最新开发状态
 
-> 更新时间：2026-06-01
-> 最新开发基线：`4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`。
-> 最新已确认恢复入口：`4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
-> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2 和 Phase 3 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，并完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单。尚未实现 Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。
-> 当前策略：下一阶段从 Phase 4 前端可见体验、Jotai 状态和 diagnostics 开始，继续保持 TypeScript fallback 和 JSON / JSONL 事实源不变；只有 benchmark 证明收益且 fallback / packaged smoke / 安全门禁齐全后，才进入 Rust sidecar。Go supervisor 仅作为有条件 spike，不进入默认主线。
+> 更新时间：2026-06-02
+> 最新开发基线：`16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。
+> 最新已确认恢复入口：本文件所在的 Phase 4 状态同步提交；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。尚未实现 Rust sidecar、Go supervisor 或任何 native binary。
+> 当前策略：下一阶段从 Phase 5 Rust search sidecar 试点开始；进入前必须先做依赖搜索和 decision record，写清性能收益门槛、packaged smoke、native missing fallback 和安全门禁。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
 
@@ -25,7 +25,7 @@
 - [x] Phase 1：TypeScript fallback 与 EventSearchService 重构。
 - [x] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [x] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
-- [ ] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
+- [x] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
 - [ ] Phase 5：Rust search sidecar 试点。
 - [ ] Phase 6：大文件 / 日志 chunk preview。
 - [ ] Phase 7：PathSafety 与 GitOutputParser 抽象。
@@ -41,7 +41,7 @@
 - [x] Pipeline records tail 已改为 TypeScript cursor / byte-offset tail，保留旧 afterIndex 兼容路径。
 - [x] Workspace 文件索引已建立可取消、可重建的 TypeScript 缓存层，并接入 watcher invalidation。
 - [x] SearchDialog 已接入 Pipeline 与 Workspace 内容搜索，并具备 Pipeline / Workspace / Chat / Agent 分组、stale result 丢弃、Pipeline record 聚焦和 Workspace 文件预览入口。
-- [ ] Native Runtime Diagnostics 设置页尚未实现。
+- [x] Native Runtime Diagnostics 设置页、Jotai diagnostics 状态、rebuild / clear cache IPC 和前端 fallback 状态已完成。
 - [ ] Rust sidecar、Rust optional package、native-cache schema 和 packaged smoke 尚未实现。
 - [ ] Go supervisor 未进入主线，必须等 Phase 9 触发条件成立。
 - [ ] 根 `README.md` / 根 `AGENTS.md` 未同步；需要用户明确允许后才可修改。
@@ -51,10 +51,10 @@
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 已完成；下一步从 Phase 4 前端可见体验、Jotai 状态和 diagnostics 开始”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache` 或其后的 Rust / Go 状态同步提交。
-4. 如果开始 Phase 4，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令和禁止事项；用户已明确计划写清后无需等待确认。
-5. 不要直接写 Rust / Go。Phase 4 仍然先做 TypeScript fallback 的前端可见状态、Jotai diagnostics 状态、rebuild / fallback / error UI 和可取消搜索体验。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 已完成；Phase 4 前端可见体验、Jotai 状态和 diagnostics 已完成；下一步从 Phase 5 Rust search sidecar 试点开始”。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验` 或其后的 Rust / Go 状态同步提交。
+4. 如果开始 Phase 5，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令、收益门槛、依赖 decision record 和禁止事项；用户已明确计划写清后无需等待确认。
+5. 不要直接写 Rust / Go 代码或安装依赖；Phase 5 必须先做 Rust 依赖搜索 / decision record、sidecar protocol / fallback / packaged smoke 计划，然后再进入最小 Rust search sidecar 实现。
 
 ## 使用规则
 
@@ -123,7 +123,7 @@
 | M1 | Phase 1 | 收敛 TS fallback 与 EventSearchService | [x] | 必须 |
 | M2 | Phase 2 | Pipeline records cursor / tail 与 SearchDialog 接入 | [x] | 必须 |
 | M3 | Phase 3 | Workspace 文件索引 TS cache 与 watcher invalidation | [x] | 必须 |
-| M4 | Phase 4 | 前端索引状态、诊断、可取消搜索和大文件入口 | [ ] | 必须 |
+| M4 | Phase 4 | 前端索引状态、诊断、可取消搜索和大文件入口 | [x] | 必须 |
 | M5 | Phase 5 | Rust search sidecar 试点 | [ ] | 有条件 |
 | M6 | Phase 6 | 大文件 / 日志 chunk preview | [ ] | 有条件 |
 | M7 | Phase 7 | PathSafety 与 GitOutputParser 抽象，可选 Rust helper | [ ] | 有条件 |
@@ -558,12 +558,12 @@ git status --short
 
 ### 阶段状态
 
-- [ ] 阶段开始
-- [ ] 测试先行完成
-- [ ] 实现完成
-- [ ] 验证完成
-- [ ] 阶段 Review 完成
-- [ ] 阶段提交完成
+- [x] 阶段开始
+- [x] 测试先行完成
+- [x] 实现完成
+- [x] 验证完成
+- [x] 阶段 Review 完成
+- [x] 阶段提交完成
 
 ### 目标
 
@@ -577,78 +577,101 @@ git status --short
 
 ### 契约与 IPC 任务
 
-- [ ] 新增 `NATIVE_RUNTIME_IPC_CHANNELS`：status、diagnostics、rebuildIndex、clearCache、search、tail、readFileChunk。
-- [ ] preload 暴露最小 API：不暴露 binary path，不允许 renderer 传任意 native command。
-- [ ] 主进程增加 native runtime status event，只推送脱敏状态。
-- [ ] 所有 IPC input 在 main process 做运行时校验。
+- [x] 新增 `NATIVE_RUNTIME_IPC_CHANNELS`：status、diagnostics、rebuildIndex、clearCache、operation state、cancel、progress event、status changed event。`search`、`tail`、`readFileChunk` 常量已在 Phase 0 草案中存在，本阶段未新增 handler。
+- [x] preload 暴露最小 API：不暴露 binary path，不允许 renderer 传任意 native command。
+- [x] 主进程增加 native runtime status event，只推送脱敏状态。
+- [x] 所有 IPC input 在 main process 做运行时校验。
 
 ### Jotai 与 Hook 任务
 
-- [ ] 新增 `native-runtime-atoms.ts`：status、diagnostics、indexing map、lastError、operation map。
-- [ ] 新增 `useGlobalNativeRuntimeListeners`，在 `main.tsx` 顶层挂载。
-- [ ] 搜索请求状态按 requestId 存储，关闭弹窗后清理 pending UI state。
-- [ ] workspace indexing 状态按 workspaceId 隔离。
-- [ ] Pipeline tail loading 状态按 sessionId 隔离。
+- [x] 新增 `native-runtime-atoms.ts`：status、diagnostics、indexing map、lastError、operation map。
+- [x] 新增 `useGlobalNativeRuntimeListeners`，在 `main.tsx` 顶层挂载。
+- [x] 搜索请求状态按 requestId 存储，关闭弹窗后清理 pending UI state。
+- [x] workspace indexing 状态按 workspaceId 隔离。
+- [x] Pipeline tail loading 状态按 sessionId 隔离。
 
 ### UI 任务
 
-- [ ] SearchDialog 增加 source tabs 或分组：全部、Chat、Agent、Pipeline、Workspace。
-- [ ] SearchDialog 增加 indexed / fallback / rebuilding / unavailable 状态。
-- [ ] SearchDialog 支持分页或 “更多结果”，避免一次性渲染过多结果。
-- [ ] PipelineRecords 增加 cursor loading 和加载失败重试。
-- [ ] Settings 增加 `NativeRuntimeDiagnostics` 面板：状态、能力、缓存、重建、清理、复制脱敏诊断。
-- [ ] 普通用户界面只展示简短状态；详细技术信息只放 diagnostics。
+- [x] SearchDialog 增加 source tabs 或分组：全部、Chat、Agent、Pipeline、Workspace。
+- [x] SearchDialog 增加 indexed / fallback / rebuilding / unavailable 状态。
+- [x] SearchDialog 支持分页或 “更多结果”，避免一次性渲染过多结果。
+- [x] PipelineRecords 增加 cursor loading 和加载失败重试。
+- [x] Settings 增加 `NativeRuntimeDiagnostics` 面板：状态、能力、缓存、重建、清理、复制脱敏诊断。
+- [x] 普通用户界面只展示简短状态；详细技术信息只放 diagnostics。
 
 ### 测试任务
 
-- [ ] Renderer 测试覆盖 SearchDialog 快速输入、stale result 丢弃、source 分组。
-- [ ] Renderer 测试覆盖 diagnostics loading、fallback、clear cache confirmation。
-- [ ] Hook 测试覆盖 listener 挂载、卸载、重复事件和 session/workspace 隔离。
-- [ ] Electron smoke 覆盖打开搜索、执行搜索、打开 diagnostics 面板。
-- [ ] 无障碍检查：按钮可聚焦、状态文本可读、错误操作有明确恢复动作。
+- [x] Renderer 测试覆盖 SearchDialog 快速输入、stale result 丢弃、source 分组。
+- [x] Renderer 测试覆盖 diagnostics loading、fallback、clear cache confirmation。
+- [x] Hook 测试覆盖 listener 挂载、卸载、重复事件和 session/workspace 隔离。
+- [skip] Electron smoke 覆盖打开搜索、执行搜索、打开 diagnostics 面板：本阶段未启动 Electron 交互 smoke；以 IPC / renderer model / build 验证收口，真实 Electron 交互 smoke 与 packaged smoke 放入 Phase 8。
+- [x] 无障碍检查：按钮可聚焦、状态文本可读、错误操作有明确恢复动作。
 
 ### 触达文件
 
-- [ ] `packages/shared/src/constants/native-runtime.ts`
-- [ ] `packages/shared/src/types/native-runtime.ts`
-- [ ] `apps/electron/src/main/ipc/native-runtime-handlers.ts`
-- [ ] `apps/electron/src/preload/index.ts`
-- [ ] `apps/electron/src/renderer/atoms/native-runtime-atoms.ts`
-- [ ] `apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.ts`
-- [ ] `apps/electron/src/renderer/main.tsx`
-- [ ] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
-- [ ] `apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.tsx`
+- [skip] `packages/shared/src/constants/native-runtime.ts`：现有 `NATIVE_RUNTIME_IPC_CHANNELS` 保持在 `types/native-runtime.ts` 并通过 shared root re-export 暴露；本阶段补 root export 测试，不新增子路径。
+- [x] `packages/shared/src/types/native-runtime.ts`
+- [x] `apps/electron/src/main/ipc/native-runtime-handlers.ts`
+- [x] `apps/electron/src/main/ipc.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [x] `apps/electron/src/preload/index.ts`
+- [x] `apps/electron/src/renderer/atoms/native-runtime-atoms.ts`
+- [x] `apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.ts`
+- [x] `apps/electron/src/renderer/main.tsx`
+- [x] `apps/electron/src/renderer/components/app-shell/SearchDialog.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/PipelineRecords.tsx`
+- [x] `apps/electron/src/renderer/components/pipeline/usePipelineRecordsTail.ts`
+- [x] `apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.tsx`
+- [x] `apps/electron/src/renderer/components/settings/SettingsPanel.tsx`
+- [x] `apps/electron/src/renderer/atoms/settings-tab.ts`
 
 ### 验证命令
 
 ```bash
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/src/main/ipc/native-runtime-handlers.test.ts
 bun test apps/electron/src/renderer/atoms/native-runtime-atoms.test.ts
 bun test apps/electron/src/renderer/hooks/useGlobalNativeRuntimeListeners.test.ts
 bun test apps/electron/src/renderer/components/app-shell/SearchDialog.indexed.test.tsx
 bun test apps/electron/src/renderer/components/settings/NativeRuntimeDiagnostics.test.tsx
+bun test packages/shared/src/types/native-runtime.test.ts
+bun test apps/electron/src/renderer/components/pipeline
+bun run --filter='@codeinsights/shared' typecheck
 bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' build:preload
 bun run --filter='@codeinsights/electron' build:renderer
+bun install --frozen-lockfile --dry-run
 git diff --check
-git status --short
+git status --short --branch
 ```
 
 ### 完成定义
 
-- [ ] 用户可以看到搜索索引状态、fallback 状态和重建入口。
-- [ ] 快速输入和视图切换不会出现旧结果覆盖新结果。
-- [ ] Diagnostics 可复制脱敏信息，不暴露 token、home path、credentialed URL。
-- [ ] UI 组件拆分清晰，没有把 diagnostics 逻辑塞进单个大组件。
+- [x] 用户可以看到搜索索引状态、fallback 状态和重建入口。
+- [x] 快速输入和视图切换不会出现旧结果覆盖新结果。
+- [x] Diagnostics 可复制脱敏信息，不暴露 token、home path、credentialed URL。
+- [x] UI 组件拆分清晰，没有把 diagnostics 逻辑塞进单个大组件。
 
 ### 禁止事项
 
-- [ ] 不在普通搜索界面展示 native binary path、protocol version 等内部细节。
-- [ ] 不引入非 Jotai 的全局状态管理。
-- [ ] 不用 localStorage 持久化 native 状态。
-- [ ] 不用 renderer 直接清理 `~/.codeinsights/native-cache/`。
+- [x] 不在普通搜索界面展示 native binary path、protocol version 等内部细节。
+- [x] 不引入非 Jotai 的全局状态管理。
+- [x] 不用 localStorage 持久化 native 状态。
+- [x] 不用 renderer 直接清理 `~/.codeinsights/native-cache/`。
 
 ### 阶段 Review
 
-待 Phase 4 完成后追加。
+- 阶段范围：TypeScript / React / Jotai / IPC 可见体验；未写 Rust / Go，未安装依赖，未创建 native binary，未改根 `README.md` / 根 `AGENTS.md`。
+- 实现完成：新增 Native Runtime IPC handler 与 preload API，支持 status、diagnostics、rebuildIndex、clearCache、operation state、cancel operation、operation progress event 和 status changed event；主进程 facade 记录 operation state 并广播脱敏 progress / status。
+- Jotai / listener：新增 `native-runtime-atoms.ts` 和 `useGlobalNativeRuntimeListeners`，全局管理 diagnostics、operation map、workspace indexing map、SearchDialog request map 和 Pipeline tail loading map；listener 在顶层挂载，detach 后不继续写状态。
+- UI 完成：SearchDialog 增加 `全部 / Pipeline / Workspace / Chat / Agent` filter tabs、fallback / rebuilding / unavailable / error 简短状态和更多结果；PipelineRecords 增加 records tail loading、读取失败和 retry；Settings 增加“运行诊断”面板，支持刷新、重建当前工作区索引、二次确认清理派生缓存和复制脱敏 diagnostics。
+- 安全边界：renderer rebuild 只能传 `workspaceId` / `requestId`，实际 `workspace-files/` 和 attached directories 由 main process 派生；diagnostics / status / operation 推送移除 `binaryPath` 并脱敏 Bearer、Authorization、credentialed URL、home path 和错误详情；clear cache 只清理 TypeScript workspace index 派生 cache，不触达 JSON / JSONL 事实源。
+- 验证通过：目标 Native Runtime / IPC / atoms / hook / SearchDialog / Diagnostics / shared tests、Pipeline renderer tests、shared/electron typecheck、main/preload/renderer build、`bun install --frozen-lockfile --dry-run`、`git diff --check` 均通过；`build:renderer` 仅有既有大 chunk 警告。
+- 未完成项 / [skip]：Electron 交互 smoke 与 packaged smoke 未在本阶段执行，留到 Phase 8；Rust sidecar、Go supervisor、native binary、native optional package、大文件 / 日志 chunk preview 均未实现。
+- 阶段提交：`16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。
+- 下一阶段入口：Phase 5 Rust search sidecar 试点；必须先做依赖搜索和 decision record，明确性能收益门槛、fallback / missing binary、contract parity、packaged smoke 和安全门禁。
 
 ## Phase 5：Rust Search Sidecar 试点
 
@@ -668,7 +691,7 @@ git status --short
 
 ### 入口条件
 
-- [ ] Phase 0 到 Phase 4 已完成并提交。
+- [x] Phase 0 到 Phase 4 已完成并提交。
 - [ ] benchmark 显示 TS fallback 在目标数据规模下仍不满足门槛。
 - [ ] Rust sidecar 的收益门槛已写入 `tasks/todo.md`：例如 100MB JSONL 搜索 P95 至少快 3 倍。
 - [ ] 已完成 Rust 依赖 decision record，比较继续 TS、Rust crate、Go package。
@@ -762,7 +785,7 @@ git status --short
 
 ### 入口条件
 
-- [ ] Phase 4 diagnostics 和 request cancellation 已完成。
+- [x] Phase 4 diagnostics 和 request cancellation 已完成。
 - [ ] 文件预览安全边界已复核：renderer 不传任意绝对路径直接读取。
 - [ ] 大文件 fixture 生成方式已确定，不提交大文件。
 
@@ -1190,5 +1213,5 @@ git status --short
 可直接复制给下一次 Codex：
 
 ```text
-请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”和 Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”已经完成。Phase 0 已建立 shared NativeRuntime DTO / IPC 草案、contract fixtures、主进程 NativeRuntimeAdapter TypeScript interface、diagnostics 空实现和 native-runtime benchmark runner；Phase 1 已新增 jsonl-event-reader.ts、ts-event-search-service.ts 和 native-runtime-service.ts，统一 Chat / Agent / Pipeline TypeScript 搜索 fallback facade，并保留旧 IPC / preload / renderer 行为兼容；Phase 2 已新增 TypeScript Pipeline cursor tail service 并接入 SearchDialog Pipeline 内容搜索；Phase 3 已新增 TypeScript workspace 文件索引 cache、main 端路径白名单、watcher invalidation 和 SearchDialog Workspace 文件分组。目前尚未实现 Native Runtime Diagnostics UI、Rust sidecar、Go supervisor 或任何 native binary。最新已确认开发基线是 4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 4“前端可见体验、Jotai 状态和 diagnostics”开始；先在 tasks/todo.md 写 Phase 4 计划，明确范围、触达文件、验证命令和禁止事项。用户已明确计划写清后无需等待确认；不要直接写 Rust / Go，不安装依赖，不创建 native binary，不修改根 README.md / AGENTS.md。
+请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”、Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”和 Phase 4“前端可见体验、Jotai 状态和 diagnostics”已经完成。Phase 4 已新增 Native Runtime diagnostics IPC / preload / Jotai atoms / 全局 listener / Settings 运行诊断面板，SearchDialog 已具备 source filter、fallback / rebuilding 状态和更多结果控制，PipelineRecords 已具备 tail loading / retry 状态。目前尚未实现 Rust sidecar、Go supervisor、native binary、native optional package 或大文件 / 日志 chunk preview。最新已确认开发基线是 16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 5“Rust search sidecar 试点”开始；先在 tasks/todo.md 写 Phase 5 计划，明确范围、触达文件、验证命令、收益门槛、依赖 decision record 和禁止事项。用户已明确计划写清后无需等待确认；不要直接写 Rust / Go 代码或安装依赖，必须先做 Rust 依赖搜索 / decision record、sidecar protocol / fallback / packaged smoke 计划，不修改根 README.md / AGENTS.md。
 ```
