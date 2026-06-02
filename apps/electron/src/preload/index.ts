@@ -6,11 +6,16 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, PIPELINE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS } from '@codeinsights/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, PIPELINE_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, NATIVE_RUNTIME_IPC_CHANNELS } from '@codeinsights/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, APP_ICON_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
   GitRepoStatus,
+  NativeRuntimeClearCacheInput,
+  NativeRuntimeDiagnostics,
+  NativeRuntimeOperationState,
+  NativeRuntimeRebuildIndexInput,
+  NativeRuntimeStatus,
   Channel,
   ChannelCreateInput,
   ChannelUpdateInput,
@@ -169,6 +174,32 @@ export interface ElectronAPI {
    * @returns Git 仓库状态
    */
   getGitRepoStatus: (dirPath: string) => Promise<GitRepoStatus | null>
+
+  // ===== Native Runtime diagnostics =====
+
+  /** 获取 Native Runtime 简要状态（已脱敏） */
+  getNativeRuntimeStatus: () => Promise<NativeRuntimeStatus>
+
+  /** 获取 Native Runtime diagnostics（已脱敏） */
+  getNativeRuntimeDiagnostics: () => Promise<NativeRuntimeDiagnostics>
+
+  /** 重建当前工作区的派生索引；主进程按 workspaceId 派生实际路径 */
+  rebuildNativeRuntimeIndex: (input: NativeRuntimeRebuildIndexInput) => Promise<NativeRuntimeOperationState>
+
+  /** 清理可重建的派生缓存 */
+  clearNativeRuntimeCache: (input: NativeRuntimeClearCacheInput) => Promise<NativeRuntimeOperationState>
+
+  /** 查询 Native Runtime operation 状态 */
+  getNativeRuntimeOperationState: (operationId: string) => Promise<NativeRuntimeOperationState | null>
+
+  /** 取消 Native Runtime operation */
+  cancelNativeRuntimeOperation: (operationId: string) => Promise<NativeRuntimeOperationState | null>
+
+  /** 订阅 Native Runtime 状态变化 */
+  onNativeRuntimeStatusChanged: (callback: (status: NativeRuntimeStatus) => void) => () => void
+
+  /** 订阅 Native Runtime operation progress */
+  onNativeRuntimeProgress: (callback: (state: NativeRuntimeOperationState) => void) => () => void
 
   // ===== 通用工具 =====
 
@@ -947,6 +978,42 @@ const electronAPI: ElectronAPI = {
 
   getGitRepoStatus: (dirPath: string) => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_REPO_STATUS, dirPath)
+  },
+
+  getNativeRuntimeStatus: () => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.GET_STATUS)
+  },
+
+  getNativeRuntimeDiagnostics: () => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.GET_DIAGNOSTICS)
+  },
+
+  rebuildNativeRuntimeIndex: (input: NativeRuntimeRebuildIndexInput) => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.REBUILD_INDEX, input)
+  },
+
+  clearNativeRuntimeCache: (input: NativeRuntimeClearCacheInput) => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.CLEAR_CACHE, input)
+  },
+
+  getNativeRuntimeOperationState: (operationId: string) => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.GET_OPERATION_STATE, operationId)
+  },
+
+  cancelNativeRuntimeOperation: (operationId: string) => {
+    return ipcRenderer.invoke(NATIVE_RUNTIME_IPC_CHANNELS.CANCEL_OPERATION, operationId)
+  },
+
+  onNativeRuntimeStatusChanged: (callback: (status: NativeRuntimeStatus) => void) => {
+    const listener = (_: unknown, status: NativeRuntimeStatus): void => callback(status)
+    ipcRenderer.on(NATIVE_RUNTIME_IPC_CHANNELS.ON_STATUS_CHANGED, listener)
+    return () => { ipcRenderer.removeListener(NATIVE_RUNTIME_IPC_CHANNELS.ON_STATUS_CHANGED, listener) }
+  },
+
+  onNativeRuntimeProgress: (callback: (state: NativeRuntimeOperationState) => void) => {
+    const listener = (_: unknown, state: NativeRuntimeOperationState): void => callback(state)
+    ipcRenderer.on(NATIVE_RUNTIME_IPC_CHANNELS.ON_PROGRESS, listener)
+    return () => { ipcRenderer.removeListener(NATIVE_RUNTIME_IPC_CHANNELS.ON_PROGRESS, listener) }
   },
 
   // 通用工具

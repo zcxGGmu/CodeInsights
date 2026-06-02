@@ -17,6 +17,7 @@ import {
   type NativeRuntimeWorkspaceIndexInput,
   type NativeRuntimeWorkspaceIndexResult,
 } from './native-runtime'
+import { NATIVE_RUNTIME_IPC_CHANNELS as ROOT_NATIVE_RUNTIME_IPC_CHANNELS } from '@codeinsights/shared'
 
 const fixturesDir = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -40,6 +41,11 @@ describe('native runtime shared contract', () => {
     expect(NATIVE_RUNTIME_IPC_CHANNELS.CANCEL_OPERATION).toBe('native-runtime:cancel-operation')
     expect(NATIVE_RUNTIME_IPC_CHANNELS.ON_PROGRESS).toBe('native-runtime:on-progress')
     expect(NATIVE_RUNTIME_IPC_CHANNELS.ON_STATUS_CHANGED).toBe('native-runtime:on-status-changed')
+  })
+
+  test('native runtime IPC channels are available from the shared package root', () => {
+    expect(ROOT_NATIVE_RUNTIME_IPC_CHANNELS.GET_DIAGNOSTICS).toBe(NATIVE_RUNTIME_IPC_CHANNELS.GET_DIAGNOSTICS)
+    expect(ROOT_NATIVE_RUNTIME_IPC_CHANNELS.ON_PROGRESS).toBe(NATIVE_RUNTIME_IPC_CHANNELS.ON_PROGRESS)
   })
 
   test('feature flags default to explicit native runtime names', () => {

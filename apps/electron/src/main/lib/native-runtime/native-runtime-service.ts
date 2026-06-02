@@ -1,9 +1,12 @@
 import type {
   NativeRuntimeFileChunkReadInput,
   NativeRuntimeFileChunkReadResult,
+  NativeRuntimeClearCacheInput,
   NativeRuntimeOperationState,
+  NativeRuntimeRebuildIndexInput,
   NativeRuntimeSearchInput,
   NativeRuntimeSearchResult,
+  NativeRuntimeStatus,
   NativeRuntimeTailInput,
   NativeRuntimeTailResult,
   NativeRuntimeWorkspaceIndexInput,
@@ -12,16 +15,19 @@ import type {
 import {
   buildNativeRuntimeDiagnostics,
   buildNativeRuntimeStatus,
+  sanitizeNativeRuntimeStatus,
 } from './native-runtime-diagnostics'
 import { TypeScriptEventSearchService } from './ts-event-search-service'
 import { TypeScriptPipelineTailService } from './ts-pipeline-tail-service'
 import { TypeScriptWorkspaceIndexService } from './ts-workspace-index-service'
 import type { NativeRuntimeAdapter } from './native-runtime-types'
-import { getPipelineSessionRecordsPath } from '../config-paths'
+import { getPipelineSessionRecordsPath, getWorkspaceFilesDir } from '../config-paths'
+import { getWorkspaceAttachedDirectories, listAgentWorkspaces } from '../agent-workspace-manager'
 
 const eventSearchService = new TypeScriptEventSearchService()
 const pipelineTailService = new TypeScriptPipelineTailService()
 const workspaceIndexService = new TypeScriptWorkspaceIndexService()
+const MAX_OPERATION_HISTORY = 100
 
 function unsupportedOperation(operation: string): Error {
   return new Error(`Native Runtime ${operation} 尚未接入 TypeScript facade`)
@@ -47,6 +53,9 @@ export function getTypeScriptWorkspaceIndexService(): TypeScriptWorkspaceIndexSe
  */
 export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
   readonly implementation = 'typescript' as const
+  private readonly operationStates = new Map<string, NativeRuntimeOperationState>()
+  private readonly progressListeners = new Set<(state: NativeRuntimeOperationState) => void>()
+  private readonly statusListeners = new Set<(status: NativeRuntimeStatus) => void>()
 
   async getStatus() {
     return buildNativeRuntimeStatus()
@@ -97,6 +106,102 @@ export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
     return workspaceIndexService.indexWorkspace(input, signal)
   }
 
+  async rebuildIndex(
+    input: NativeRuntimeRebuildIndexInput,
+    signal?: AbortSignal,
+  ): Promise<NativeRuntimeOperationState> {
+    const workspace = listAgentWorkspaces().find((item) => item.id === input.workspaceId)
+    if (!workspace) {
+      throw new Error(`Agent 工作区不存在: ${input.workspaceId}`)
+    }
+
+    const startedAt = Date.now()
+    const operationId = `native-index-rebuild-${input.requestId}`
+    this.upsertOperation({
+      operationId,
+      requestId: input.requestId,
+      workspaceId: input.workspaceId,
+      kind: 'index_rebuild',
+      phase: 'scanning',
+      startedAt,
+      source: 'typescript',
+      message: '正在重建工作区索引',
+    })
+
+    try {
+      const result = await this.indexWorkspace({
+        requestId: input.requestId,
+        workspaceId: input.workspaceId,
+        rootPath: getWorkspaceFilesDir(workspace.slug),
+        additionalPaths: getWorkspaceAttachedDirectories(workspace.slug),
+        force: true,
+      }, signal)
+
+      const completed = this.upsertOperation({
+        operationId,
+        requestId: input.requestId,
+        workspaceId: input.workspaceId,
+        kind: 'index_rebuild',
+        phase: 'completed',
+        startedAt,
+        completedAt: Date.now(),
+        completed: result.indexedFiles,
+        total: result.indexedFiles,
+        source: 'typescript',
+        message: '工作区索引已重建',
+      })
+      this.emitStatus()
+      return completed
+    } catch (error) {
+      const failed = this.upsertOperation({
+        operationId,
+        requestId: input.requestId,
+        workspaceId: input.workspaceId,
+        kind: 'index_rebuild',
+        phase: 'failed',
+        startedAt,
+        completedAt: Date.now(),
+        source: 'typescript',
+        error: {
+          code: 'io_error',
+          message: error instanceof Error ? error.message : '重建工作区索引失败',
+          recoverable: true,
+        },
+      })
+      this.emitStatus()
+      return failed
+    }
+  }
+
+  async clearCache(input: NativeRuntimeClearCacheInput): Promise<NativeRuntimeOperationState> {
+    const startedAt = Date.now()
+    const operationId = `native-cache-cleanup-${input.requestId}`
+    this.upsertOperation({
+      operationId,
+      requestId: input.requestId,
+      kind: 'cache_cleanup',
+      phase: 'writing',
+      startedAt,
+      source: 'typescript',
+      message: '正在清理派生缓存',
+    })
+
+    workspaceIndexService.clear()
+
+    const completed = this.upsertOperation({
+      operationId,
+      requestId: input.requestId,
+      kind: 'cache_cleanup',
+      phase: 'completed',
+      startedAt,
+      completedAt: Date.now(),
+      source: 'typescript',
+      message: '派生缓存已清理',
+    })
+    this.emitStatus()
+    return completed
+  }
+
   async readFileChunk(
     _input: NativeRuntimeFileChunkReadInput,
   ): Promise<NativeRuntimeFileChunkReadResult> {
@@ -104,11 +209,56 @@ export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
   }
 
   async getOperationState(_operationId: string): Promise<NativeRuntimeOperationState | null> {
-    return null
+    return this.operationStates.get(_operationId) ?? null
   }
 
   async cancelOperation(_operationId: string): Promise<NativeRuntimeOperationState | null> {
-    return null
+    const current = this.operationStates.get(_operationId)
+    if (!current) return null
+    if (current.phase === 'completed' || current.phase === 'failed' || current.phase === 'cancelled') {
+      return current
+    }
+    return this.upsertOperation({
+      ...current,
+      phase: 'cancelled',
+      cancelledAt: Date.now(),
+      completedAt: Date.now(),
+      message: '操作已取消',
+    })
+  }
+
+  onProgress(listener: (state: NativeRuntimeOperationState) => void): () => void {
+    this.progressListeners.add(listener)
+    return () => {
+      this.progressListeners.delete(listener)
+    }
+  }
+
+  onStatusChanged(listener: (status: NativeRuntimeStatus) => void): () => void {
+    this.statusListeners.add(listener)
+    return () => {
+      this.statusListeners.delete(listener)
+    }
+  }
+
+  private upsertOperation(state: NativeRuntimeOperationState): NativeRuntimeOperationState {
+    this.operationStates.set(state.operationId, state)
+    while (this.operationStates.size > MAX_OPERATION_HISTORY) {
+      const oldest = this.operationStates.keys().next().value
+      if (!oldest) break
+      this.operationStates.delete(oldest)
+    }
+    for (const listener of this.progressListeners) {
+      listener(state)
+    }
+    return state
+  }
+
+  private emitStatus(): void {
+    const status = sanitizeNativeRuntimeStatus(buildNativeRuntimeStatus())
+    for (const listener of this.statusListeners) {
+      listener(status)
+    }
   }
 }
 

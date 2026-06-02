@@ -25,11 +25,21 @@ import {
 } from '@/atoms/agent-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { pipelineRecordFocusIntentAtom } from '@/atoms/pipeline-atoms'
+import {
+  clearNativeRuntimeSearchRequestAtom,
+  nativeRuntimeActiveOperationsAtom,
+  nativeRuntimeLastErrorAtom,
+  nativeRuntimeStatusAtom,
+  setNativeRuntimeSearchRequestAtom,
+} from '@/atoms/native-runtime-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import type {
   AgentMessageSearchResult,
   FileIndexEntry,
   MessageSearchResult,
+  NativeRuntimeError,
+  NativeRuntimeOperationState,
+  NativeRuntimeStatus,
   PipelineSessionRecordsSearchMatch,
 } from '@codeinsights/shared'
 
@@ -63,6 +73,12 @@ export interface SearchDialogContentGroup {
   type: SearchDialogContentResult['type']
   label: string
   results: SearchDialogContentResult[]
+}
+
+export type SearchDialogSourceFilter = 'all' | SearchDialogContentResult['type']
+
+export interface LimitedSearchDialogContentGroup extends SearchDialogContentGroup {
+  hiddenCount: number
 }
 
 export interface BuildSearchDialogContentResultsInput {
@@ -180,6 +196,62 @@ export function buildSearchDialogContentGroups(
     .filter((group) => group.results.length > 0)
 }
 
+export function filterSearchDialogResultsBySource(
+  results: SearchDialogContentResult[],
+  source: SearchDialogSourceFilter,
+): SearchDialogContentResult[] {
+  if (source === 'all') return results
+  return results.filter((result) => result.type === source)
+}
+
+export function limitSearchDialogContentGroups(
+  groups: SearchDialogContentGroup[],
+  limitPerGroup: number,
+): LimitedSearchDialogContentGroup[] {
+  return groups.map((group) => {
+    const results = group.results.slice(0, limitPerGroup)
+    return {
+      ...group,
+      results,
+      hiddenCount: Math.max(0, group.results.length - results.length),
+    }
+  })
+}
+
+export function resolveSearchDialogResultIndex(input: {
+  visibleTitleCount: number
+  contentGroupOffset: number
+  contentResultOffset: number
+}): number {
+  return input.visibleTitleCount + input.contentGroupOffset + input.contentResultOffset
+}
+
+export interface SearchDialogRuntimeStatusModel {
+  label: string
+  tone: 'indexed' | 'fallback' | 'rebuilding' | 'unavailable' | 'error'
+}
+
+export function buildSearchDialogRuntimeStatus(input: {
+  status: NativeRuntimeStatus | null
+  activeOperations: NativeRuntimeOperationState[]
+  lastError: NativeRuntimeError | null
+}): SearchDialogRuntimeStatusModel {
+  const rebuilding = input.activeOperations.some((operation) => operation.kind === 'index_rebuild')
+  if (rebuilding) {
+    return { label: '索引重建中', tone: 'rebuilding' }
+  }
+  if (input.lastError && input.lastError.code !== 'disabled') {
+    return { label: '索引状态异常', tone: 'error' }
+  }
+  if (!input.status) {
+    return { label: '索引状态未知', tone: 'unavailable' }
+  }
+  if (!input.status.nativeEnabled || input.status.implementation === 'typescript') {
+    return { label: 'TypeScript fallback', tone: 'fallback' }
+  }
+  return { label: 'Indexed', tone: 'indexed' }
+}
+
 export function shouldApplySearchDialogContentResults(
   state: SearchDialogContentRequestState,
 ): boolean {
@@ -249,8 +321,13 @@ export function SearchDialog(): React.ReactElement {
   const agentWorkspaces = useAtomValue(agentWorkspacesAtom)
   const currentAgentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaceAttachedDirectoriesMap = useAtomValue(workspaceAttachedDirectoriesMapAtom)
+  const nativeRuntimeStatus = useAtomValue(nativeRuntimeStatusAtom)
+  const nativeRuntimeActiveOperations = useAtomValue(nativeRuntimeActiveOperationsAtom)
+  const nativeRuntimeLastError = useAtomValue(nativeRuntimeLastErrorAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setPipelineRecordFocusIntent = useSetAtom(pipelineRecordFocusIntentAtom)
+  const setNativeRuntimeSearchRequest = useSetAtom(setNativeRuntimeSearchRequestAtom)
+  const clearNativeRuntimeSearchRequest = useSetAtom(clearNativeRuntimeSearchRequestAtom)
   const openSession = useOpenSession()
 
   const workspaceNameMap = React.useMemo(() => {
@@ -270,6 +347,8 @@ export function SearchDialog(): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = React.useState(0)
   const [contentResults, setContentResults] = React.useState<SearchDialogContentResult[]>([])
   const [contentLoading, setContentLoading] = React.useState(false)
+  const [sourceFilter, setSourceFilter] = React.useState<SearchDialogSourceFilter>('all')
+  const [contentExpanded, setContentExpanded] = React.useState(false)
   const [workspaceSearchBasePaths, setWorkspaceSearchBasePaths] = React.useState<string[]>([])
   const inputRef = React.useRef<HTMLInputElement>(null)
   const listRef = React.useRef<HTMLDivElement>(null)
@@ -281,6 +360,11 @@ export function SearchDialog(): React.ReactElement {
     () => agentWorkspaces.find((workspace) => workspace.id === currentAgentWorkspaceId) ?? null,
     [agentWorkspaces, currentAgentWorkspaceId],
   )
+  const runtimeStatusModel = React.useMemo(() => buildSearchDialogRuntimeStatus({
+    status: nativeRuntimeStatus,
+    activeOperations: nativeRuntimeActiveOperations,
+    lastError: nativeRuntimeLastError,
+  }), [nativeRuntimeStatus, nativeRuntimeActiveOperations, nativeRuntimeLastError])
 
   /**
    * 提交搜索词（微 debounce 60ms）
@@ -352,13 +436,23 @@ export function SearchDialog(): React.ReactElement {
       setContentResults([])
       setWorkspaceSearchBasePaths([])
       setContentLoading(false)
+      setContentExpanded(false)
       return
     }
 
     const requestId = contentSearchSeqRef.current + 1
     contentSearchSeqRef.current = requestId
+    const nativeRequestId = `search-dialog-${requestId}`
+    setNativeRuntimeSearchRequest({
+      requestId: nativeRequestId,
+      query: searchQuery,
+      status: 'loading',
+      source: 'workspace',
+      startedAt: Date.now(),
+    })
     setContentLoading(true)
     setContentResults([])
+    setContentExpanded(false)
 
     const timer = setTimeout(async () => {
       try {
@@ -404,13 +498,32 @@ export function SearchDialog(): React.ReactElement {
           pipelineResults: pipelineResult.matches,
           workspaceResults: workspaceSearch.result.entries,
         }))
+        setNativeRuntimeSearchRequest({
+          requestId: nativeRequestId,
+          query: searchQuery,
+          status: 'success',
+          source: 'workspace',
+          startedAt: Date.now(),
+          completedAt: Date.now(),
+        })
       } catch (error) {
         console.error('[搜索] 内容搜索失败:', error)
         if (shouldApplySearchDialogContentResults({
           requestId,
           latestRequestId: contentSearchSeqRef.current,
           open,
-        })) setContentResults([])
+        })) {
+          setContentResults([])
+          setNativeRuntimeSearchRequest({
+            requestId: nativeRequestId,
+            query: searchQuery,
+            status: 'error',
+            source: 'workspace',
+            startedAt: Date.now(),
+            completedAt: Date.now(),
+            error: error instanceof Error ? error.message : '搜索失败',
+          })
+        }
       } finally {
         if (shouldApplySearchDialogContentResults({
           requestId,
@@ -420,23 +533,45 @@ export function SearchDialog(): React.ReactElement {
       }
     }, 300)
 
-    return () => { clearTimeout(timer) }
-  }, [open, searchQuery, titleResults, currentWorkspace, workspaceAttachedDirectoriesMap])
+    return () => {
+      clearTimeout(timer)
+      clearNativeRuntimeSearchRequest(nativeRequestId)
+    }
+  }, [open, searchQuery, titleResults, currentWorkspace, workspaceAttachedDirectoriesMap, setNativeRuntimeSearchRequest, clearNativeRuntimeSearchRequest])
 
+  const filteredTitleResults = React.useMemo(
+    () => sourceFilter === 'all'
+      ? titleResults
+      : titleResults.filter((result) => result.type === sourceFilter),
+    [sourceFilter, titleResults],
+  )
+  const filteredContentResults = React.useMemo(
+    () => filterSearchDialogResultsBySource(contentResults, sourceFilter),
+    [contentResults, sourceFilter],
+  )
   // 全部结果列表
   const allResults = React.useMemo(
-    () => [...titleResults, ...contentResults.map((c) => ({ ...c, updatedAt: 0 }))],
-    [titleResults, contentResults]
+    () => [...filteredTitleResults, ...filteredContentResults.map((c) => ({ ...c, updatedAt: 0 }))],
+    [filteredTitleResults, filteredContentResults]
   )
   const contentGroups = React.useMemo(
-    () => buildSearchDialogContentGroups(contentResults),
-    [contentResults],
+    () => buildSearchDialogContentGroups(filteredContentResults),
+    [filteredContentResults],
+  )
+  const visibleContentGroups = React.useMemo(
+    () => limitSearchDialogContentGroups(contentGroups, contentExpanded ? Number.MAX_SAFE_INTEGER : 6),
+    [contentExpanded, contentGroups],
+  )
+  const hiddenContentCount = React.useMemo(
+    () => visibleContentGroups.reduce((sum, group) => sum + group.hiddenCount, 0),
+    [visibleContentGroups],
   )
 
   // 重置选中索引
   React.useEffect(() => {
     setSelectedIndex(0)
-  }, [searchQuery])
+    setContentExpanded(false)
+  }, [searchQuery, sourceFilter])
 
   // 导航到对话/会话
   const navigateToResult = React.useCallback((result: TitleResult | SearchDialogContentResult) => {
@@ -508,6 +643,8 @@ export function SearchDialog(): React.ReactElement {
       setContentResults([])
       setWorkspaceSearchBasePaths([])
       setContentLoading(false)
+      setSourceFilter('all')
+      setContentExpanded(false)
       setSelectedIndex(0)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
@@ -547,6 +684,42 @@ export function SearchDialog(): React.ReactElement {
           </kbd>
         </div>
 
+        <div className="flex items-center justify-between gap-2 border-b border-border/30 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+            {([
+              ['all', '全部'],
+              ['pipeline', 'Pipeline'],
+              ['workspace', 'Workspace'],
+              ['chat', 'Chat'],
+              ['agent', 'Agent'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSourceFilter(value)}
+                className={cn(
+                  'rounded-md px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  sourceFilter === value
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-foreground/45 hover:bg-foreground/[0.04] hover:text-foreground/70',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className={cn(
+            'shrink-0 rounded-md px-2 py-1 text-[11px] font-medium',
+            runtimeStatusModel.tone === 'rebuilding' && 'bg-amber-500/10 text-amber-700',
+            runtimeStatusModel.tone === 'fallback' && 'bg-sky-500/10 text-sky-700',
+            runtimeStatusModel.tone === 'error' && 'bg-destructive/10 text-destructive',
+            runtimeStatusModel.tone === 'indexed' && 'bg-emerald-500/10 text-emerald-700',
+            runtimeStatusModel.tone === 'unavailable' && 'bg-foreground/[0.06] text-foreground/45',
+          )}>
+            {runtimeStatusModel.label}
+          </span>
+        </div>
+
         {/* 搜索结果 */}
         <div ref={listRef} className="max-h-[400px] overflow-y-auto">
           {!query && (
@@ -555,19 +728,19 @@ export function SearchDialog(): React.ReactElement {
             </div>
           )}
 
-          {searchQuery && titleResults.length === 0 && contentResults.length === 0 && !contentLoading && (
+          {searchQuery && filteredTitleResults.length === 0 && filteredContentResults.length === 0 && !contentLoading && (
             <div className="py-12 text-center text-[13px] text-foreground/40">
               未找到匹配结果
             </div>
           )}
 
           {/* 标题匹配区域 */}
-          {titleResults.length > 0 && (
+          {filteredTitleResults.length > 0 && (
             <div className="py-1 animate-in fade-in duration-150">
               <div className="px-4 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
                 标题匹配
               </div>
-              {titleResults.map((result, idx) => (
+              {filteredTitleResults.map((result, idx) => (
                 <button
                   key={`title-${result.id}`}
                   data-index={idx}
@@ -608,7 +781,7 @@ export function SearchDialog(): React.ReactElement {
           )}
 
           {/* 内容匹配区域 */}
-          {(contentResults.length > 0 || (contentLoading && searchQuery.length >= 2)) && (
+          {(filteredContentResults.length > 0 || (contentLoading && searchQuery.length >= 2)) && (
             <div className="py-1 border-t border-border/30 animate-in fade-in duration-150">
               <div className="px-4 pt-2 pb-1 flex items-center gap-2 text-[11px] font-medium text-foreground/40 select-none">
                 <span>内容匹配</span>
@@ -616,7 +789,7 @@ export function SearchDialog(): React.ReactElement {
               </div>
               {(() => {
                 let contentOffset = 0
-                return contentGroups.map((group) => {
+                return visibleContentGroups.map((group) => {
                   const groupOffset = contentOffset
                   contentOffset += group.results.length
                   return (
@@ -625,7 +798,11 @@ export function SearchDialog(): React.ReactElement {
                         {group.label}
                       </div>
                       {group.results.map((result, i) => {
-                        const globalIdx = titleResults.length + groupOffset + i
+                        const globalIdx = resolveSearchDialogResultIndex({
+                          visibleTitleCount: filteredTitleResults.length,
+                          contentGroupOffset: groupOffset,
+                          contentResultOffset: i,
+                        })
                         return (
                           <button
                             key={`content-${result.type}-${result.id}-${result.recordId ?? 'session'}`}
@@ -688,6 +865,15 @@ export function SearchDialog(): React.ReactElement {
                   )
                 })
               })()}
+              {hiddenContentCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setContentExpanded(true)}
+                  className="mx-4 my-2 w-[calc(100%-2rem)] rounded-md bg-foreground/[0.04] px-3 py-2 text-[12px] font-medium text-foreground/55 hover:bg-foreground/[0.07] hover:text-foreground/75 transition-colors"
+                >
+                  显示更多结果（{hiddenContentCount}）
+                </button>
+              )}
             </div>
           )}
         </div>

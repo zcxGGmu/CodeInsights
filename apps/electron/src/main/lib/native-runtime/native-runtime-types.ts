@@ -1,9 +1,11 @@
 import type {
   NativeImplementationKind,
+  NativeRuntimeClearCacheInput,
   NativeRuntimeDiagnostics,
   NativeRuntimeFileChunkReadInput,
   NativeRuntimeFileChunkReadResult,
   NativeRuntimeOperationState,
+  NativeRuntimeRebuildIndexInput,
   NativeRuntimeSearchInput,
   NativeRuntimeSearchResult,
   NativeRuntimeStatus,
@@ -29,6 +31,8 @@ export interface NativeRuntimeAdapter {
     input: NativeRuntimeWorkspaceIndexInput,
     signal?: AbortSignal,
   ): Promise<NativeRuntimeWorkspaceIndexResult>
+  rebuildIndex(input: NativeRuntimeRebuildIndexInput, signal?: AbortSignal): Promise<NativeRuntimeOperationState>
+  clearCache(input: NativeRuntimeClearCacheInput): Promise<NativeRuntimeOperationState>
   readFileChunk(
     input: NativeRuntimeFileChunkReadInput,
     signal?: AbortSignal,

@@ -93,6 +93,7 @@ import { registerChannelIpcHandlers } from './ipc/channel-handlers'
 import { registerPipelineIpcHandlers } from './ipc/pipeline-handlers'
 import { registerQuickTaskIpcHandlers } from './ipc/quick-task-handlers'
 import { registerSettingsIpcHandlers } from './ipc/settings-handlers'
+import { registerNativeRuntimeIpcHandlers } from './ipc/native-runtime-handlers'
 
 /**
  * 注册 IPC 处理器
@@ -179,6 +180,9 @@ export function registerIpcHandlers(): void {
 
   // ===== 用户档案 / 应用设置 / 图标 =====
   registerSettingsIpcHandlers({ resolveAppIconPath })
+
+  // ===== Native Runtime diagnostics =====
+  registerNativeRuntimeIpcHandlers()
 
   // ===== 对话管理相关 =====
 

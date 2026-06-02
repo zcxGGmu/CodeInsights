@@ -3,6 +3,8 @@ import {
   buildNativeRuntimeDiagnostics,
   buildNativeRuntimeStatus,
   getNativeRuntimeDiagnostics,
+  sanitizeNativeRuntimeDiagnostics,
+  sanitizeNativeRuntimeStatus,
 } from './native-runtime-diagnostics'
 
 describe('native-runtime-diagnostics', () => {
@@ -18,7 +20,7 @@ describe('native-runtime-diagnostics', () => {
       fallbackReason: 'disabled',
       checkedAt: 1764590401000,
     })
-    expect(status.capabilities).toEqual(['diagnostics'])
+    expect(status.capabilities).toEqual(['diagnostics', 'jsonl-tail', 'workspace-index'])
     expect(status.binaryPath).toBeUndefined()
   })
 
@@ -32,12 +34,10 @@ describe('native-runtime-diagnostics', () => {
       code: 'disabled',
       recoverable: true,
     })
-    expect(diagnostics.capabilities).toEqual([
-      {
-        capability: 'diagnostics',
-        available: true,
-        implementation: 'typescript',
-      },
+    expect(diagnostics.capabilities.map((item) => item.capability)).toEqual([
+      'diagnostics',
+      'jsonl-tail',
+      'workspace-index',
     ])
   })
 
@@ -47,5 +47,31 @@ describe('native-runtime-diagnostics', () => {
     expect(diagnostics.status.implementation).toBe('typescript')
     expect(diagnostics.status.nativeEnabled).toBe(false)
     expect(diagnostics.status.capabilities).toContain('diagnostics')
+  })
+
+  test('状态与 diagnostics 推送前会移除路径并脱敏错误详情', () => {
+    const unsafeStatus = {
+      ...buildNativeRuntimeStatus({ checkedAt: 1764590403000 }),
+      binaryPath: '/Users/demo/.codeinsights/native-cache/native-helper',
+      lastError: {
+        code: 'io_error' as const,
+        message: '读取失败 /Users/demo/.codeinsights/token Bearer secret-token',
+        detail: 'Authorization: Bearer secret-token https://user:pass@example.com/repo.git',
+        recoverable: true,
+      },
+    }
+    const status = sanitizeNativeRuntimeStatus(unsafeStatus)
+    const diagnostics = sanitizeNativeRuntimeDiagnostics({
+      ...buildNativeRuntimeDiagnostics({ checkedAt: 1764590403000 }),
+      status: unsafeStatus,
+      lastError: unsafeStatus.lastError,
+    })
+
+    expect(status.binaryPath).toBeUndefined()
+    expect(status.lastError?.message).not.toContain('/Users/demo')
+    expect(status.lastError?.message).not.toContain('secret-token')
+    expect(diagnostics.status.binaryPath).toBeUndefined()
+    expect(diagnostics.lastError?.detail).not.toContain('user:pass')
+    expect(diagnostics.lastError?.detail).toContain('[redacted]')
   })
 })

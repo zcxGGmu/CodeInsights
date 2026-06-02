@@ -3,11 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  getTypeScriptWorkspaceIndexService,
   getTypeScriptEventSearchService,
   nativeRuntimeService,
 } from './native-runtime-service'
 import { TypeScriptEventSearchService } from './ts-event-search-service'
 import { appendPipelineRecord, createPipelineSession } from '../pipeline-session-manager'
+import { createAgentWorkspace } from '../agent-workspace-manager'
+import { getWorkspaceFilesDir } from '../config-paths'
 
 const tempDirs: string[] = []
 const originalConfigDir = process.env.CODEINSIGHTS_CONFIG_DIR
@@ -105,5 +108,60 @@ describe('native-runtime-service', () => {
       status: 'ready',
       implementation: 'typescript',
     })
+  })
+
+  test('rebuildIndex 从已登记 workspace 派生路径并记录 operation 状态', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-rebuild-'))
+    tempDirs.push(configDir)
+    process.env.CODEINSIGHTS_CONFIG_DIR = configDir
+    const workspace = createAgentWorkspace('Native Runtime Workspace')
+    const workspaceFilesDir = getWorkspaceFilesDir(workspace.slug)
+    mkdirSync(join(workspaceFilesDir, 'src'), { recursive: true })
+    writeFileSync(join(workspaceFilesDir, 'src', 'phase-four.ts'), '', 'utf-8')
+
+    const operation = await nativeRuntimeService.rebuildIndex({
+      requestId: 'rebuild-workspace-index',
+      workspaceId: workspace.id,
+    })
+    const storedOperation = await nativeRuntimeService.getOperationState(operation.operationId)
+
+    expect(operation).toMatchObject({
+      requestId: 'rebuild-workspace-index',
+      kind: 'index_rebuild',
+      phase: 'completed',
+      workspaceId: workspace.id,
+      source: 'typescript',
+    })
+    expect(operation.total).toBe(1)
+    expect(storedOperation?.operationId).toBe(operation.operationId)
+  })
+
+  test('clearCache 只清理 TypeScript 派生索引并返回 cache cleanup operation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-clear-cache-'))
+    tempDirs.push(root)
+    writeFileSync(join(root, 'cached.ts'), '', 'utf-8')
+    await nativeRuntimeService.indexWorkspace({
+      requestId: 'workspace-index-before-clear',
+      workspaceId: 'workspace-clear',
+      rootPath: root,
+      force: true,
+    })
+
+    const operation = await nativeRuntimeService.clearCache({ requestId: 'clear-derived-cache' })
+    const searchAfterClear = await getTypeScriptWorkspaceIndexService().searchWorkspaceFiles({
+      requestId: 'search-after-clear',
+      workspaceId: 'workspace-clear',
+      rootPath: root,
+      query: 'cached',
+      limit: 10,
+    })
+
+    expect(operation).toMatchObject({
+      requestId: 'clear-derived-cache',
+      kind: 'cache_cleanup',
+      phase: 'completed',
+      source: 'typescript',
+    })
+    expect(searchAfterClear.entries.map((entry) => entry.name)).toEqual(['cached.ts'])
   })
 })

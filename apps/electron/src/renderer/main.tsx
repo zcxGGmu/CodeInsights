@@ -58,6 +58,7 @@ import {
 } from './atoms/ui-preferences'
 import { useGlobalAgentListeners } from './hooks/useGlobalAgentListeners'
 import { useGlobalChatListeners } from './hooks/useGlobalChatListeners'
+import { useGlobalNativeRuntimeListeners } from './hooks/useGlobalNativeRuntimeListeners'
 import { useGlobalPipelineListeners } from './hooks/useGlobalPipelineListeners'
 import { tabsAtom, activeTabIdAtom } from './atoms/tab-atoms'
 import type { TabItem } from './atoms/tab-atoms'
@@ -453,6 +454,11 @@ function PipelineListenersInitializer(): null {
   return null
 }
 
+function NativeRuntimeListenersInitializer(): null {
+  useGlobalNativeRuntimeListeners()
+  return null
+}
+
 function PipelineSessionsInitializer(): null {
   const setSessions = useSetAtom(pipelineSessionsAtom)
   const setPendingGates = useSetAtom(pipelinePendingGatesAtom)
@@ -812,6 +818,7 @@ if (isQuickTaskWindow) {
       <ChatListenersInitializer />
       <AgentListenersInitializer />
       <PipelineListenersInitializer />
+      <NativeRuntimeListenersInitializer />
       <ChatToolInitializer />
       <UpdaterInitializer />
       <FeishuInitializer />

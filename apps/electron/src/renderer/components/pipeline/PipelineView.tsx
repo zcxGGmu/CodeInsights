@@ -105,8 +105,11 @@ export function PipelineView({
     recordsFocusRequest,
     latestUserInput,
     latestErrorRecord,
+    recordsLoading,
+    recordsLoadError,
     hasOlderRecords,
     loadingOlderRecords,
+    retryLoadRecords,
     loadOlderRecords,
     requestStageFocus,
     requestRecordFocus,
@@ -652,6 +655,9 @@ export function PipelineView({
                 version={session?.version ?? state?.version}
                 hasOlderRecords={hasOlderRecords}
                 loadingOlderRecords={loadingOlderRecords}
+                recordsLoading={recordsLoading}
+                recordsLoadError={recordsLoadError}
+                onRetryLoadRecords={retryLoadRecords}
                 onLoadOlderRecords={loadOlderRecords}
               />
             </div>

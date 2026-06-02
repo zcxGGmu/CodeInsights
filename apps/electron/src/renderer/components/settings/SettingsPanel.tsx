@@ -23,6 +23,7 @@ import {
   Keyboard,
   AlertCircle,
   Download,
+  Activity,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { settingsTabAtom, channelFormDirtyAtom, settingsCloseRequestedAtom } from "@/atoms/settings-tab";
@@ -52,6 +53,7 @@ import { BotHubSettings } from "./BotHubSettings";
 import { TutorialViewer } from "../tutorial/TutorialViewer";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { resolveSettingsNavStatus } from "./settings-ui-model";
+import { NativeRuntimeDiagnostics } from "./NativeRuntimeDiagnostics";
 
 /** 设置 Tab 定义 */
 interface TabItem {
@@ -104,6 +106,7 @@ const SHORTCUTS_TAB: TabItem = {
 /** 尾部 Tabs */
 const TAIL_TABS: TabItem[] = [
   { id: "appearance", label: "外观设置", icon: <Palette size={16} />, description: "主题与显示偏好" },
+  { id: "diagnostics", label: "运行诊断", icon: <Activity size={16} />, description: "索引、缓存与 fallback" },
   { id: "about", label: "关于/更新", icon: <Info size={16} />, description: "版本、更新和环境检测" },
 ];
 
@@ -124,6 +127,8 @@ function renderTabContent(tab: SettingsTab): React.ReactElement {
       return <ToolSettings />;
     case "appearance":
       return <AppearanceSettings />;
+    case "diagnostics":
+      return <NativeRuntimeDiagnostics />;
     case "about":
       return <AboutSettings />;
     case "bots":

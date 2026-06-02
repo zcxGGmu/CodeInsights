@@ -227,6 +227,9 @@ export interface NativeRuntimeOperationRef {
 }
 
 export interface NativeRuntimeOperationProgress extends NativeRuntimeOperationRef {
+  requestId?: string
+  workspaceId?: string
+  sessionId?: string
   phase: NativeRuntimeOperationPhase
   completed?: number
   total?: number
@@ -237,8 +240,15 @@ export interface NativeRuntimeOperationProgress extends NativeRuntimeOperationRe
   error?: NativeRuntimeError
 }
 
-export interface NativeRuntimeOperationState extends NativeRuntimeOperationProgress {
-  requestId?: string
+export interface NativeRuntimeOperationState extends NativeRuntimeOperationProgress {}
+
+export interface NativeRuntimeRebuildIndexInput {
+  requestId: string
+  workspaceId: string
+}
+
+export interface NativeRuntimeClearCacheInput {
+  requestId: string
 }
 
 export const NATIVE_RUNTIME_FEATURE_FLAGS = {

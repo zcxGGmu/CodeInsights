@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { useAtomValue } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 import type { PipelineNodeKind, PipelineRecord, PipelineRecordsSummaryResult } from '@codeinsights/shared'
 import { pipelineRecordFocusIntentAtom } from '@/atoms/pipeline-atoms'
+import { setNativeRuntimeTailLoadingAtom } from '@/atoms/native-runtime-atoms'
 import type { PipelineRecordsFocusRequest } from './PipelineRecords'
 import {
   mergePipelineRecordsTail,
@@ -18,8 +19,11 @@ export interface UsePipelineRecordsTailResult {
   recordsFocusRequest: PipelineRecordsFocusRequest | null
   latestUserInput?: string
   latestErrorRecord?: PipelineErrorRecord
+  recordsLoading: boolean
+  recordsLoadError: string | null
   hasOlderRecords: boolean
   loadingOlderRecords: boolean
+  retryLoadRecords: () => void
   loadOlderRecords: (options?: { untilRecordId?: string }) => Promise<void>
   requestStageFocus: (node: PipelineNodeKind) => void
   requestRecordFocus: (recordId: string) => void
@@ -48,11 +52,15 @@ export function usePipelineRecordsTail(
   refreshVersion: number,
 ): UsePipelineRecordsTailResult {
   const focusIntent = useAtomValue(pipelineRecordFocusIntentAtom)
+  const setNativeRuntimeTailLoading = useSetAtom(setNativeRuntimeTailLoadingAtom)
   const [records, setRecords] = React.useState<PipelineRecord[]>([])
   const [recordsFocusRequest, setRecordsFocusRequest] = React.useState<PipelineRecordsFocusRequest | null>(null)
   const [recordsSummary, setRecordsSummary] = React.useState<PipelineRecordsSummaryResult | null>(null)
   const [hasOlderRecords, setHasOlderRecords] = React.useState(false)
+  const [recordsLoading, setRecordsLoading] = React.useState(false)
+  const [recordsLoadError, setRecordsLoadError] = React.useState<string | null>(null)
   const [loadingOlderRecords, setLoadingOlderRecords] = React.useState(false)
+  const [retryVersion, setRetryVersion] = React.useState(0)
   const recordsCursorRef = React.useRef(0)
   const olderCursorRef = React.useRef<string | null>(null)
   const latestCursorRef = React.useRef<string | null>(null)
@@ -85,6 +93,8 @@ export function usePipelineRecordsTail(
     setRecords([])
     setRecordsSummary(null)
     setHasOlderRecords(false)
+    setRecordsLoading(false)
+    setRecordsLoadError(null)
     setLoadingOlderRecords(false)
   }, [sessionId])
 
@@ -116,6 +126,9 @@ export function usePipelineRecordsTail(
       recordsLoadSeqRef.current = loadId
       const afterIndex = recordsCursorRef.current
       const hasCursor = Boolean(latestCursorRef.current)
+      setRecordsLoading(true)
+      setRecordsLoadError(null)
+      setNativeRuntimeTailLoading({ sessionId, loading: true })
       const result = await window.electronAPI.getPipelineRecordsTail(hasCursor
         ? {
             sessionId,
@@ -153,15 +166,26 @@ export function usePipelineRecordsTail(
       setRecords((prev) => result.cursorInvalid || !hasCursor
         ? recordsBatch
         : mergePipelineRecordsTail(prev, recordsBatch, prev.length))
+      setNativeRuntimeTailLoading({ sessionId, loading: false })
     }
 
     loadRecordsTail().catch((error) => {
+      if (cancelled) return
       console.error('[PipelineRecordsTail] 读取 Pipeline 记录失败:', error)
+      const message = error instanceof Error ? error.message : '读取 Pipeline 记录失败'
+      setRecordsLoadError(message)
+      setNativeRuntimeTailLoading({ sessionId, loading: false, error: message })
+    }).finally(() => {
+      if (!cancelled) {
+        setRecordsLoading(false)
+        setNativeRuntimeTailLoading({ sessionId, loading: false })
+      }
     })
     return () => {
       cancelled = true
+      setNativeRuntimeTailLoading({ sessionId, loading: false })
     }
-  }, [sessionId, refreshVersion])
+  }, [sessionId, refreshVersion, retryVersion, setNativeRuntimeTailLoading])
 
   const requestStageFocus = React.useCallback((node: PipelineNodeKind): void => {
     recordsFocusSeqRef.current += 1
@@ -179,6 +203,10 @@ export function usePipelineRecordsTail(
       type: 'record',
       recordId,
     })
+  }, [])
+
+  const retryLoadRecords = React.useCallback((): void => {
+    setRetryVersion((prev) => prev + 1)
   }, [])
 
   const loadOlderRecords = React.useCallback(async (options: { untilRecordId?: string } = {}): Promise<void> => {
@@ -264,8 +292,11 @@ export function usePipelineRecordsTail(
     recordsFocusRequest,
     latestUserInput,
     latestErrorRecord,
+    recordsLoading,
+    recordsLoadError,
     hasOlderRecords,
     loadingOlderRecords,
+    retryLoadRecords,
     loadOlderRecords,
     requestStageFocus,
     requestRecordFocus,

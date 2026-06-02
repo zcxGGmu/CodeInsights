@@ -628,7 +628,10 @@ export function PipelineRecords({
   showLiveOutput,
   version,
   hasOlderRecords = false,
+  recordsLoading = false,
+  recordsLoadError = null,
   loadingOlderRecords = false,
+  onRetryLoadRecords,
   onLoadOlderRecords,
 }: {
   focusRequest?: PipelineRecordsFocusRequest | null
@@ -640,7 +643,10 @@ export function PipelineRecords({
   showLiveOutput?: boolean
   version?: PipelineVersion
   hasOlderRecords?: boolean
+  recordsLoading?: boolean
+  recordsLoadError?: string | null
   loadingOlderRecords?: boolean
+  onRetryLoadRecords?: () => void
   onLoadOlderRecords?: () => Promise<void> | void
 }): React.ReactElement {
   const [activeTab, setActiveTab] = React.useState<PipelineRecordTab>('artifacts')
@@ -1078,6 +1084,33 @@ export function PipelineRecords({
           </div>
         ) : null}
       </div>
+
+      {(recordsLoading || recordsLoadError) ? (
+        <div className={cn(
+          'flex items-center justify-between gap-3 rounded-card px-3 py-2 text-xs',
+          recordsLoadError
+            ? 'bg-destructive/10 text-destructive'
+            : 'bg-surface-muted text-text-secondary',
+        )}>
+          <div className="flex min-w-0 items-center gap-2">
+            {recordsLoadError ? <CircleAlert size={14} /> : <Loader2 size={14} className="animate-spin" />}
+            <span className="truncate">
+              {recordsLoadError ? `记录读取失败：${recordsLoadError}` : '正在读取最新记录'}
+            </span>
+          </div>
+          {recordsLoadError ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRetryLoadRecords}
+              className="h-7 shrink-0 bg-surface-card"
+            >
+              重试
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="pipeline-records-tabs rounded-panel border border-border-subtle/70 bg-surface-card p-3 shadow-card">
         <TabsList className="h-auto rounded-card bg-background/55 p-1 shadow-inner">
