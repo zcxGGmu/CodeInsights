@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 恢复入口再次回填习惯
+
+- 当用户在 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态` 之后再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，仓库内 `next-session-prompt.md` 和 development checklist 必须明确把 `fb7e2d73` 写成最新已确认恢复入口；不能继续让提示词停在 `2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径` 或只写“以最新 docs 提交为准”。
+- 这类恢复入口回填属于阶段收尾默认动作，即使没有业务代码变化，也要写 `tasks/todo.md` 计划与 Review、更新 lessons、验证禁止文件未触碰，然后单独提交文档状态同步。
+
 ## 2026-06-03 Rust / Go Phase 5 fake sidecar smoke 状态边界
 
 - `protocol-mismatch` / `crash` / `timeout` / `cache-corruption` smoke 一旦通过 fake sidecar / isolated cache fixture 落地并提交（例如 `2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`），后续恢复入口不能再把这些 mode 写成 skipped 或“下一步优先补齐”；下一步应转向 optional package manifest、packaged smoke 设计或 Agent native work-delay 分析。
@@ -16,13 +21,13 @@
 
 - 用 `eventLoopDelaySamplesMs` / `eventLoopBaselineMs` / `eventLoopWorkDelayMs` 复跑稳定 benchmark 后，default-enable 判断不能只看 native P95 大幅领先；如果 Agent native `eventLoopWorkDelayP95Ms` 连续高于 TS fallback，即使绝对差异只有 0.1ms 级，也要记录为 event-loop gate 未完全通过，native 继续显式 opt-in / default off。
 - `eventLoopWorkDelayP95Ms` 等于 0 时不要计算“降低百分比”来包装结论；应直接写出 TS 与 native 的原始值、样本方向和 baseline 噪声。Chat 达标不能替代 Agent gate，`native-sidecar-status-cache-overhead` 只能帮助解释 manager cache 成本，不能证明 packaged default enable。
-- 只要 optional package、native-cache schema、smoke script 和 packaged smoke 尚未完成，即使 P95 / event-loop 数字看起来通过，也不能默认启用 native；下一步应优先在 default off 前提下完成 smoke / package / cache 设计，而不是改 feature flag。
+- 只要 optional package、packaged smoke 和 default-enable 风险评估尚未完成，即使 P95 / event-loop 数字看起来通过，也不能默认启用 native；下一步应优先在 default off 前提下完成 package / packaged smoke 设计或 Agent work-delay 分析，而不是改 feature flag。
 
 ## 2026-06-03 Rust / Go Phase 5 stable benchmark gate 习惯
 
 - 跑 Rust native benchmark 前必须先用 sidecar `status` 检查本地 release binary 的 `binaryVersion` 是否与源码 `BINARY_VERSION` 一致；如果 `native/search/target/release/codeinsights-native-search` 仍报告旧版本（例如 `0.0.1-dev` 而源码为 `0.0.2-dev`），必须先 `cargo build --release --manifest-path native/search/Cargo.toml` 重建本地 ignored 产物，再开始性能结论记录。
 - `native-runtime-benchmark.ts` 的 `eventLoopDelayMs` 是所有 iterations 中最大的 `setTimeout(0)` 延迟，不是 P95；default-enable 评估要明确这个口径。即使 Agent native P95 远超 gate，如果 Agent native event loop delay 连续复跑仍高于同轮 TS fallback，也要保持 native 显式 opt-in / default off。
-- 稳定 benchmark gate 通过不能替代 packaged smoke / optional package / native-cache schema；在未证明 bundled binary、不使用系统 `PATH`、missing/crash/timeout fallback 和 cache corruption 之前，不得默认启用 native。
+- 稳定 benchmark gate 通过不能替代 packaged smoke / optional package / default-enable 风险评估；在未证明 bundled binary、不使用系统 `PATH`、packaged missing / crash / timeout fallback 和 cache corruption 之前，不得默认启用 native。
 
 ## 2026-06-03 Rust / Go Phase 5 状态同步重复请求习惯
 
@@ -52,13 +57,13 @@
 - Phase 5 search-only Rust 源码切片提交后，状态同步必须把“已完成”和“未完成”拆开写：`native/search/`、TS fallback benchmark gate、Rust 单测和 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片` 已完成；Electron main process sidecar manager、fallback 集成、contract parity、native benchmark、optional package、packaged smoke 和默认启用判断未完成。
 - 阶段完成后的恢复入口不能继续写“提交后以实际 git log 为准”或“本文件所在提交”这类不可执行占位；仓库文档至少要回填最近真实开发基线 `e39682f1`，并要求下次启动用 `git log -5 --oneline` 识别其后的 Rust / Go docs 状态同步提交。
 - 用户再次强调“每个阶段性任务完成后自动去做”时，要把这视为长期默认工作流：阶段实现提交后立即同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，验证后单独提交，并在最终回复给可直接复制的下一次启动提示词。
-- 下次启动提示词必须直接指向下一步可执行工作：先补 `native-runtime-sidecar-manager.ts` contract tests（missing binary、version mismatch、timeout、crash、shutdown、contract violation fallback），再接入 main process 和 Rust vs TS benchmark；不能让恢复会话重复跑已经通过的 TS fallback gate 或重新创建 Rust crate。
+- 下次启动提示词必须直接指向当时最新的下一步可执行工作；search-only 切片刚完成时可以指向 sidecar manager contract tests，但后续 sidecar manager、parity、benchmark、smoke/cache 已完成后，提示词必须推进到 optional package / packaged smoke / Agent work-delay 分析，不能让恢复会话倒退到已完成的 sidecar manager 测试。
 
 ## 2026-06-03 Rust / Go Phase 5 前置状态同步习惯
 
 - 用户要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”并再次强调阶段完成后自动执行时，即使刚写过前置文档，也要新建 `tasks/todo.md` 状态同步计划，更新 development checklist、next-session prompt、`tasks/todo.md` Review 和本文件，验证后单独提交状态同步。
 - Phase 5 这类“前置决策完成但 Rust 实现未开始”的状态必须用 `[~]` 或明确文字表达，不能把 Phase 5 标成已完成；已完成项只能写依赖 decision record、protocol / fallback / packaged smoke 计划和性能门槛，未完成项必须列出 benchmark、Rust 工程、sidecar manager、smoke script、optional package、packaged smoke。
-- 本条前置阶段规则仅适用于 `e39682f1` 之前、Rust search-only 源码切片尚未开始时；`e39682f1` 之后的下次启动提示词必须从 sidecar manager contract tests 和 main process fallback 集成继续，不能重复要求重新跑已完成的 TS fallback gate 或重新创建 Rust crate。
+- 本条前置阶段规则仅适用于 `e39682f1` 之前、Rust search-only 源码切片尚未开始时；`e39682f1` 到 sidecar manager 完成前的恢复入口可从 sidecar manager contract tests 和 main process fallback 集成继续。后续阶段完成后必须以最新 checklist / next-session prompt 的未完成项为准，不能重复要求重新跑已完成的 TS fallback gate、sidecar manager tests 或重新创建 Rust crate。
 
 ## 2026-06-02 Rust / Go Native Runtime diagnostics 前端边界
 

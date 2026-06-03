@@ -1,5 +1,24 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 fake sidecar smoke 恢复入口回填计划
+
+范围确认：用户要求更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可复制提示词；同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步，把当前已确认状态同步提交 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态` 回填为恢复入口；不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最新提交为 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态`。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，保持最新开发基线为 `2cc95b1b`，把最新已确认恢复入口回填为 `fb7e2d73`，并确认完成 / 未完成清单仍准确。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把仓库内可复制提示词的恢复入口推进到 `fb7e2d73`，下一步继续指向 optional package manifest / packaged smoke 设计或 Agent work-delay 分析。
+- [x] 更新 `tasks/lessons.md`，记录用户再次要求状态同步时必须把上一轮真实 docs 提交 `fb7e2d73` 回填，避免仓库提示词停在实现提交。
+- [x] 更新本 `tasks/todo.md` Review，记录本轮验证、禁止事项和最终下次入口。
+- [x] 运行 `git diff --check`，确认未修改根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml`，然后单独提交状态同步。
+
+### Review
+
+- 本轮只做状态文档同步，没有修改业务代码、Rust / Go 源码、打包配置或根文档。
+- 最新开发基线保持为 `2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`；最新已确认恢复入口已回填为 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态`。本轮状态同步提交完成后，下次启动应以 `git log -5 --oneline` 中最新的 `docs(rust-go): 回填 Phase 5 fake sidecar smoke 最新恢复入口` 为实际恢复入口。
+- 已完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 已完成 fake sidecar / isolated cache smoke，下一步转向 optional package manifest、packaged smoke 设计或 Agent native work-delay 分析；packaged native binary、optional package、packaged smoke、default enable、Phase 6-9 仍未完成。
+- 边界保持：native 继续显式 opt-in / default off；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+- 验证通过：`git diff --check`；`git diff --name-only | rg '(^README\.md$|^AGENTS\.md$|electron-builder\.yml$|native/search/target|\.exe$|codeinsights-native-search$)'` 无命中；旧恢复入口 / 旧下一步提示搜索无命中。
+
 ## 2026-06-03 Rust/Go Phase 5 fake sidecar / cache-corruption smoke 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只在 native 默认关闭 / 显式 opt-in 前提下，把 `smoke:native-runtime` 中已规划但仍 skipped 的 `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` smoke 做成可执行 fake sidecar / isolated cache fixture；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现需要触碰 optional package 或 packaged binary，立即停止并重新规划。
