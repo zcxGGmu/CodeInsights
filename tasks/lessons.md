@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 stable benchmark gate 习惯
+
+- 跑 Rust native benchmark 前必须先用 sidecar `status` 检查本地 release binary 的 `binaryVersion` 是否与源码 `BINARY_VERSION` 一致；如果 `native/search/target/release/codeinsights-native-search` 仍报告旧版本（例如 `0.0.1-dev` 而源码为 `0.0.2-dev`），必须先 `cargo build --release --manifest-path native/search/Cargo.toml` 重建本地 ignored 产物，再开始性能结论记录。
+- `native-runtime-benchmark.ts` 的 `eventLoopDelayMs` 是所有 iterations 中最大的 `setTimeout(0)` 延迟，不是 P95；default-enable 评估要明确这个口径。即使 Agent native P95 远超 gate，如果 Agent native event loop delay 连续复跑仍高于同轮 TS fallback，也要保持 native 显式 opt-in / default off。
+- 稳定 benchmark gate 通过不能替代 packaged smoke / optional package / native-cache schema；在未证明 bundled binary、不使用系统 `PATH`、missing/crash/timeout fallback 和 cache corruption 之前，不得默认启用 native。
+
 ## 2026-06-03 Rust / Go Phase 5 状态同步重复请求习惯
 
 - 用户在阶段实现和上一轮状态同步都完成后再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，仍要新建本轮 `tasks/todo.md` 同步计划和 Review，把当前 `git log` 可确认的最新状态同步提交（例如 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`）回填到 development checklist 和 next-session prompt；不能因为上一轮文档大体正确就只口头回复。
