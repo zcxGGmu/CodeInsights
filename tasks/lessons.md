@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 sidecar manager 恢复入口回填习惯
+
+- 阶段实现提交和状态同步提交都完成后，如果用户再次要求“更新文档最新状态 / 标注完成未完成 / 给下次启动提示词”，不能只口头确认已有文档；必须把最新状态同步提交号（例如 `fdb6997b docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态`）回填到 development checklist 和 next-session prompt，避免仍写“319f30e8 或其后的 docs 提交”这类需要读者推断的占位。
+- 这类复核即使没有业务代码变化，也要在 `tasks/todo.md` 新增本轮同步计划和 Review，验证根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml` 未触碰后单独提交，最终回复提供可直接复制的下一次启动提示词。
+
 ## 2026-06-03 Rust / Go Phase 5 sidecar manager 安全与 benchmark 习惯
 
 - Native sidecar fallback 只能覆盖 `missing_binary`、`version_mismatch`、`contract_violation`、`timeout`、`crashed`、`cache_corrupted`、`unsupported_platform` 这类可用性 / 合约失败；`path_denied`、`invalid_input`、`operation_cancelled`、`io_error` 等拒绝类错误必须向上传播，不能被 TypeScript fallback 重新读取文件绕过。

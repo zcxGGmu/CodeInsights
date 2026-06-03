@@ -3,7 +3,7 @@
 > 更新时间：2026-06-03
 > 当前分支：`rust-go-refactor`
 > 最新已确认开发基线：`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`。
-> 最新已确认恢复入口：`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`；如果 `git log -5 --oneline` 中存在其后的 `docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态` 提交，下次启动时以最新的 Rust / Go docs / tasks / feat 提交为准。
+> 最新已确认恢复入口：`fdb6997b docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态`。
 
 ## 当前真实进度
 
@@ -49,11 +49,11 @@
 ```text
 请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md、docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md、docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md、docs/improve/rust-go/next-session-prompt.md 和 native/search/。
 
-当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”、Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”和 Phase 4“前端可见体验、Jotai 状态和 diagnostics”已经完成。Phase 5 已完成前置计划、依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB 级 TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search fallback gate、Rust vs TS contract parity 和 100MB native benchmark 对比。最新开发基线是 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`；如果存在其后的 Rust / Go 文档状态同步提交，以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交作为恢复入口。
+当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”、Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”和 Phase 4“前端可见体验、Jotai 状态和 diagnostics”已经完成。Phase 5 已完成前置计划、依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB 级 TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search fallback gate、Rust vs TS contract parity 和 100MB native benchmark 对比。最新开发基线是 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`；最新恢复入口是 `fdb6997b docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态`。
 
 已完成的 Phase 5 sidecar manager 切片：Rust crate 直接依赖固定为 `serde = 1.0.228`、`serde_json = 1.0.150`；实现 stdin / stdout line-delimited JSON protocol、`status`、literal `search`、`shutdown` 和 explicit out-of-scope `tail_jsonl` typed error；Electron main process 通过 `native-runtime-sidecar-manager.ts` 显式 binary path opt-in，不从系统 PATH 查找；覆盖 missing binary、version mismatch、timeout、crash、shutdown、bad JSON stdout、stdout buffer 上限、contract violation、source boundary violation、range violation、拒绝类错误不 fallback、Chat legacy snippet parity、真实 Rust vs TS parity。100MB benchmark 结论：Rust native Chat event loop delay 从 44.914ms 降到 1.812ms，但 P95 456.835ms 慢于 TS 413.818ms；Rust native Agent P95 808.661ms 慢于 TS 343.416ms，因此 native 仍不能默认启用。尚未完成：Rust search 性能优化 / gate 复核、optional package、packaged smoke、默认启用判断、Phase 6-9。
 
-启动后先运行 `git status --short --branch` 和 `git log -5 --oneline`。下一步继续 Phase 5“Rust search sidecar 试点”：先复核 `319f30e8` 后是否已有状态同步提交；再基于当前 benchmark 结果优化 Rust search 性能或重新规划 default-enable gate。未达到 P95 / event loop gate 前不得默认启用 native；不要创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+启动后先运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `fdb6997b` 和 `319f30e8`。下一步继续 Phase 5“Rust search sidecar 试点”：基于当前 benchmark 结果优化 Rust search 性能或重新规划 default-enable gate。未达到 P95 / event loop gate 前不得默认启用 native；不要创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
 
 请遵守阶段纪律：每完成一个阶段并通过验证后，立即更新 development checklist、next-session-prompt.md、tasks/todo.md Review 和必要的 lessons，然后单独提交该阶段相关文件，提交信息使用详细中文。
 ```
