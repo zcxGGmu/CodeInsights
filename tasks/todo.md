@@ -26,7 +26,7 @@
 - [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
 - [x] 运行 `bun install --frozen-lockfile --dry-run`。
 - [x] 运行 `git diff --check`，确认未修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
-- [ ] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
+- [x] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
 
 ### Review
 

@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 optional package manifest 预检边界
+
+- `packaged-manifest` smoke 只能证明 optional package manifest schema / 平台矩阵和 TypeScript fallback 可用；只要 summary 仍写 `bundledBinaryVerified=false`，它就不等于 bundled binary packaged smoke，不能把 optionalDependencies、bundled package resolver、`apps/electron/electron-builder.yml` files、签名或默认启用标成完成。
+- optional package manifest schema 必须是闭合白名单：只允许 package name / version、protocol version、cache schema version、platform / arch、binary name 和 SHA-256 fingerprint；必须拒绝 `binaryPath`、home、path-like 字段和任意额外字段，避免把路径或用户信息夹带进 manifest。
+- Phase 5 状态同步要同时检查 development checklist 顶部状态和底部“下一轮启动入口”代码块；不能只更新顶部而让底部提示词继续停在 `2cc95b1b` / `fb7e2d73`。完成 manifest 预检后，下一步应推进 bundled package resolver / 真实 packaged smoke 设计，而不是重复做 optional package manifest schema。
+
 ## 2026-06-03 Rust / Go Phase 5 恢复入口再次回填习惯
 
 - 当用户在 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态` 之后再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，仓库内 `next-session-prompt.md` 和 development checklist 必须明确把 `fb7e2d73` 写成最新已确认恢复入口；不能继续让提示词停在 `2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径` 或只写“以最新 docs 提交为准”。
