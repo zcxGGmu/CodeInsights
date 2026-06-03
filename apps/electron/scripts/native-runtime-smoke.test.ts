@@ -103,4 +103,76 @@ describe('native-runtime-smoke', () => {
     }))
     expect(JSON.stringify(summary)).not.toContain('/tmp/missing-codeinsights-native-search')
   })
+
+  test('protocol mismatch smoke 使用 fake sidecar 验证 version_mismatch fallback', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'protocol-mismatch',
+      query: '关键字',
+    })
+
+    expect(summary.nativeSearchBinaryProvided).toBe(false)
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'protocol-mismatch',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'typescript-fallback-search',
+      status: 'passed',
+    }))
+    expect(JSON.stringify(summary)).toContain('fallbackReason=version_mismatch')
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+  })
+
+  test('crash smoke 使用 fake sidecar 验证 crashed fallback', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'crash',
+      query: '关键字',
+    })
+
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'crash',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'typescript-fallback-search',
+      status: 'passed',
+    }))
+    expect(JSON.stringify(summary)).toContain('fallbackReason=crashed')
+    expect(JSON.stringify(summary)).not.toContain('secret-token')
+  })
+
+  test('timeout smoke 使用 fake sidecar 验证 timeout fallback 且清理 pending', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'timeout',
+      query: '关键字',
+    })
+
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'timeout',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'typescript-fallback-search',
+      status: 'passed',
+    }))
+    expect(JSON.stringify(summary)).toContain('fallbackReason=timeout')
+  })
+
+  test('cache corruption smoke 使用隔离 config dir 验证 cache_corrupted 且不读取真实缓存', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'cache-corruption',
+      query: '关键字',
+    })
+
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'cache-corruption',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'typescript-fallback-search',
+      status: 'passed',
+    }))
+    expect(JSON.stringify(summary)).toContain('fallbackReason=cache_corrupted')
+    expect(JSON.stringify(summary)).not.toContain('/codeinsights-native-runtime-smoke-')
+  })
 })

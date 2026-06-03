@@ -1,7 +1,12 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
+import {
+  getNativeRuntimeCacheDir,
+  getNativeRuntimeCacheManifestPath,
+  readNativeRuntimeCacheManifest,
+} from '../src/main/lib/native-runtime/native-runtime-cache-schema'
 import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 
@@ -106,6 +111,32 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       cases.push(await runNativeMissingCase(options.nativeSearchBinary ?? join(rootDir, 'missing-native-search')))
     } else if (options.mode === 'native-available') {
       cases.push(await runNativeAvailableCase(options.nativeSearchBinary, fixturePath, options.query, options.env))
+    } else if (options.mode === 'protocol-mismatch') {
+      cases.push(await runFakeSidecarFallbackCase({
+        mode: options.mode,
+        scenario: 'protocol-mismatch',
+        fixturePath,
+        query: options.query,
+        expectedFallbackReason: 'version_mismatch',
+      }))
+    } else if (options.mode === 'crash') {
+      cases.push(await runFakeSidecarFallbackCase({
+        mode: options.mode,
+        scenario: 'crash',
+        fixturePath,
+        query: options.query,
+        expectedFallbackReason: 'crashed',
+      }))
+    } else if (options.mode === 'timeout') {
+      cases.push(await runFakeSidecarFallbackCase({
+        mode: options.mode,
+        scenario: 'timeout',
+        fixturePath,
+        query: options.query,
+        expectedFallbackReason: 'timeout',
+      }))
+    } else if (options.mode === 'cache-corruption') {
+      cases.push(await runCacheCorruptionCase())
     } else {
       cases.push({
         name: options.mode,
@@ -127,6 +158,14 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
     }
     rmSync(rootDir, { recursive: true, force: true })
   }
+}
+
+interface FakeSidecarFallbackCaseOptions {
+  mode: NativeRuntimeSmokeMode
+  scenario: 'protocol-mismatch' | 'crash' | 'timeout'
+  fixturePath: string
+  query: string
+  expectedFallbackReason: 'version_mismatch' | 'crashed' | 'timeout'
 }
 
 async function runTypeScriptFallbackCase(filePath: string, query: string): Promise<NativeRuntimeSmokeCase> {
@@ -159,6 +198,89 @@ async function runNativeMissingCase(binaryPath: string): Promise<NativeRuntimeSm
     name: 'native-missing',
     status: status.fallbackReason === 'missing_binary' ? 'passed' : 'failed',
     detail: `fallbackReason=${status.fallbackReason ?? 'none'}`,
+  }
+}
+
+async function runFakeSidecarFallbackCase(options: FakeSidecarFallbackCaseOptions): Promise<NativeRuntimeSmokeCase> {
+  const fakeSidecarPath = createFakeNativeRuntimeSidecar(options.scenario)
+  const manager = new NativeRuntimeSidecarManager({
+    binaryPath: process.execPath,
+    args: [fakeSidecarPath, options.scenario],
+    requestTimeoutMs: 80,
+    statusTimeoutMs: 500,
+    shutdownTimeoutMs: 80,
+  })
+
+  try {
+    if (options.scenario === 'protocol-mismatch') {
+      const status = await manager.getStatus()
+      return buildFallbackSmokeCase(options.mode, status.fallbackReason, options.expectedFallbackReason)
+    }
+
+    const status = await manager.getStatus()
+    if (!status.nativeEnabled) {
+      return {
+        name: options.mode,
+        status: 'failed',
+        detail: `fake sidecar status fallbackReason=${status.fallbackReason ?? 'none'}`,
+      }
+    }
+
+    try {
+      await manager.search({
+        requestId: `native-runtime-smoke-${options.mode}`,
+        query: options.query,
+        limit: 10,
+        sources: [{
+          sourceKind: 'chat_message',
+          sourceId: 'smoke-chat',
+          sessionId: 'smoke-chat',
+          title: 'Smoke Chat',
+          filePath: options.fixturePath,
+          textFields: ['content'],
+          idField: 'id',
+        }],
+      })
+    } catch {
+      const fallbackStatus = await manager.getStatus()
+      return buildFallbackSmokeCase(options.mode, fallbackStatus.fallbackReason, options.expectedFallbackReason)
+    }
+
+    return {
+      name: options.mode,
+      status: 'failed',
+      detail: 'fake sidecar search 未触发 fallback',
+    }
+  } finally {
+    await manager.shutdown().catch(() => false)
+    rmSync(dirname(fakeSidecarPath), { recursive: true, force: true })
+  }
+}
+
+async function runCacheCorruptionCase(): Promise<NativeRuntimeSmokeCase> {
+  mkdirSync(getNativeRuntimeCacheDir(), { recursive: true })
+  writeFileSync(getNativeRuntimeCacheManifestPath(), '{broken native cache manifest', 'utf-8')
+  const result = readNativeRuntimeCacheManifest()
+  if (result.ok) {
+    return {
+      name: 'cache-corruption',
+      status: 'failed',
+      detail: '损坏 manifest 被错误识别为可用',
+    }
+  }
+
+  return buildFallbackSmokeCase('cache-corruption', result.error.code, 'cache_corrupted')
+}
+
+function buildFallbackSmokeCase(
+  name: NativeRuntimeSmokeMode,
+  actualFallbackReason: string | undefined,
+  expectedFallbackReason: string,
+): NativeRuntimeSmokeCase {
+  return {
+    name,
+    status: actualFallbackReason === expectedFallbackReason ? 'passed' : 'failed',
+    detail: `fallbackReason=${actualFallbackReason ?? 'none'}`,
   }
 }
 
@@ -210,6 +332,60 @@ async function runNativeAvailableCase(
   } finally {
     await manager.shutdown().catch(() => false)
   }
+}
+
+function createFakeNativeRuntimeSidecar(scenario: 'protocol-mismatch' | 'crash' | 'timeout'): string {
+  const scriptDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-fake-sidecar-'))
+  const scriptPath = join(scriptDir, 'fake-sidecar.js')
+  writeFileSync(scriptPath, `
+const scenario = process.argv[2] ?? '${scenario}'
+let buffer = ''
+
+function send(value) {
+  process.stdout.write(JSON.stringify(value) + '\\n')
+}
+
+function handle(line) {
+  const request = JSON.parse(line)
+  if (request.method === 'status') {
+    send({
+      jsonrpc: '2.0',
+      id: request.id,
+      ok: true,
+      result: {
+        implementation: 'rust-sidecar',
+        binaryVersion: '0.0.0-smoke',
+        protocolVersion: scenario === 'protocol-mismatch' ? 999 : 1,
+        cacheSchemaVersion: 1,
+        capabilities: ['diagnostics', 'indexed-search'],
+      },
+    })
+    return
+  }
+
+  if (request.method === 'search') {
+    if (scenario === 'crash') process.exit(42)
+    if (scenario === 'timeout') return
+  }
+
+  if (request.method === 'shutdown') {
+    send({ jsonrpc: '2.0', id: request.id, ok: true, result: { accepted: true } })
+    process.exit(0)
+  }
+}
+
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', (chunk) => {
+  buffer += chunk
+  while (buffer.includes('\\n')) {
+    const index = buffer.indexOf('\\n')
+    const line = buffer.slice(0, index)
+    buffer = buffer.slice(index + 1)
+    if (line.trim()) handle(line)
+  }
+})
+`, 'utf-8')
+  return scriptPath
 }
 
 function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
