@@ -1,5 +1,23 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 native smoke/cache 状态同步计划
+
+范围确认：用户要求更新文档最新开发状态、标注完成 / 未完成，并给出下次启动可直接复制提示词；同时再次强调阶段完成后自动同步。本轮只做状态文档同步，不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最新实现提交为 `c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，把最新开发基线和恢复入口明确回填为 `c6104eee`，标清已完成基础 smoke / cache schema，未完成 optional package / packaged smoke / default enable / Phase 6-9。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，移除“以 git log 中 feat 为准”的占位，写入 `c6104eee` 作为最新恢复入口，并把下一步指向 fake sidecar smoke / optional package manifest / packaged smoke 设计。
+- [x] 更新 `tasks/lessons.md`，记录 native smoke/cache 阶段完成后也必须回填真实恢复入口，不能留下“本轮实现后”占位。
+- [x] 更新本 `tasks/todo.md` Review，记录验证、边界和下次入口。
+- [ ] 运行 `git diff --check`，确认未修改根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml`，然后单独提交状态同步。
+
+### Review
+
+- 最新实现提交已回填为 `c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`；development checklist 和 next-session prompt 不再把 `4f9c4d28` 或“本轮实现后以 git log 为准”作为最新恢复入口。
+- 已完成项明确：Phase 0-4；Phase 5 前置计划、依赖 decision record、protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、Rust search-only sidecar、sidecar manager、Chat search opt-in fallback、contract parity、100MB benchmark、早停性能优化、稳定 benchmark 复跑、event-loop 口径增强、新字段 benchmark 复跑、基础 `smoke:native-runtime` 脚本和 native-cache manifest schema helper。
+- 未完成项明确：Phase 5 default enable、optional package、packaged smoke、`protocol-mismatch` / `crash` / `timeout` / `cache-corruption` smoke fixture、Agent native work-delay 进一步分析、Phase 6 大文件 / 日志 chunk preview、Phase 7 PathSafety / GitOutputParser、Phase 8 打包 / CI / 发布收口、Phase 9 Go supervisor 可选 spike。
+- 下一步入口明确：继续 Phase 5，在 default off 前提下优先补齐 fake sidecar / isolated cache smoke，或推进 optional package manifest 与 packaged smoke 设计；不得创建 packaged native binary，不得修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，不得 push 或创建 PR。
+
 ## 2026-06-03 Rust/Go Phase 5 native smoke script 与 cache schema 设计计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮在 native 继续 default off 的前提下，优先补 smoke script 和 native-cache schema 的可执行基础；optional package 只做设计记录，不修改 `optionalDependencies`，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现偏向 default enable 或 packaged binary，立即停止并重新规划。

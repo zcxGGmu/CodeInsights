@@ -9,8 +9,8 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-03
-> 最新开发基线：`4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`。
-> 最新已确认恢复入口：`4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`；本轮实现与状态同步提交后，以 `git log -5 --oneline` 中最新的 `feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础` 或后续 docs 提交为实际恢复入口。
+> 最新开发基线：`c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`。
+> 最新已确认恢复入口：`c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`；本轮状态同步提交后，以 `git log -5 --oneline` 中最新的 `docs(rust-go): 同步 Phase 5 native smoke/cache 后续状态` 为实际恢复入口。
 > 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search opt-in fallback 边界、Rust vs TS contract parity、100MB native benchmark 对比、search `limit + 1` 早停性能优化、benchmark event-loop 口径增强、基础 `smoke:native-runtime` 脚本和 native-cache manifest schema helper；尚未实现 packaged native binary、optional package、packaged smoke 或 Go supervisor。
 > 当前策略：Phase 5 native search 仍不能默认启用。本轮已用新增 event-loop samples / baseline / work delay 字段复跑 2 轮 100MB / 20 iterations 稳定 benchmark；Rust native Chat / Agent P95 仍远超性能门槛，Chat work delay gate 达标，但 Agent native `eventLoopWorkDelayP95Ms` 两轮仍高于 TS fallback（0.065ms vs 0ms；0.164ms vs 0.047ms），未扣 baseline 的 Agent `eventLoopDelayP95Ms` 也两轮小幅回退（1.199ms vs 1.121ms；1.191ms vs 1.114ms）。这些差异绝对值很小，但方向仍不支持 default enable；在 packaged smoke、optional package、native-cache schema、smoke script 和 default-enable 风险评估完成前，native 必须继续保持显式 opt-in / default off。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
@@ -63,9 +63,9 @@
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
 2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0-4 已完成；Phase 5 已完成前置依赖决策与 protocol / smoke 计划、100MB TS fallback benchmark gate、最小 Rust search-only sidecar、Electron main process sidecar manager、Chat search fallback gate、Rust vs TS contract parity 和 100MB native benchmark；native 未达默认启用门槛，packaged native binary / optional package / packaged smoke 尚未完成”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含最新的 `docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`，以及 `40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态` 和 `65c67c52 docs(rust-go): 回填 Phase 5 search 性能优化最新恢复入口`。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`，以及 `4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`、`40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径` 和 `1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态`。
 4. 如果继续 Phase 5，先读取 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`、`native/search/` 和 `apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.ts`，确认 native search 当前是显式 opt-in 且默认关闭。
-5. 下一步不要创建 packaged native binary 或修改打包配置；在 default off 前提下优先设计 smoke script、optional package 与 native-cache schema，或继续分析 Agent native work delay 小幅回退的 sidecar manager / benchmark 调度成本。只有 P95 / event loop gate 同时达标且 packaged smoke 计划进入可执行阶段后，才允许默认启用 native。
+5. 下一步不要创建 packaged native binary 或修改打包配置；在 default off 前提下优先补齐 `protocol-mismatch` / `crash` / `timeout` / `cache-corruption` smoke 的 fake sidecar / isolated cache fixture，或继续推进 optional package manifest 与 packaged smoke 设计。只有 P95 / event loop gate 同时达标且 packaged smoke 计划进入可执行阶段后，才允许默认启用 native。
 
 ## 使用规则
 

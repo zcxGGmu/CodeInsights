@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 native smoke/cache 状态同步习惯
+
+- Phase 5 native smoke / native-cache schema 这类小切片完成并提交后，如果用户要求更新最新开发状态和下次启动提示词，必须把真实实现提交号（例如 `c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`）回填到 development checklist 和 next-session prompt；不能继续写“本轮实现后以 git log 为准”或“最新 feat 提交”这类恢复入口占位。
+- 状态同步要明确区分“基础 smoke/cache 已完成”和“packaged smoke / optional package / default enable 未完成”：`smoke:native-runtime` 的 native-missing / native-available 入口不等于 packaged bundled binary smoke，native-cache manifest schema helper 不等于完整 native cache corruption smoke。
+- 用户再次强调“每个阶段性任务完成后自动去做”时，即使刚完成过实现提交，也要新建本轮 `tasks/todo.md` 同步计划和 Review，验证根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml` 未触碰后单独提交状态同步，并在最终回复给可复制提示词。
+
 ## 2026-06-03 Rust / Go Phase 5 新 event-loop 字段 gate 习惯
 
 - 用 `eventLoopDelaySamplesMs` / `eventLoopBaselineMs` / `eventLoopWorkDelayMs` 复跑稳定 benchmark 后，default-enable 判断不能只看 native P95 大幅领先；如果 Agent native `eventLoopWorkDelayP95Ms` 连续高于 TS fallback，即使绝对差异只有 0.1ms 级，也要记录为 event-loop gate 未完全通过，native 继续显式 opt-in / default off。
