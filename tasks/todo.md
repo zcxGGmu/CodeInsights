@@ -12,20 +12,31 @@
 
 实现计划：
 
-- [ ] 测试先行扩展 `apps/electron/scripts/native-runtime-smoke.test.ts`，锁住 `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` 不再 skipped，且 summary 不泄露 fake binary path、home path、token 或真实 config/cache 路径。
-- [ ] 在 `apps/electron/scripts/native-runtime-smoke.ts` 内新增测试专用 fake sidecar fixture：只用 `process.execPath + 临时 JS 脚本` 模拟 protocol mismatch、search crash、search timeout；不从系统 `PATH` 查找，不创建 packaged binary。
-- [ ] 为 `cache-corruption` 使用隔离 `CODEINSIGHTS_CONFIG_DIR` 写入损坏 manifest，验证 `readNativeRuntimeCacheManifest()` 返回 `cache_corrupted`，同时证明 TypeScript fallback 搜索仍可用。
-- [ ] 保持 `native-missing` / `native-available` 既有行为兼容；native available 仍只接受显式 binary，未提供时 skipped。
-- [ ] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不改 optionalDependencies。
+- [x] 测试先行扩展 `apps/electron/scripts/native-runtime-smoke.test.ts`，锁住 `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` 不再 skipped，且 summary 不泄露 fake binary path、home path、token 或真实 config/cache 路径。
+- [x] 在 `apps/electron/scripts/native-runtime-smoke.ts` 内新增测试专用 fake sidecar fixture：只用 `process.execPath + 临时 JS 脚本` 模拟 protocol mismatch、search crash、search timeout；不从系统 `PATH` 查找，不创建 packaged binary。
+- [x] 为 `cache-corruption` 使用隔离 `CODEINSIGHTS_CONFIG_DIR` 写入损坏 manifest，验证 `readNativeRuntimeCacheManifest()` 返回 `cache_corrupted`，同时证明 TypeScript fallback 搜索仍可用。
+- [x] 保持 `native-missing` / `native-available` 既有行为兼容；native available 仍只接受显式 binary，未提供时 skipped。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不改 optionalDependencies。
 
 验证计划：
 
-- [ ] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts`。
-- [ ] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`。
-- [ ] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protocol-mismatch`、`--mode crash`、`--mode timeout`、`--mode cache-corruption`。
-- [ ] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
-- [ ] 运行 `git diff --check`，确认未修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
-- [ ] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts`。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protocol-mismatch`、`--mode crash`、`--mode timeout`、`--mode cache-corruption`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `git diff --check`，确认未修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [x] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 阶段实现已提交：`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`。
+- 已把 `smoke:native-runtime` 的 `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` 从 skipped 计划入口改成可执行 smoke。`protocol-mismatch` / `crash` / `timeout` 使用 `process.execPath + 临时 JS fake sidecar`，分别验证 `version_mismatch`、`crashed`、`timeout` fallback；`cache-corruption` 使用隔离 `CODEINSIGHTS_CONFIG_DIR/native-cache/manifest.json` 写入损坏 manifest 并验证 `cache_corrupted`。
+- 每个新增 smoke mode 都先运行 TypeScript fallback 搜索并断言可用；summary 只暴露 `nativeSearchBinaryProvided` boolean，case detail 经 `redactNativeRuntimeText()` 脱敏，不打印 fake sidecar path、home path、token 或真实 config/cache 路径。
+- 已保持 `native-available` 行为：未显式传 `--native-search-binary` 或 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 时仍 skipped，不从系统 `PATH` 查找；本轮未创建 packaged native binary，未修改 `optionalDependencies`，未修改 `electron-builder.yml`。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.139` 并同步 `bun.lock`。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts`（9 pass）；`bun test apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`（27 pass）；四个 CLI smoke mode `protocol-mismatch` / `crash` / `timeout` / `cache-corruption` 均输出 `passed`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 代码审查子代理未发现阻断问题；重点确认进程清理、`CODEINSIGHTS_CONFIG_DIR` 恢复、PATH 边界、脱敏和 default-enable / packaged 边界均保持。
+- 边界保持：native search 继续显式 opt-in / default off；未 push，未创建 PR；未修改根 `README.md` / 根 `AGENTS.md`；未修改 `electron-builder.yml`；未创建 packaged native binary。下一步应优先推进 optional package manifest 与 packaged smoke 设计，或继续分析 Agent native work-delay 小幅回退。
 
 ## 2026-06-03 Rust/Go Phase 5 native smoke/cache 状态同步计划
 

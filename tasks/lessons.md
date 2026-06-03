@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 fake sidecar smoke 状态边界
+
+- `protocol-mismatch` / `crash` / `timeout` / `cache-corruption` smoke 一旦通过 fake sidecar / isolated cache fixture 落地并提交（例如 `2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`），后续恢复入口不能再把这些 mode 写成 skipped 或“下一步优先补齐”；下一步应转向 optional package manifest、packaged smoke 设计或 Agent native work-delay 分析。
+- fake sidecar smoke 只能证明 main process protocol/fallback 行为：version mismatch、crash、timeout、cache corrupted 和 TS fallback 可用；它仍不等于 bundled binary packaged smoke，不证明 optionalDependencies、electron-builder files、签名、CI 平台矩阵或默认启用安全。
+- 状态同步时要同时更新 `2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，否则该计划文档会继续声称 `protocol-mismatch` / `crash` / `timeout` / `cache-corruption` 是 skipped，和 checklist / next-session prompt 冲突。
+
 ## 2026-06-03 Rust / Go Phase 5 native smoke/cache 状态同步习惯
 
 - Phase 5 native smoke / native-cache schema 这类小切片完成并提交后，如果用户要求更新最新开发状态和下次启动提示词，必须把真实实现提交号（例如 `c6104eee feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础`）回填到 development checklist 和 next-session prompt；不能继续写“本轮实现后以 git log 为准”或“最新 feat 提交”这类恢复入口占位。

@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本和 native-cache manifest schema helper，尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper，以及 fake sidecar / isolated cache failure smoke；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`
 
 ## 目标
 
@@ -47,6 +47,8 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `native-available` 只有显式传 `--native-search-binary` 或 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 时才尝试 native；未提供时标记 skipped，不从系统 `PATH` 查找。
 - `native-missing` 使用隔离 `CODEINSIGHTS_CONFIG_DIR` fixture，验证 TypeScript fallback 搜索可用，并验证缺失 binary 返回 `missing_binary`。
 - `apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.ts` 已定义 `getConfigDir()/native-cache/manifest.json` manifest 约定，记录 schema / protocol / package plan，不记录 binary path；损坏 manifest 返回 `cache_corrupted`。
+- `protocol-mismatch`、`crash`、`timeout` 已接入 `process.execPath + 临时 JS fake sidecar` fixture，分别验证 `version_mismatch`、`crashed`、`timeout` fallback，且每个 mode 都同时验证 TypeScript fallback 搜索仍可用。
+- `cache-corruption` 已接入隔离 `CODEINSIGHTS_CONFIG_DIR/native-cache/manifest.json` fixture，写入损坏 manifest 后验证 `readNativeRuntimeCacheManifest()` 返回 `cache_corrupted`，不读取真实 `~/.codeinsights/`。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -269,11 +271,16 @@ Smoke cases:
 ```bash
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing --native-search-binary /tmp/codeinsights-missing-native-search
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-available --native-search-binary /abs/path/to/local/codeinsights-native-search
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protocol-mismatch
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode crash
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode timeout
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode cache-corruption
 ```
 
 - `native-missing` 已作为非 packaged smoke 可执行，输出 JSON summary，不打印 binary path。
 - `native-available` 仅验证显式本地 binary 的 status / search / shutdown；它不是 bundled binary smoke。
-- `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` 目前保留入口并标记 skipped，后续应接入 fake sidecar / isolated cache fixture。
+- `protocol-mismatch`、`crash`、`timeout` 已作为非 packaged fake sidecar smoke 可执行，输出 JSON summary，不打印 fake sidecar 路径。
+- `cache-corruption` 已作为 isolated cache smoke 可执行，使用临时 `CODEINSIGHTS_CONFIG_DIR`，不读取真实配置目录。
 
 Smoke output rules:
 
