@@ -6,7 +6,9 @@ import {
   getTypeScriptWorkspaceIndexService,
   getTypeScriptEventSearchService,
   nativeRuntimeService,
+  TypeScriptNativeRuntimeService,
 } from './native-runtime-service'
+import { NativeRuntimeSidecarError, type NativeRuntimeSidecarSearchInput } from './native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from './ts-event-search-service'
 import { appendPipelineRecord, createPipelineSession } from '../pipeline-session-manager'
 import { createAgentWorkspace } from '../agent-workspace-manager'
@@ -50,6 +52,111 @@ describe('native-runtime-service', () => {
       scope: ['chat'],
       limit: 10,
     })).rejects.toThrow('Native Runtime search 尚未接入 TypeScript facade')
+  })
+
+  test('显式注入 sidecar 时 search 由 main process 派生 Chat JSONL 路径', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-search-'))
+    tempDirs.push(configDir)
+    process.env.CODEINSIGHTS_CONFIG_DIR = configDir
+    const conversationId = 'chat-session-native'
+    mkdirSync(join(configDir, 'conversations'), { recursive: true })
+    writeFileSync(join(configDir, 'conversations', `${conversationId}.jsonl`), [
+      JSON.stringify({ id: 'msg-1', role: 'assistant', content: '这里包含关键字', createdAt: 1 }),
+    ].join('\n'), 'utf-8')
+    let capturedInput: NativeRuntimeSidecarSearchInput | undefined
+    const service = new TypeScriptNativeRuntimeService({
+      search: async (input) => {
+        capturedInput = input
+        return {
+          requestId: input.requestId,
+          query: input.query,
+          matches: [{
+            id: 'msg-1',
+            sourceKind: 'chat_message',
+            title: 'Chat 会话',
+            snippet: '这里包含关键字',
+            matchedRanges: [{ start: 4, length: 3 }],
+            score: 1,
+            sessionId: conversationId,
+            recordId: 'msg-1',
+            cursor: '1',
+          }],
+          hasMore: false,
+          indexState: 'ready',
+          implementation: 'rust-sidecar',
+          searchedAt: Date.now(),
+        }
+      },
+    })
+
+    const result = await service.search({
+      requestId: 'native-chat-search',
+      query: '关键字',
+      scope: ['chat'],
+      limit: 10,
+      sessionId: conversationId,
+    })
+
+    expect(result.implementation).toBe('rust-sidecar')
+    expect(capturedInput?.sources[0]?.filePath).toBe(join(configDir, 'conversations', `${conversationId}.jsonl`))
+    expect(capturedInput?.sources[0]?.textFields).toEqual(['content'])
+  })
+
+  test('sidecar search 失败时回退 TypeScript search result', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-search-fallback-'))
+    tempDirs.push(configDir)
+    process.env.CODEINSIGHTS_CONFIG_DIR = configDir
+    const conversationId = 'chat-session-fallback'
+    mkdirSync(join(configDir, 'conversations'), { recursive: true })
+    writeFileSync(join(configDir, 'conversations', `${conversationId}.jsonl`), [
+      JSON.stringify({ id: 'msg-1', role: 'assistant', content: '这里包含关键字', createdAt: 1 }),
+    ].join('\n'), 'utf-8')
+    const service = new TypeScriptNativeRuntimeService({
+      search: async () => {
+        throw new NativeRuntimeSidecarError('contract_violation', 'bad native contract')
+      },
+    })
+
+    const result = await service.search({
+      requestId: 'native-chat-search-fallback',
+      query: '关键字',
+      scope: ['chat'],
+      limit: 10,
+      sessionId: conversationId,
+    })
+
+    expect(result.implementation).toBe('typescript')
+    expect(result.matches.map((match) => match.id)).toEqual(['msg-1'])
+  })
+
+  test('sidecar path_denied 拒绝错误不会回退 TypeScript search', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-search-denied-'))
+    tempDirs.push(configDir)
+    process.env.CODEINSIGHTS_CONFIG_DIR = configDir
+    const conversationId = 'chat-session-denied'
+    mkdirSync(join(configDir, 'conversations'), { recursive: true })
+    writeFileSync(join(configDir, 'conversations', `${conversationId}.jsonl`), [
+      JSON.stringify({ id: 'msg-1', role: 'assistant', content: '这里包含关键字', createdAt: 1 }),
+    ].join('\n'), 'utf-8')
+    const service = new TypeScriptNativeRuntimeService({
+      search: async () => {
+        throw new NativeRuntimeSidecarError('path_denied', 'native 拒绝读取路径')
+      },
+    })
+
+    try {
+      await service.search({
+        requestId: 'native-chat-search-denied',
+        query: '关键字',
+        scope: ['chat'],
+        limit: 10,
+        sessionId: conversationId,
+      })
+      throw new Error('search should preserve native rejection')
+    } catch (error) {
+      expect(error).toBeInstanceOf(NativeRuntimeSidecarError)
+      expect((error as NativeRuntimeSidecarError).code).toBe('path_denied')
+    }
   })
 
   test('tailJsonl backward 返回请求方向上的下一 cursor', async () => {

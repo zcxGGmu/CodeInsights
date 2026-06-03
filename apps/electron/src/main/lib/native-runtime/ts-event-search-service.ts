@@ -11,6 +11,14 @@ import {
   type JsonlEventReadIssue,
   type JsonlEventRecord,
 } from './jsonl-event-reader'
+import type {
+  NativeRuntimeSidecarSearchInput,
+  NativeRuntimeSidecarSource,
+} from './native-runtime-sidecar-manager'
+import {
+  canFallbackFromNativeSidecarError,
+  NativeRuntimeSidecarError,
+} from './native-runtime-sidecar-manager'
 
 export interface EventSearchDiagnostics {
   invalidJsonLines: number
@@ -30,6 +38,8 @@ export interface EventSearchSource<TRecord, TResult> {
   getRecordCreatedAt?: (record: TRecord, event: JsonlEventRecord<TRecord>) => number | undefined
   filterRecord?: (record: TRecord, event: JsonlEventRecord<TRecord>) => boolean
   toLegacyResult: (input: EventSearchLegacyResultInput<TRecord>) => TResult
+  nativeTextFields?: string[]
+  nativeIdField?: string
 }
 
 export interface EventSearchLegacyResultInput<TRecord> {
@@ -75,6 +85,14 @@ export interface SearchMatchesInSourceResult<TResult> {
 interface EventSearchMatchBundle<TResult> {
   legacyResult: TResult
   nativeMatch: NativeRuntimeSearchMatch
+}
+
+export interface NativeEventSearchSidecar {
+  search(input: NativeRuntimeSidecarSearchInput, signal?: AbortSignal): Promise<NativeRuntimeSearchResult>
+}
+
+export interface TypeScriptEventSearchServiceOptions {
+  nativeSearch?: NativeEventSearchSidecar
 }
 
 function createDiagnostics(): EventSearchDiagnostics {
@@ -146,6 +164,50 @@ function buildNativeMatch<TRecord, TResult>(
   }
 }
 
+function sourceAllowsNative<TRecord, TResult>(source: EventSearchSource<TRecord, TResult>): boolean {
+  return Array.isArray(source.nativeTextFields) && source.nativeTextFields.length > 0
+}
+
+function canUseNativeForQuery(query: string): boolean {
+  for (const char of query) {
+    if (char.charCodeAt(0) > 0x7f && char.toLowerCase() !== char.toUpperCase()) {
+      return false
+    }
+  }
+  return true
+}
+
+function toNativeSource<TRecord, TResult>(
+  source: EventSearchSource<TRecord, TResult>,
+): NativeRuntimeSidecarSource {
+  return {
+    sourceKind: source.sourceKind,
+    sourceId: source.sourceId,
+    sessionId: source.sourceId,
+    workspaceId: source.workspaceId,
+    title: source.title,
+    filePath: source.filePath,
+    textFields: source.nativeTextFields,
+    idField: source.nativeIdField,
+  }
+}
+
+async function readJsonlRecordAtCursor<TRecord>(
+  filePath: string,
+  cursor: string | undefined,
+  signal?: AbortSignal,
+): Promise<JsonlEventRecord<TRecord> | null> {
+  const lineNumber = Number.parseInt(cursor ?? '', 10)
+  if (!Number.isFinite(lineNumber) || lineNumber <= 0) return null
+
+  for await (const event of iterateJsonlEvents<TRecord>(filePath, { signal })) {
+    if (event.lineNumber === lineNumber) return event
+    if (event.lineNumber > lineNumber) return null
+  }
+
+  return null
+}
+
 async function findFirstMatchInSource<TRecord, TResult>(
   source: EventSearchSource<TRecord, TResult>,
   query: string,
@@ -185,6 +247,12 @@ async function findFirstMatchInSource<TRecord, TResult>(
 }
 
 export class TypeScriptEventSearchService {
+  private readonly nativeSearch?: NativeEventSearchSidecar
+
+  constructor(options: TypeScriptEventSearchServiceOptions = {}) {
+    this.nativeSearch = options.nativeSearch
+  }
+
   async searchFirstMatchPerSource<TRecord, TResult>(
     input: SearchFirstMatchPerSourceInput<TRecord, TResult>,
   ): Promise<SearchFirstMatchPerSourceResult<TResult>> {
@@ -199,6 +267,9 @@ export class TypeScriptEventSearchService {
     if (query.length === 0) {
       return { results: [], searchResult: result, diagnostics }
     }
+
+    const nativeResult = await this.trySearchFirstMatchPerSourceWithNative(input, diagnostics)
+    if (nativeResult) return nativeResult
 
     const queryLower = query.toLowerCase()
     const results: TResult[] = []
@@ -255,6 +326,9 @@ export class TypeScriptEventSearchService {
       }
     }
 
+    const nativeResult = await this.trySearchMatchesInSourceWithNative(input, diagnostics)
+    if (nativeResult) return nativeResult
+
     const queryLower = query.toLowerCase()
     const matches: TResult[] = []
     const nativeMatches: NativeRuntimeSearchMatch[] = []
@@ -300,6 +374,137 @@ export class TypeScriptEventSearchService {
         hasMore: nextOffset < total,
       },
       diagnostics,
+    }
+  }
+
+  private async trySearchFirstMatchPerSourceWithNative<TRecord, TResult>(
+    input: SearchFirstMatchPerSourceInput<TRecord, TResult>,
+    diagnostics: EventSearchDiagnostics,
+  ): Promise<SearchFirstMatchPerSourceResult<TResult> | null> {
+    if (!this.nativeSearch || !canUseNativeForQuery(input.query)) return null
+
+    const nativeSources = input.sources.filter(sourceAllowsNative)
+    if (nativeSources.length === 0 || nativeSources.length !== input.sources.length) return null
+
+    try {
+      const results: TResult[] = []
+      const matches: NativeRuntimeSearchMatch[] = []
+      let nativeHasMore = false
+      const limit = normalizeLimit(input.limit, 100)
+
+      for (const source of nativeSources) {
+        throwIfJsonlEventReadAborted(input.signal)
+        if (results.length >= limit) break
+
+        const nativeResult = await this.nativeSearch.search({
+          requestId: `${input.requestId}-${source.sourceId}`,
+          query: input.query,
+          limit: 1,
+          sources: [toNativeSource(source)],
+        }, input.signal)
+        nativeHasMore = nativeHasMore || nativeResult.hasMore
+
+        const match = nativeResult.matches[0]
+        if (!match) continue
+        const event = await readJsonlRecordAtCursor<TRecord>(source.filePath, match.cursor, input.signal)
+        if (!event) continue
+        if (source.filterRecord && !source.filterRecord(event.record, event)) continue
+        const text = source.getRecordText(event.record, event)
+        if (!text) continue
+        const snippet = buildSearchSnippet(text, input.query, input.query.toLowerCase())
+        if (!snippet) continue
+
+        results.push(source.toLegacyResult({
+          source: source as EventSearchSource<TRecord, unknown>,
+          record: event.record,
+          event,
+          text,
+          snippet,
+        }))
+        matches.push(buildNativeMatch(source, event, event.record, text, snippet))
+      }
+
+      return {
+        results,
+        searchResult: {
+          requestId: input.requestId,
+          query: input.query,
+          matches,
+          hasMore: nativeHasMore || (results.length >= limit && input.sources.length > results.length),
+          indexState: 'ready',
+          implementation: 'rust-sidecar',
+          searchedAt: Date.now(),
+        },
+        diagnostics,
+      }
+    } catch (error) {
+      if (error instanceof NativeRuntimeSidecarError && !canFallbackFromNativeSidecarError(error)) {
+        throw error
+      }
+      return null
+    }
+  }
+
+  private async trySearchMatchesInSourceWithNative<TRecord, TResult>(
+    input: SearchMatchesInSourceInput<TRecord, TResult>,
+    diagnostics: EventSearchDiagnostics,
+  ): Promise<SearchMatchesInSourceResult<TResult> | null> {
+    if (
+      !this.nativeSearch ||
+      !sourceAllowsNative(input) ||
+      !canUseNativeForQuery(input.query) ||
+      normalizeOffset(input.offset) > 0
+    ) {
+      return null
+    }
+
+    const limit = normalizeLimit(input.limit, 100)
+    try {
+      const nativeResult = await this.nativeSearch.search({
+        requestId: input.requestId,
+        query: input.query.trim(),
+        limit,
+        sources: [toNativeSource(input)],
+      }, input.signal)
+      const matches: TResult[] = []
+      const nativeMatches: NativeRuntimeSearchMatch[] = []
+
+      for (const match of nativeResult.matches) {
+        const event = await readJsonlRecordAtCursor<TRecord>(input.filePath, match.cursor, input.signal)
+        if (!event) continue
+        if (input.filterRecord && !input.filterRecord(event.record, event)) continue
+        const text = input.getRecordText(event.record, event)
+        if (!text) continue
+        const snippet = buildSearchSnippet(text, input.query.trim(), input.query.trim().toLowerCase())
+        if (!snippet) continue
+
+        matches.push(input.toLegacyResult({
+          source: input as EventSearchSource<TRecord, unknown>,
+          record: event.record,
+          event,
+          text,
+          snippet,
+        }))
+        nativeMatches.push(buildNativeMatch(input, event, event.record, text, snippet))
+      }
+
+      const nextOffset = matches.length
+      return {
+        matches,
+        total: nativeResult.hasMore ? nextOffset + 1 : nextOffset,
+        nextOffset,
+        hasMore: nativeResult.hasMore,
+        searchResult: {
+          ...nativeResult,
+          matches: nativeMatches,
+        },
+        diagnostics,
+      }
+    } catch (error) {
+      if (error instanceof NativeRuntimeSidecarError && !canFallbackFromNativeSidecarError(error)) {
+        throw error
+      }
+      return null
     }
   }
 }

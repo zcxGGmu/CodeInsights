@@ -1,5 +1,57 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 sidecar manager、fallback 集成与 benchmark 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。当前只完成 `native/search/` search-only Rust 源码切片，尚未接入 Electron main process。本轮目标是先用 contract 测试锁住 sidecar manager 的失败与降级路径，再接入 main process 可替换边界，最后做 Rust vs TS contract parity 与 100MB benchmark 对比。未达到 P95 / event loop gate 前不得默认启用 native。本轮不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / fallback / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支 `rust-go-refactor`，最近历史包含 `c76f3b33 docs(rust-go): 同步 Phase 5 search-only sidecar 后续开发状态` 与 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`。
+- [x] 确认本轮禁止事项：不生成 packaged native binary，不修改打包配置，不默认启用 native，不触碰根 `README.md` / 根 `AGENTS.md`。
+
+测试先行：
+
+- [x] 新增 `native-runtime-sidecar-manager.test.ts`，覆盖 missing binary、version mismatch、timeout、crash、shutdown 和 contract violation fallback。
+- [x] contract 测试使用隔离 fake sidecar 脚本模拟 stdout protocol、bad JSON、hang、crash 和 shutdown；不依赖 packaged binary，不从系统 `PATH` 查找同名工具。
+- [x] 新增 Rust vs TS contract parity 测试，使用同一脱敏 JSONL fixture 验证 query、limit、bad JSON、missing file、中文命中、credential-like snippet 脱敏和 UTF-16 matchedRanges。
+- [x] 新增 / 扩展 benchmark runner，支持 TypeScript 与 Rust sidecar search 对比，记录 P50 / P95 / P99、event loop delay、memory delta、数据规模和是否满足 default-enable gate。
+
+实现范围：
+
+- [x] 新增 `native-runtime-sidecar-manager.ts`：封装 child process lifecycle、line-delimited JSON request / response、status handshake、schema 校验、timeout、crash pending cleanup、shutdown 和本进程禁用 native fallback reason。
+- [x] sidecar manager 所有返回进入业务前做最小 schema 校验、错误规范化和 diagnostics 脱敏；renderer 不接收 binary path、raw stderr、credentialed URL 或完整 home path。
+- [x] 在 `native-runtime-service.ts` 接入可替换 search 边界：feature flag 开启且 sidecar 可用时尝试 Rust search，missing / timeout / crash / version mismatch / contract violation 时降级 TypeScript search；feature flag 关闭继续只走 TS fallback。
+- [x] 暂不实现 `tail_jsonl` native 接入；Rust 当前明确 out-of-scope，Pipeline tail 仍走 TypeScript cursor tail。
+- [x] 递增受影响 package patch 版本并同步 `bun.lock`。
+
+验证命令：
+
+```bash
+bun test apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/scripts/native-runtime-benchmark.test.ts
+cargo test --manifest-path native/search/Cargo.toml
+cargo fmt --check --manifest-path native/search/Cargo.toml
+cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20 --native-search-binary /Users/zq/Desktop/ai-projs/posp/RV-Insights/native/search/target/release/codeinsights-native-search
+git diff --check
+git status --short --branch
+```
+
+### Review
+
+- 已新增 `native-runtime-sidecar-manager.ts`，只接受显式 `binaryPath`，不从系统 `PATH` 查找 sidecar；实现 `status`、`search`、`shutdown` 的 line-delimited JSON protocol、pending request cleanup、timeout、crash、shutdown ack / SIGTERM / SIGKILL 和本进程 fallback 状态。
+- 已接入 Electron main process 可替换 search 边界：只有 `CODEINSIGHTS_NATIVE_RUNTIME=1`、`CODEINSIGHTS_NATIVE_SEARCH=1` 和 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 同时存在时才创建 Rust sidecar manager；默认仍是 TypeScript fallback。当前只把 Chat JSONL source 标记为 native-safe，Agent / Pipeline 未 opt in，`tail_jsonl` 仍保持 TypeScript cursor tail。
+- code-review 子代理指出的问题已修复：stdout protocol buffer 加 1MB 上限；`path_denied` / `invalid_input` / `operation_cancelled` / `io_error` 这类拒绝语义不再被 TS fallback 绕过；Chat legacy snippet / matchedRanges 回到 TypeScript `buildSearchSnippet()` 生成；sidecar match source 边界、range、score、searchedAt 严格校验；sidecar 夹带的 `filePath` 不透传；benchmark CLI 失败路径脱敏；parity test 不再无 cargo 静默通过，并使用临时 `CARGO_TARGET_DIR`。
+- Rust vs TS contract parity 已接通真实 Rust sidecar：同一 JSONL fixture 上命中 id、UTF-16 matchedRanges 和 Bearer 脱敏保持一致；parity 通过 `cargo run --manifest-path native/search/Cargo.toml --quiet --` 运行，测试 target 写入临时目录而非 `native/search/target/`。
+- 100MB native benchmark 已通过运行但未达到 default-enable gate。命令使用绝对 binary path，避免 `bun --filter` 改变 cwd：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20 --native-search-binary /Users/zq/Desktop/ai-projs/posp/RV-Insights/native/search/target/release/codeinsights-native-search`。
+- Benchmark 结果：TS Chat 99,527,780 bytes，P95 413.818ms，event loop delay 44.914ms；Rust native Chat P95 456.835ms，event loop delay 1.812ms。Rust native Chat event loop gate 达标但 P95 比 TS 更慢。TS Agent 102,397,780 bytes，P95 343.416ms，event loop delay 1.564ms；Rust native Agent P95 808.661ms，event loop delay 1.134ms。结论：native 仍不得默认启用，只能保持显式 opt-in / default off。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts`；`bun test apps/electron/src/main/lib/native-runtime apps/electron/scripts/native-runtime-benchmark.test.ts`（53 pass）；`cargo test --manifest-path native/search/Cargo.toml`（11 pass）；`cargo fmt --check --manifest-path native/search/Cargo.toml`；`cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings`；`cargo build --release --manifest-path native/search/Cargo.toml`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界保持：未创建 packaged native binary，未修改 `electron-builder.yml`，未修改根 `README.md` / 根 `AGENTS.md`，未新增 optional package，未 push，未创建 PR；`native/search/target/` 仅为本地 ignored 构建产物，不提交。
+
 ## 2026-06-03 Rust/Go Phase 5 search-only sidecar 状态同步计划
 
 范围确认：用户要求在 Phase 5 最小 Rust search-only sidecar 源码切片提交后，更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词；同时再次强调该动作要成为每个阶段性任务完成后的默认习惯。本轮只做文档、任务记录和 lessons 同步，不进入 Electron main process 集成，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

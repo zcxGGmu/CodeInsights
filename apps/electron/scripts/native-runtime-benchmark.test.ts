@@ -19,6 +19,8 @@ describe('native-runtime-benchmark helpers', () => {
       '4096',
       '--iterations',
       '3',
+      '--native-search-binary',
+      '/tmp/native-search',
       '--keep-artifacts',
     ])
 
@@ -28,6 +30,7 @@ describe('native-runtime-benchmark helpers', () => {
       workspaceFiles: 2400,
       logBytes: 4096,
       iterations: 3,
+      nativeSearchBinary: '/tmp/native-search',
       keepArtifacts: true,
     })
   })
@@ -50,6 +53,7 @@ describe('native-runtime-benchmark helpers', () => {
         logBytes: 1024,
         iterations: 2,
         keepArtifacts: false,
+        nativeSearchBinary: '/Users/demo/native-search',
       },
       cases: [
         {
@@ -63,7 +67,9 @@ describe('native-runtime-benchmark helpers', () => {
     })
 
     expect(summary.schemaVersion).toBe(1)
-    expect(summary.implementation).toBe('typescript')
+    expect(summary.implementation).toBe('typescript+rust-sidecar')
+    expect(JSON.stringify(summary)).not.toContain('/Users/demo/native-search')
+    expect(summary.options.nativeSearchBinaryProvided).toBe(true)
     expect(summary.cases[0]).toMatchObject({
       name: 'chat-search-large-history',
       p50Ms: 2,

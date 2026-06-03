@@ -13,28 +13,50 @@ import type {
   NativeRuntimeWorkspaceIndexResult,
 } from '@codeinsights/shared'
 import {
+  NATIVE_RUNTIME_FEATURE_FLAGS,
+} from '@codeinsights/shared'
+import {
   buildNativeRuntimeDiagnostics,
   buildNativeRuntimeStatus,
   sanitizeNativeRuntimeStatus,
 } from './native-runtime-diagnostics'
-import { TypeScriptEventSearchService } from './ts-event-search-service'
+import { TypeScriptEventSearchService, type NativeEventSearchSidecar } from './ts-event-search-service'
 import { TypeScriptPipelineTailService } from './ts-pipeline-tail-service'
 import { TypeScriptWorkspaceIndexService } from './ts-workspace-index-service'
+import {
+  canFallbackFromNativeSidecarError,
+  NativeRuntimeSidecarError,
+  NativeRuntimeSidecarManager,
+} from './native-runtime-sidecar-manager'
 import type { NativeRuntimeAdapter } from './native-runtime-types'
-import { getPipelineSessionRecordsPath, getWorkspaceFilesDir } from '../config-paths'
+import { getConversationMessagesPath, getPipelineSessionRecordsPath, getWorkspaceFilesDir } from '../config-paths'
 import { getWorkspaceAttachedDirectories, listAgentWorkspaces } from '../agent-workspace-manager'
 
-const eventSearchService = new TypeScriptEventSearchService()
 const pipelineTailService = new TypeScriptPipelineTailService()
 const workspaceIndexService = new TypeScriptWorkspaceIndexService()
 const MAX_OPERATION_HISTORY = 100
+const NATIVE_SEARCH_BINARY_ENV = 'CODEINSIGHTS_NATIVE_SEARCH_BINARY'
 
 function unsupportedOperation(operation: string): Error {
   return new Error(`Native Runtime ${operation} 尚未接入 TypeScript facade`)
 }
 
+function isNativeSearchEnabled(): boolean {
+  return process.env[NATIVE_RUNTIME_FEATURE_FLAGS.RUNTIME] === '1'
+    && process.env[NATIVE_RUNTIME_FEATURE_FLAGS.SEARCH] === '1'
+}
+
+function createNativeSearchSidecarFromEnv(): NativeRuntimeSidecarManager | undefined {
+  if (!isNativeSearchEnabled()) return undefined
+
+  const binaryPath = process.env[NATIVE_SEARCH_BINARY_ENV]?.trim()
+  if (!binaryPath) return undefined
+
+  return new NativeRuntimeSidecarManager({ binaryPath })
+}
+
 export function getTypeScriptEventSearchService(): TypeScriptEventSearchService {
-  return eventSearchService
+  return nativeRuntimeService.getEventSearchService()
 }
 
 export function getTypeScriptPipelineTailService(): TypeScriptPipelineTailService {
@@ -53,20 +75,99 @@ export function getTypeScriptWorkspaceIndexService(): TypeScriptWorkspaceIndexSe
  */
 export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
   readonly implementation = 'typescript' as const
+  private readonly nativeSearch?: NativeEventSearchSidecar
+  private readonly nativeSearchManager?: NativeRuntimeSidecarManager
+  private readonly eventSearchService: TypeScriptEventSearchService
   private readonly operationStates = new Map<string, NativeRuntimeOperationState>()
   private readonly progressListeners = new Set<(state: NativeRuntimeOperationState) => void>()
   private readonly statusListeners = new Set<(status: NativeRuntimeStatus) => void>()
 
+  constructor(nativeSearch: NativeEventSearchSidecar | undefined = createNativeSearchSidecarFromEnv()) {
+    this.nativeSearch = nativeSearch
+    this.nativeSearchManager = nativeSearch instanceof NativeRuntimeSidecarManager ? nativeSearch : undefined
+    this.eventSearchService = new TypeScriptEventSearchService({ nativeSearch })
+  }
+
+  getEventSearchService(): TypeScriptEventSearchService {
+    return this.eventSearchService
+  }
+
   async getStatus() {
+    if (this.nativeSearchManager) {
+      return this.nativeSearchManager.getStatus()
+    }
     return buildNativeRuntimeStatus()
   }
 
   async getDiagnostics() {
+    if (this.nativeSearchManager) {
+      const status = await this.nativeSearchManager.getStatus()
+      const capabilities = status.capabilities.map((capability) => ({
+        capability,
+        available: status.nativeEnabled,
+        implementation: status.implementation,
+        fallbackReason: status.fallbackReason,
+        lastError: status.lastError,
+      }))
+      return {
+        status,
+        protocolVersion: status.protocolVersion,
+        cacheSchemaVersion: status.cacheSchemaVersion,
+        capabilities,
+        fallbackReason: status.fallbackReason,
+        lastError: status.lastError,
+        checkedAt: status.checkedAt,
+      }
+    }
     return buildNativeRuntimeDiagnostics()
   }
 
   async search(input: NativeRuntimeSearchInput): Promise<NativeRuntimeSearchResult> {
-    throw unsupportedOperation('search')
+    if (!this.nativeSearch || !input.scope.includes('chat') || !input.sessionId) {
+      throw unsupportedOperation('search')
+    }
+
+    try {
+      return await this.nativeSearch.search({
+        requestId: input.requestId,
+        query: input.query,
+        limit: input.limit,
+        sources: [{
+          sourceKind: 'chat_message',
+          sourceId: input.sessionId,
+          sessionId: input.sessionId,
+          filePath: getConversationMessagesPath(input.sessionId),
+          textFields: ['content'],
+          idField: 'id',
+        }],
+      })
+    } catch (error) {
+      if (error instanceof NativeRuntimeSidecarError && canFallbackFromNativeSidecarError(error)) {
+        return this.eventSearchService.searchMatchesInSource<Record<string, unknown>, NativeRuntimeSearchResult['matches'][number]>({
+          requestId: input.requestId,
+          query: input.query,
+          filePath: getConversationMessagesPath(input.sessionId),
+          sourceKind: 'chat_message',
+          sourceId: input.sessionId,
+          title: 'Chat 会话',
+          limit: input.limit,
+          getRecordId: (record) => typeof record.id === 'string' ? record.id : '',
+          getRecordText: (record) => typeof record.content === 'string' ? record.content : null,
+          toLegacyResult: ({ source, record, snippet, event }) => ({
+            id: typeof record.id === 'string' ? record.id : `line-${event.lineNumber}`,
+            sourceKind: source.sourceKind,
+            title: source.title,
+            snippet: snippet.snippet,
+            matchedRanges: [{ start: snippet.matchStart, length: snippet.matchLength }],
+            score: 1,
+            sessionId: source.sourceId,
+            recordId: typeof record.id === 'string' ? record.id : undefined,
+            cursor: String(event.lineNumber),
+          }),
+        }).then((result) => result.searchResult)
+      }
+      throw error
+    }
   }
 
   async tailJsonl(input: NativeRuntimeTailInput): Promise<NativeRuntimeTailResult> {
@@ -255,10 +356,14 @@ export class TypeScriptNativeRuntimeService implements NativeRuntimeAdapter {
   }
 
   private emitStatus(): void {
-    const status = sanitizeNativeRuntimeStatus(buildNativeRuntimeStatus())
-    for (const listener of this.statusListeners) {
-      listener(status)
-    }
+    void this.getStatus()
+      .then((status) => sanitizeNativeRuntimeStatus(status))
+      .catch(() => sanitizeNativeRuntimeStatus(buildNativeRuntimeStatus()))
+      .then((status) => {
+        for (const listener of this.statusListeners) {
+          listener(status)
+        }
+      })
   }
 }
 

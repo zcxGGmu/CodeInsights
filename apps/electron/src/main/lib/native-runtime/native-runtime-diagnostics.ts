@@ -65,7 +65,7 @@ export async function getNativeRuntimeDiagnostics(): Promise<NativeRuntimeDiagno
   return buildNativeRuntimeDiagnostics()
 }
 
-function redactNativeRuntimeText(value: string): string {
+export function redactNativeRuntimeText(value: string): string {
   return value
     .replace(/Bearer\s+[^"'`\s<>]+/gi, 'Bearer [redacted]')
     .replace(/Authorization:\s*[^"'`\n\r]+/gi, 'Authorization: [redacted]')

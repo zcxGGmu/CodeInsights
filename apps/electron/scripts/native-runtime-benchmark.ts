@@ -2,6 +2,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
+import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 import { TypeScriptPipelineTailService } from '../src/main/lib/native-runtime/ts-pipeline-tail-service'
 import { TypeScriptWorkspaceIndexService } from '../src/main/lib/native-runtime/ts-workspace-index-service'
@@ -13,6 +15,7 @@ export interface BenchmarkOptions {
   logBytes: number
   iterations: number
   keepArtifacts: boolean
+  nativeSearchBinary?: string
 }
 
 interface BenchmarkCaseInput {
@@ -37,6 +40,10 @@ interface BenchmarkDataScale {
   bytes?: number
 }
 
+interface BenchmarkSummaryOptions extends Omit<BenchmarkOptions, 'nativeSearchBinary'> {
+  nativeSearchBinaryProvided: boolean
+}
+
 interface BenchmarkCaseSummary extends BenchmarkDataScale {
   name: string
   samplesMs: number[]
@@ -50,13 +57,13 @@ interface BenchmarkCaseSummary extends BenchmarkDataScale {
 interface BenchmarkSummary {
   schemaVersion: number
   generatedAt: string
-  implementation: 'typescript'
+  implementation: 'typescript' | 'typescript+rust-sidecar'
   environment: {
     platform: string
     arch: string
     bunVersion: string
   }
-  options: BenchmarkOptions
+  options: BenchmarkSummaryOptions
   artifactDir?: string
   cases: BenchmarkCaseSummary[]
 }
@@ -98,6 +105,9 @@ export function parseBenchmarkArgs(args: string[]): BenchmarkOptions {
     } else if (arg === '--iterations') {
       options.iterations = parsePositiveInteger(value, options.iterations)
       index += 1
+    } else if (arg === '--native-search-binary') {
+      options.nativeSearchBinary = value
+      index += 1
     }
   }
 
@@ -124,13 +134,21 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
   return {
     schemaVersion: 1,
     generatedAt: input.startedAt,
-    implementation: 'typescript',
+    implementation: input.options.nativeSearchBinary ? 'typescript+rust-sidecar' : 'typescript',
     environment: {
       platform: process.platform,
       arch: process.arch,
       bunVersion: Bun.version,
     },
-    options: input.options,
+    options: {
+      records: input.options.records,
+      payloadBytes: input.options.payloadBytes,
+      workspaceFiles: input.options.workspaceFiles,
+      logBytes: input.options.logBytes,
+      iterations: input.options.iterations,
+      keepArtifacts: input.options.keepArtifacts,
+      nativeSearchBinaryProvided: Boolean(input.options.nativeSearchBinary),
+    },
     ...(input.keepArtifacts ? { artifactDir: input.artifactDir } : {}),
     cases: input.cases.map((benchmarkCase) => ({
       name: benchmarkCase.name,
@@ -151,6 +169,14 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
   const eventSearchService = new TypeScriptEventSearchService()
   const pipelineTailService = new TypeScriptPipelineTailService()
   const workspaceIndexService = new TypeScriptWorkspaceIndexService()
+  const nativeSearchManager = options.nativeSearchBinary
+    ? new NativeRuntimeSidecarManager({
+      binaryPath: options.nativeSearchBinary,
+      requestTimeoutMs: 120_000,
+      statusTimeoutMs: 120_000,
+      shutdownTimeoutMs: 5_000,
+    })
+    : undefined
 
   try {
     const fixtures = generateFixtures(artifactDir, options)
@@ -197,6 +223,56 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
         return result.total
       },
     ))
+
+    if (nativeSearchManager) {
+      await nativeSearchManager.getStatus()
+
+      cases.push(await measureCase(
+        'native-chat-search-large-history',
+        { records: options.records, bytes: fixtures.chatBytes },
+        options.iterations,
+        async () => {
+          const result = await nativeSearchManager.search({
+            requestId: 'benchmark-native-chat-search',
+            query: '关键字',
+            limit: 100,
+            sources: [{
+              sourceKind: 'chat_message',
+              sourceId: 'chat-session-demo',
+              sessionId: 'chat-session-demo',
+              title: 'Chat benchmark',
+              filePath: fixtures.chatJsonlPath,
+              textFields: ['content'],
+              idField: 'id',
+            }],
+          })
+          return result.matches.length
+        },
+      ))
+
+      cases.push(await measureCase(
+        'native-agent-runtime-search',
+        { records: options.records, bytes: fixtures.agentBytes },
+        options.iterations,
+        async () => {
+          const result = await nativeSearchManager.search({
+            requestId: 'benchmark-native-agent-search',
+            query: 'tool_result',
+            limit: 100,
+            sources: [{
+              sourceKind: 'agent_message',
+              sourceId: 'agent-session-demo',
+              sessionId: 'agent-session-demo',
+              title: 'Agent benchmark',
+              filePath: fixtures.agentJsonlPath,
+              textFields: ['type', 'content'],
+              idField: 'seq',
+            }],
+          })
+          return result.matches.length
+        },
+      ))
+    }
 
     cases.push(await measureCase(
       'pipeline-tail-large-records',
@@ -272,6 +348,7 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
     if (!options.keepArtifacts) {
       rmSync(artifactDir, { recursive: true, force: true })
     }
+    await nativeSearchManager?.shutdown().catch(() => false)
   }
 }
 
@@ -437,7 +514,13 @@ function readLargeLogPreview(filePath: string): number {
 }
 
 if (import.meta.main) {
-  const options = parseBenchmarkArgs(process.argv.slice(2))
-  const summary = await runBenchmark(options)
-  process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)
+  try {
+    const options = parseBenchmarkArgs(process.argv.slice(2))
+    const summary = await runBenchmark(options)
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`[Native Runtime Benchmark] ${redactNativeRuntimeText(message)}\n`)
+    process.exitCode = 1
+  }
 }

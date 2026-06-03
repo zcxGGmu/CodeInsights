@@ -419,6 +419,8 @@ export async function searchConversationMessages(query: string): Promise<Message
       title: conv.title,
       filePath: getConversationMessagesPath(conv.id),
       updatedAt: conv.updatedAt,
+      nativeTextFields: ['content'],
+      nativeIdField: 'id',
       getRecordId: (message) => message.id,
       getRecordText: (message) => message.content,
       getRecordCreatedAt: (message) => message.createdAt,

@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { TypeScriptEventSearchService } from './ts-event-search-service'
+import {
+  TypeScriptEventSearchService,
+  type NativeEventSearchSidecar,
+} from './ts-event-search-service'
+import { NativeRuntimeSidecarError } from './native-runtime-sidecar-manager'
 
 interface MessageFixture {
   id: string
@@ -187,5 +191,186 @@ describe('TypeScriptEventSearchService', () => {
         },
       ],
     })).rejects.toThrow('搜索已取消')
+  })
+
+  test('source 显式声明 nativeTextFields 时可使用 sidecar search 并生成 legacy result', async () => {
+    const chatPath = createTempJsonl('chat.jsonl', [
+      JSON.stringify({ id: 'chat-skip', role: 'user', content: '没有命中', createdAt: 1 }),
+      JSON.stringify({ id: 'chat-hit', role: 'assistant', content: '这里包含关键字和上下文', createdAt: 2 }),
+    ])
+    const sidecar: NativeEventSearchSidecar = {
+      search: async (input) => ({
+        requestId: input.requestId,
+        query: input.query,
+        matches: [{
+          id: 'chat-hit',
+          sourceKind: 'chat_message',
+          title: 'Chat 会话',
+          snippet: '这里包含关键字和上下文',
+          matchedRanges: [{ start: 4, length: 3 }],
+          score: 1,
+          sessionId: 'chat-1',
+          recordId: 'chat-hit',
+          cursor: '2',
+        }],
+        hasMore: false,
+        indexState: 'ready',
+        implementation: 'rust-sidecar',
+        searchedAt: 1764590404000,
+      }),
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    const result = await service.searchFirstMatchPerSource<MessageFixture, LegacyMessageResult>({
+      requestId: 'req-native-chat-search',
+      query: '关键字',
+      limit: 10,
+      sources: [{
+        sourceKind: 'chat_message',
+        sourceId: 'chat-1',
+        title: 'Chat 会话',
+        filePath: chatPath,
+        nativeTextFields: ['content'],
+        getRecordId: (record) => record.id,
+        getRecordText: (record) => record.content,
+        toLegacyResult: ({ source, record, snippet }) => ({
+          ownerId: source.sourceId,
+          ownerTitle: source.title,
+          messageId: record.id,
+          ...snippet,
+        }),
+      }],
+    })
+
+    expect(result.searchResult.implementation).toBe('rust-sidecar')
+    expect(result.results.map((item) => item.messageId)).toEqual(['chat-hit'])
+    expect(result.results[0]?.snippet).toContain('关键字')
+  })
+
+  test('native search contract violation 时回退 TypeScript 搜索并保留旧结果', async () => {
+    const chatPath = createTempJsonl('chat.jsonl', [
+      JSON.stringify({ id: 'chat-hit', role: 'assistant', content: '这里包含关键字和上下文', createdAt: 2 }),
+    ])
+    const sidecar: NativeEventSearchSidecar = {
+      search: async () => {
+        throw new NativeRuntimeSidecarError('contract_violation', 'bad native result')
+      },
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    const result = await service.searchFirstMatchPerSource<MessageFixture, LegacyMessageResult>({
+      requestId: 'req-native-fallback-search',
+      query: '关键字',
+      limit: 10,
+      sources: [{
+        sourceKind: 'chat_message',
+        sourceId: 'chat-1',
+        title: 'Chat 会话',
+        filePath: chatPath,
+        nativeTextFields: ['content'],
+        getRecordId: (record) => record.id,
+        getRecordText: (record) => record.content,
+        toLegacyResult: ({ source, record, snippet }) => ({
+          ownerId: source.sourceId,
+          ownerTitle: source.title,
+          messageId: record.id,
+          ...snippet,
+        }),
+      }],
+    })
+
+    expect(result.searchResult.implementation).toBe('typescript')
+    expect(result.results.map((item) => item.messageId)).toEqual(['chat-hit'])
+  })
+
+  test('native 命中只用于定位 cursor，legacy snippet 仍由 TypeScript 规则生成', async () => {
+    const content = `${'a'.repeat(60)}KeyWord${'b'.repeat(60)}`
+    const chatPath = createTempJsonl('chat.jsonl', [
+      JSON.stringify({ id: 'chat-hit', role: 'assistant', content, createdAt: 2 }),
+    ])
+    const sidecar: NativeEventSearchSidecar = {
+      search: async (input) => ({
+        requestId: input.requestId,
+        query: input.query,
+        matches: [{
+          id: 'chat-hit',
+          sourceKind: 'chat_message',
+          title: 'Chat 会话',
+          snippet: 'native-short',
+          matchedRanges: [{ start: 0, length: 6 }],
+          score: 1,
+          sessionId: 'chat-1',
+          recordId: 'chat-hit',
+          cursor: '1',
+        }],
+        hasMore: false,
+        indexState: 'ready',
+        implementation: 'rust-sidecar',
+        searchedAt: 1764590404000,
+      }),
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    const result = await service.searchMatchesInSource<MessageFixture, LegacyMessageResult>({
+      requestId: 'req-native-legacy-snippet',
+      query: 'keyword',
+      limit: 10,
+      filePath: chatPath,
+      sourceKind: 'chat_message',
+      sourceId: 'chat-1',
+      title: 'Chat 会话',
+      nativeTextFields: ['content'],
+      getRecordId: (record) => record.id,
+      getRecordText: (record) => record.content,
+      toLegacyResult: ({ source, record, snippet }) => ({
+        ownerId: source.sourceId,
+        ownerTitle: source.title,
+        messageId: record.id,
+        ...snippet,
+      }),
+    })
+
+    expect(result.searchResult.implementation).toBe('rust-sidecar')
+    expect(result.matches[0]?.snippet.startsWith('...')).toBe(true)
+    expect(result.matches[0]?.snippet).not.toBe('native-short')
+    expect(result.matches[0]?.matchStart).toBe(43)
+    expect(result.searchResult.matches[0]?.matchedRanges).toEqual([{ start: 43, length: 7 }])
+  })
+
+  test('native path_denied 这类拒绝错误不会被 TypeScript fallback 绕过', async () => {
+    const chatPath = createTempJsonl('chat.jsonl', [
+      JSON.stringify({ id: 'chat-hit', role: 'assistant', content: '这里包含关键字', createdAt: 2 }),
+    ])
+    const sidecar: NativeEventSearchSidecar = {
+      search: async () => {
+        throw new NativeRuntimeSidecarError('path_denied', 'native 拒绝读取路径')
+      },
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    try {
+      await service.searchMatchesInSource<MessageFixture, LegacyMessageResult>({
+        requestId: 'req-native-path-denied',
+        query: '关键字',
+        limit: 10,
+        filePath: chatPath,
+        sourceKind: 'chat_message',
+        sourceId: 'chat-1',
+        title: 'Chat 会话',
+        nativeTextFields: ['content'],
+        getRecordId: (record) => record.id,
+        getRecordText: (record) => record.content,
+        toLegacyResult: ({ source, record, snippet }) => ({
+          ownerId: source.sourceId,
+          ownerTitle: source.title,
+          messageId: record.id,
+          ...snippet,
+        }),
+      })
+      throw new Error('search should preserve native rejection')
+    } catch (error) {
+      expect(error).toBeInstanceOf(NativeRuntimeSidecarError)
+      expect((error as NativeRuntimeSidecarError).code).toBe('path_denied')
+    }
   })
 })
