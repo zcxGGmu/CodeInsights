@@ -8,11 +8,11 @@
 
 ## 最新开发状态
 
-> 更新时间：2026-06-02
+> 更新时间：2026-06-03
 > 最新开发基线：`16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。
-> 最新已确认恢复入口：本文件所在的 Phase 4 状态同步提交；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
-> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。尚未实现 Rust sidecar、Go supervisor 或任何 native binary。
-> 当前策略：下一阶段从 Phase 5 Rust search sidecar 试点开始；进入前必须先做依赖搜索和 decision record，写清性能收益门槛、packaged smoke、native missing fallback 和安全门禁。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
+> 最新已确认恢复入口：本文件所在的 Phase 5 前置状态同步提交；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划和性能收益门槛，尚未实现 Rust sidecar、Go supervisor 或任何 native binary。
+> 当前策略：Phase 5 下一步应先重新跑当前 TS fallback benchmark，确认目标数据规模仍满足 native 试点收益门槛；满足后再进入最小 Rust search sidecar 实现。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
 
@@ -26,7 +26,7 @@
 - [x] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [x] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
 - [x] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
-- [ ] Phase 5：Rust search sidecar 试点。
+- [~] Phase 5：Rust search sidecar 试点（前置依赖决策与 protocol / smoke 计划已完成，Rust 实现尚未开始）。
 - [ ] Phase 6：大文件 / 日志 chunk preview。
 - [ ] Phase 7：PathSafety 与 GitOutputParser 抽象。
 - [ ] Phase 8：打包、CI、版本与发布收口。
@@ -42,7 +42,8 @@
 - [x] Workspace 文件索引已建立可取消、可重建的 TypeScript 缓存层，并接入 watcher invalidation。
 - [x] SearchDialog 已接入 Pipeline 与 Workspace 内容搜索，并具备 Pipeline / Workspace / Chat / Agent 分组、stale result 丢弃、Pipeline record 聚焦和 Workspace 文件预览入口。
 - [x] Native Runtime Diagnostics 设置页、Jotai diagnostics 状态、rebuild / clear cache IPC 和前端 fallback 状态已完成。
-- [ ] Rust sidecar、Rust optional package、native-cache schema 和 packaged smoke 尚未实现。
+- [x] Phase 5 前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划已完成：`2026-06-03-phase-5-dependency-decision-record.md`、`2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
+- [ ] Rust sidecar、Rust optional package、native-cache schema、smoke script 和 packaged smoke 尚未实现。
 - [ ] Go supervisor 未进入主线，必须等 Phase 9 触发条件成立。
 - [ ] 根 `README.md` / 根 `AGENTS.md` 未同步；需要用户明确允许后才可修改。
 
@@ -51,10 +52,10 @@
 下次启动 Codex 后先执行以下动作：
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
-2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 已完成；Phase 4 前端可见体验、Jotai 状态和 diagnostics 已完成；下一步从 Phase 5 Rust search sidecar 试点开始”。
+2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 已完成；Phase 4 前端可见体验、Jotai 状态和 diagnostics 已完成；Phase 5 前置依赖决策与 protocol / smoke 计划已完成，Rust 实现尚未开始”。
 3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验` 或其后的 Rust / Go 状态同步提交。
-4. 如果开始 Phase 5，先在 `tasks/todo.md` 新增该阶段计划，写清范围、文件边界、验证命令、收益门槛、依赖 decision record 和禁止事项；用户已明确计划写清后无需等待确认。
-5. 不要直接写 Rust / Go 代码或安装依赖；Phase 5 必须先做 Rust 依赖搜索 / decision record、sidecar protocol / fallback / packaged smoke 计划，然后再进入最小 Rust search sidecar 实现。
+4. 如果继续 Phase 5，先读取 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md` 和 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，确认前置门禁已完成但 Rust 实现尚未开始。
+5. 不要直接安装依赖或创建 native binary；下一步先重新跑当前 TS fallback benchmark，确认收益门槛仍成立，再进入最小 Rust search sidecar 实现。
 
 ## 使用规则
 
@@ -124,7 +125,7 @@
 | M2 | Phase 2 | Pipeline records cursor / tail 与 SearchDialog 接入 | [x] | 必须 |
 | M3 | Phase 3 | Workspace 文件索引 TS cache 与 watcher invalidation | [x] | 必须 |
 | M4 | Phase 4 | 前端索引状态、诊断、可取消搜索和大文件入口 | [x] | 必须 |
-| M5 | Phase 5 | Rust search sidecar 试点 | [ ] | 有条件 |
+| M5 | Phase 5 | Rust search sidecar 试点 | [~] | 有条件 |
 | M6 | Phase 6 | 大文件 / 日志 chunk preview | [ ] | 有条件 |
 | M7 | Phase 7 | PathSafety 与 GitOutputParser 抽象，可选 Rust helper | [ ] | 有条件 |
 | M8 | Phase 8 | native 打包、CI、发布和回滚收口 | [ ] | native 默认启用前必须 |
@@ -677,8 +678,8 @@ git status --short --branch
 
 ### 阶段状态
 
-- [ ] 阶段开始
-- [ ] 依赖评估完成
+- [x] 阶段开始
+- [x] 依赖评估完成
 - [ ] 测试先行完成
 - [ ] 实现完成
 - [ ] 验证完成
@@ -693,15 +694,15 @@ git status --short --branch
 
 - [x] Phase 0 到 Phase 4 已完成并提交。
 - [ ] benchmark 显示 TS fallback 在目标数据规模下仍不满足门槛。
-- [ ] Rust sidecar 的收益门槛已写入 `tasks/todo.md`：例如 100MB JSONL 搜索 P95 至少快 3 倍。
-- [ ] 已完成 Rust 依赖 decision record，比较继续 TS、Rust crate、Go package。
-- [ ] 已确认 packaged smoke 计划覆盖 native available / missing。
+- [x] Rust sidecar 的收益门槛已写入 `tasks/todo.md`：100MB JSONL 搜索 P95 至少快 3 倍，event loop delay 至少降低 70%，并包含 Agent / Pipeline / Workspace / cold start 门槛。
+- [x] 已完成 Rust 依赖 decision record，比较继续 TS、Rust crate、Go package：`docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`。
+- [x] 已确认 packaged smoke 计划覆盖 native available / missing：`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
 
 ### Rust 工程任务
 
 - [ ] 新增 native workspace，目录命名与 package 策略在 Review 中确认。
-- [ ] 定义 sidecar protocol：stdin/stdout JSON-RPC 或 loopback + random auth，默认优先 stdin/stdout。
-- [ ] 实现 `status`、`index_jsonl`、`tail_jsonl`、`search`、`shutdown`。
+- [x] 定义 sidecar protocol：首版采用 stdin / stdout line-delimited JSON protocol，详见 `2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
+- [ ] 实现 `status`、`search`、`tail_jsonl`、`shutdown`；`index_jsonl` 等 cache schema 明确后再进入后续实现。
 - [ ] 实现 protocol version、cache schema version、capability handshake。
 - [ ] 所有返回 JSON 通过 schema / fixture 与 TS fallback 对齐。
 - [ ] stderr 只输出脱敏 diagnostics，不输出原始 prompt、token、完整 home path。
@@ -766,7 +767,13 @@ git status --short
 
 ### 阶段 Review
 
-待 Phase 5 完成后追加。
+前置 Review：
+
+- Phase 5 已完成前置计划和依赖决策，但未进入 Rust 实现。新增 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`，记录 crates.io / docs.rs / OSV / Go 对照查询结果。
+- 依赖结论：进入实现阶段时只建议评估 `serde`、`serde_json` 和可选 `memchr`；暂缓 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`；Go / `fsnotify` 不进入 Phase 5 默认实现。
+- 新增 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，确定首版采用 stdin / stdout line-delimited JSON protocol，初始 method 为 `status`、`search`、`tail_jsonl`、`shutdown`。
+- Fallback / smoke 结论：native missing / available、protocol mismatch、crash、timeout、cache corruption 和“不使用系统 PATH”必须进入后续 smoke；所有 native result 仍需 main process schema 校验、二次脱敏和路径白名单。
+- 当前未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未创建 native binary，尚未新增 sidecar manager / smoke script / optional package / 打包配置。
 
 ## Phase 6：大文件 / 日志 Chunk Preview
 

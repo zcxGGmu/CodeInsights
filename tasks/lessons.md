@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 前置状态同步习惯
+
+- 用户要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”并再次强调阶段完成后自动执行时，即使刚写过前置文档，也要新建 `tasks/todo.md` 状态同步计划，更新 development checklist、next-session prompt、`tasks/todo.md` Review 和本文件，验证后单独提交状态同步。
+- Phase 5 这类“前置决策完成但 Rust 实现未开始”的状态必须用 `[~]` 或明确文字表达，不能把 Phase 5 标成已完成；已完成项只能写依赖 decision record、protocol / fallback / packaged smoke 计划和性能门槛，未完成项必须列出 benchmark、Rust 工程、sidecar manager、smoke script、optional package、packaged smoke。
+- 下次启动提示词要把下一步写成“先重新跑 TS fallback benchmark，确认收益门槛仍成立，再进入最小 Rust search sidecar 实现”，避免恢复会话直接安装依赖、创建 native binary 或修改打包配置。
+
 ## 2026-06-02 Rust / Go Native Runtime diagnostics 前端边界
 
 - Native Runtime diagnostics 即使当前只是 TypeScript fallback，也要按未来 native 失败路径处理：IPC / event 推送前统一移除 `binaryPath`，并脱敏 Bearer、Authorization、credentialed URL、home path 和 stderr-like 文本；普通搜索 UI 只展示简短状态，protocol / cache schema / binary path 这类技术细节只允许出现在已脱敏 diagnostics 面板。

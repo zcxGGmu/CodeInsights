@@ -1,5 +1,162 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 前置状态同步计划
+
+范围确认：用户要求更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调“每个阶段性任务完成后自动去做”。本轮只做 Phase 5 前置状态同步，不进入 Rust 实现，不安装依赖，不创建 native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 检查 `git status --short --branch` 和 `git log -5 --oneline`，确认最新已提交恢复入口仍为 `f2f90e31 docs(rust-go): 同步 Phase 4 后续开发状态与下次启动入口`，当前存在 Phase 5 前置文档改动。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`：标清 Phase 0-4 已完成、Phase 5 前置依赖决策 / protocol / smoke 计划已完成、Rust sidecar 实现尚未开始、Phase 6-9 未完成。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`：写清 Phase 5 前置文档已完成，下一步先跑 TS fallback benchmark，再进入最小 Rust sidecar 实现。
+- [x] 更新 `tasks/todo.md`：保留 Phase 5 前置计划 Review，并新增本状态同步计划。
+- [x] 更新 `tasks/lessons.md`：记录用户再次强调的阶段收尾默认动作，避免以后只口头给提示词。
+- [x] 验证：`git diff --check`、行尾空白扫描、Markdown code fence 检查、`git status --short --branch`。
+- [x] 单独提交本轮 Phase 5 前置状态同步文档，提交信息使用详细中文；实际提交号以最终回复和 `git log` 为准。
+
+### Review
+
+- 状态同步已完成：development checklist 与 next-session prompt 均标明 Phase 0-4 已完成，Phase 5 仅完成前置计划 / dependency decision record / sidecar protocol / fallback / packaged smoke 计划和性能收益门槛，Rust sidecar 实现尚未开始。
+- 已新增并纳入恢复入口：`docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
+- 已更新 `tasks/lessons.md`：再次固化“阶段性任务完成后自动同步 docs / todo Review / lessons / next-session prompt 并单独提交”的习惯；对 Phase 5 前置完成但实现未开始的状态要求使用 `[~]` 或明确文字。
+- 下一步入口：先重新跑当前 TS fallback benchmark，确认 100MB JSONL 搜索 P95 至少快 3 倍、event loop delay 降低 70% 等收益门槛仍成立，再进入最小 Rust search sidecar 实现。
+- 验证通过：`git diff --check`；行尾空白扫描无命中；Markdown code fence 检查通过；根 `README.md` / 根 `AGENTS.md` / package / lockfile / `electron-builder.yml` 无 diff。
+- 边界保持：未写 Rust / Go，未安装依赖，未创建 native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+
+## 2026-06-03 Rust/Go Phase 5 Rust search sidecar 前置计划
+
+范围确认：Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成。最新开发基线为 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`，最新状态同步恢复入口为 `f2f90e31 docs(rust-go): 同步 Phase 4 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor`。本阶段从 Phase 5 “Rust search sidecar 试点”开始，但先只做依赖搜索、decision record、sidecar protocol、fallback、contract parity、packaged smoke 和性能门槛计划；计划与决策写清后无需等待确认。当前步骤不直接写 Rust / Go 实现代码，不安装依赖，不创建 native binary，不修改根 `README.md` / 根 `AGENTS.md`。
+
+启动基线：
+
+- [x] 已读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、开发跟踪清单和下次启动提示词。
+- [x] 已运行 `git status --short --branch`：当前分支为 `rust-go-refactor`，最新状态以当前工作树和后续 `git status` 为准。
+- [x] 已运行 `git log -5 --oneline`：最近历史包含 `f2f90e31 docs(rust-go): 同步 Phase 4 后续开发状态与下次启动入口` 和 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。
+- [x] 已确认 Phase 5 入口仍缺少前置门禁：Rust 依赖 decision record、sidecar protocol、fallback / packaged smoke 计划和性能收益门槛。
+
+Phase 5 当前范围：
+
+- [x] 先做 Rust / Go / TypeScript 路线与依赖搜索：比较继续 TS、Rust sidecar crate、Go package / supervisor 三类路线，不安装任何依赖。
+- [x] 新增 Phase 5 dependency decision record：记录候选依赖当前版本、维护状态、license、跨平台、体积 / transitive deps、CVE / 安全关注点、替代路线和最终建议。
+- [x] 明确 sidecar protocol 计划：优先 stdin/stdout JSON-RPC line-delimited protocol；定义 handshake、request / response envelope、requestId、protocolVersion、capabilities、timeout、shutdown、stderr 脱敏和 contract violation 行为。
+- [x] 明确 fallback 计划：native disabled / missing / version_mismatch / contract_violation / timeout / crashed / cache_corrupted 时，本进程禁用 native 或降级 TS fallback；renderer 只看脱敏状态，不看 binary path。
+- [x] 明确 packaged smoke 计划：覆盖 native available / missing、bundled binary path、不使用系统 `PATH`、unpacked app、cache corruption、protocol mismatch；实际打包和 binary 创建留到实现阶段或 Phase 8。
+- [x] 明确性能收益门槛：若 Rust sidecar 未达到门槛，不默认启用 native。
+- [x] 明确最小实现进入条件：前置 decision record、protocol plan、fallback plan、packaged smoke plan 和 benchmark 门槛写入文档后，才允许进入最小 Rust search sidecar 实现。
+
+性能收益门槛：
+
+- [x] `chat-search-large-history` / 100MB JSONL 内容搜索：Phase 5 native P95 至少比 Phase 1 / 当前 TS fallback 快 3 倍；event loop delay 至少降低 70%。
+- [x] `agent-runtime-search` / 100MB 级 Agent JSONL：P95 至少快 2 倍；native crash / timeout 不影响 Agent UI 和会话事实源。
+- [x] `pipeline-tail-large-records` / 50000 records：tail P95 与历史总量弱相关，较 Phase 2 TS cursor tail 至少不退化；如果收益不足，不把 tail 纳入首个 Rust sidecar 默认能力。
+- [x] `workspace-file-name-search` / 100000 files：首次索引后热查询 P95 小于 150ms；Rust 只在证明能明显降低主进程阻塞后接手。
+- [x] native 冷启动不让应用可交互时间增加超过 500ms；默认懒启动，启动探测只能轻量执行。
+- [x] binary 体积、构建时间、optional package 数量和 packaged smoke 成本必须在 Review 中记录；收益不足时默认保留 TS fallback。
+
+拟触达文件：
+
+- [x] `tasks/todo.md`
+- [x] `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`
+- [x] `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`
+- [x] `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`（已同步 Phase 5 前置状态）
+- [x] `docs/improve/rust-go/next-session-prompt.md`（已同步 Phase 5 前置恢复入口）
+- [ ] `tasks/lessons.md`（仅发现新的依赖 / protocol / smoke 纪律时）
+
+后续实现阶段可能触达但本轮禁止直接修改：
+
+- [ ] `native/search/` 或最终确认的 Rust 目录。
+- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.ts`
+- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [ ] `apps/electron/scripts/native-runtime-smoke.ts`
+- [ ] `apps/electron/package.json`
+- [ ] `electron-builder.yml`
+- [ ] `bun.lock`
+
+依赖 decision record 必须覆盖：
+
+- [x] 继续 TypeScript：复用当前 `TypeScriptEventSearchService`、`TypeScriptPipelineTailService`、`TypeScriptWorkspaceIndexService` 的成本和收益。
+- [x] Rust 标准库优先方案：先评估是否可用标准库完成 line-delimited JSON protocol、JSONL tail 和简单 substring search。
+- [x] Rust crate 候选：`serde` / `serde_json`、`memchr`、`regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`；每个候选记录用途、版本、license、维护状态、跨平台和是否进入首个 sidecar。
+- [x] Go package / supervisor 路线：标准库、`fsnotify` 等只作为 Phase 9 条件 spike，不进入 Phase 5 默认实现。
+- [x] 安全与供应链：license、CVE、release 活跃度、维护者 / issue 活跃度、transitive dependencies、binary 体积和 release 签名影响。
+
+sidecar protocol / fallback 计划必须覆盖：
+
+- [x] handshake：`status` 返回 protocolVersion、cacheSchemaVersion、capabilities、binaryVersion、implementation。
+- [x] request envelope：每行一个 JSON object，包含 `requestId`、`method`、`params`、`deadlineMs`；response 包含 `ok`、`result` 或 typed `error`。
+- [x] 初始 method：`status`、`search`、`tail_jsonl`、`shutdown`；`index_jsonl` 只在 decision record 确认 cache schema 后进入实现。
+- [x] stdout 只输出 protocol JSON，stderr 只允许脱敏 diagnostics；不得输出 prompt、token、credentialed URL、完整 home path 或原始 JSONL 内容。
+- [x] timeout / crash / bad JSON / protocol mismatch / contract violation：main process 记录 typed diagnostics，本进程禁用 native 或降级 TS fallback。
+- [x] 所有 native 结果进入业务流程前必须在 main process 做 schema 校验、二次脱敏、路径白名单和事实源边界检查。
+
+packaged smoke 计划必须覆盖：
+
+- [x] native missing：隐藏或移除 bundled binary 后，Diagnostics 显示 `missing_binary`，Search / Tail 走 TS fallback。
+- [x] native available：只允许使用 packaged app 内 bundled binary，不从系统 `PATH` 查找同名工具。
+- [x] protocol mismatch：伪造不兼容 version 后自动禁用 native。
+- [x] crash / timeout：sidecar 退出或超时后，主流程不中断，后续搜索走 TS fallback。
+- [x] cache corruption：损坏 native-cache 后隔离 / 清理 / 重建，不影响 JSON / JSONL 事实源。
+- [x] smoke 输出必须脱敏，不打印 binary path 给 renderer，不打印 token / Authorization / credentialed URL。
+
+验证命令：
+
+```bash
+git diff --check
+git status --short --branch
+```
+
+前置文档完成后的建议验证命令：
+
+```bash
+bun test packages/shared/src/types/native-runtime.test.ts
+bun test apps/electron/src/main/lib/native-runtime
+bun test apps/electron/src/main/ipc/native-runtime-handlers.test.ts
+bun run --filter='@codeinsights/shared' typecheck
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 256 --workspace-files 100000 --log-bytes 524288000 --iterations 3
+git diff --check
+git status --short --branch
+```
+
+实现阶段验证命令草案（本轮不执行，除非后续开始 Rust sidecar 实现）：
+
+```bash
+cargo test
+bun test apps/electron/src/main/lib/native-runtime
+bun run --filter='@codeinsights/electron' typecheck
+bun run --filter='@codeinsights/electron' build:main
+bun run --filter='@codeinsights/electron' pack
+bun run --filter='@codeinsights/electron' smoke:native-runtime
+git diff --check
+git status --short --branch
+```
+
+禁止事项：
+
+- [x] 不直接写 Rust / Go 代码。
+- [x] 不安装依赖，不运行 `bun add`、`cargo add`、`go get` 或修改 lockfile。
+- [x] 不创建 native binary、Rust crate、Go module、optionalDependencies 或打包配置。
+- [x] 不修改根 `README.md` / 根 `AGENTS.md`。
+- [x] 不把 native cache 当作 JSON / JSONL 事实源，不写业务事实源。
+- [x] 不让 renderer 知道 sidecar endpoint、binary path、cache path 或任意 native command。
+- [x] 不从系统 `PATH` 隐式寻找 sidecar，不把 smoke 建立在系统工具存在上。
+- [x] 不展示 token、Authorization、credentialed remote URL、完整 home path、原始 stderr 或用户真实 JSONL 内容。
+- [x] 不把 Go supervisor 纳入 Phase 5 默认主线；仅保留 Phase 9 条件 spike。
+- [x] 不 push、不创建 PR、不执行真实远端写。
+
+### 实现前 Check-in
+
+- [x] 已将 Phase 5 前置计划写入本节；用户已明确无需确认，继续进行依赖搜索 / decision record 与 protocol / fallback / packaged smoke 计划。
+
+### Review
+
+- 前置计划已完成：新增 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md` 和 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，明确 Phase 5 先做依赖决策、protocol、fallback、contract parity、packaged smoke 和性能门槛。
+- 依赖决策结论：Phase 5 首个 Rust sidecar 只建议进入实现阶段时评估 `serde`、`serde_json` 和可选 `memchr`；暂缓 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`；Go / `fsnotify` 不进入 Phase 5 默认实现，只保留 Phase 9 条件 spike。
+- 安全查询结论：OSV 查询中 `regex` 存在旧版本历史 advisory，修复版本为 `1.5.5`，当前候选 `1.12.3` 不在受影响范围内；因首版只做 literal search，仍不引入 `regex`。
+- Protocol 结论：首版使用 stdin / stdout line-delimited JSON protocol，初始 method 为 `status`、`search`、`tail_jsonl`、`shutdown`；stdout 只输出 protocol JSON，stderr 只允许脱敏 diagnostics。
+- Fallback 结论：`disabled`、`missing_binary`、`unsupported_platform`、`version_mismatch`、`contract_violation`、`timeout`、`crashed`、`cache_corrupted` 都必须可恢复到 TS fallback；native result 进入业务前必须经 main process schema 校验、二次脱敏和路径边界检查。
+- Packaged smoke 结论：未来 smoke 必须覆盖 native missing / available、protocol mismatch、crash、timeout、cache corruption 和“不使用系统 PATH”；本轮只写计划，不创建 binary、不修改 `electron-builder.yml`。
+- 当前未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未写 sidecar manager，尚未新增 smoke script，尚未修改打包配置。
+
 ## 2026-06-02 Rust/Go Phase 4 前端可见体验、Jotai 状态与 Diagnostics 计划
 
 范围确认：Phase 0、Phase 1、Phase 2 和 Phase 3 已完成。最新开发基线为 `4ec586fc feat(rust-go): 完成 Phase 3 Workspace 文件索引 TS cache`，最新状态同步恢复入口为 `0128727a docs(rust-go): 同步 Phase 3 后续开发状态与下次启动入口`。启动检查已确认当前分支为 `rust-go-refactor` 且工作树干净；本阶段继续只做 TypeScript / React / Jotai / IPC 可见体验，不写 Rust / Go、不安装依赖、不创建 native binary、不修改根 `README.md` / 根 `AGENTS.md`。用户已明确计划写清后无需等待确认，因此本计划落地后直接按 TDD / BDD 实现。

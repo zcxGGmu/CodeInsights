@@ -1,0 +1,272 @@
+# Phase 5 Sidecar Protocol / Fallback / Smoke Plan
+
+> 日期：2026-06-03
+> 阶段：Phase 5 Rust search sidecar 试点前置计划
+> 状态：协议与 smoke 计划完成，尚未实现 Rust sidecar，尚未创建 native binary
+
+## 目标
+
+Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有业务编排、权限、路径白名单、脱敏、diagnostics UI、IPC 和 renderer 状态仍留在 TypeScript / Electron 主进程。
+
+首版 sidecar 只允许覆盖：
+
+- `status`
+- `search`
+- `tail_jsonl`
+- `shutdown`
+
+暂不覆盖：
+
+- workspace directory walk
+- 大文件 chunk preview
+- Git 输出解析
+- path safety 权威判定
+- 全文索引 / Tantivy cache
+- Go supervisor / watcher
+
+## Transport 决策
+
+首版使用 stdin / stdout line-delimited JSON protocol。
+
+选择原因：
+
+- 不暴露 loopback port，减少 CORS、auth token、端口冲突和本机代理干扰。
+- main process 可以通过 child process stdio 直接管理 lifecycle、timeout 和 crash。
+- packaged smoke 更容易证明未使用系统 `PATH`：只需要校验 spawn 的 bundled binary 来源。
+
+暂缓 loopback + random auth。只有后续需要多客户端、长期驻留或高吞吐 stream 时，再单独评估。
+
+## Envelope
+
+每行一个 UTF-8 JSON object。stdout 只输出 protocol JSON；stderr 只输出脱敏 diagnostics。
+
+Request:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-123",
+  "method": "status",
+  "params": {},
+  "deadlineMs": 1500
+}
+```
+
+Response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-123",
+  "ok": true,
+  "result": {}
+}
+```
+
+Error response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-123",
+  "ok": false,
+  "error": {
+    "code": "invalid_input",
+    "message": "请求参数无效",
+    "recoverable": true
+  }
+}
+```
+
+Rules:
+
+- `id` 必须等于 main process 的 requestId 或 operationId。
+- sidecar 不生成 renderer 可见 id。
+- `deadlineMs` 由 main process 控制；sidecar 必须在 deadline 前返回或让 main process timeout。
+- unknown method 返回 `invalid_input`，不能 panic。
+- bad JSON line 返回 typed error；连续 bad JSON 或 protocol violation 后 main process 禁用 native。
+- response result 必须再经过 main process schema 校验，不能直接返回 renderer。
+
+## Methods
+
+### `status`
+
+返回：
+
+```json
+{
+  "implementation": "rust-sidecar",
+  "binaryVersion": "0.0.0-dev",
+  "protocolVersion": 1,
+  "cacheSchemaVersion": 1,
+  "capabilities": ["diagnostics", "indexed-search", "jsonl-tail"]
+}
+```
+
+Main process rules:
+
+- `protocolVersion` 不等于 `NATIVE_RUNTIME_PROTOCOL_VERSION`：禁用 native，fallback reason = `version_mismatch`。
+- `cacheSchemaVersion` 不兼容：隔离 / 清理 native cache 后重建；若无法处理，fallback reason = `cache_corrupted`。
+- `binaryVersion` 缺失：允许 fallback，diagnostics 标红，不默认启用。
+
+### `search`
+
+输入由 main process 派生，不接受 renderer 直传路径：
+
+```json
+{
+  "requestId": "search-1",
+  "query": "keyword",
+  "limit": 20,
+  "sources": [
+    {
+      "sourceKind": "pipeline_record",
+      "sessionId": "session-1",
+      "filePath": "/abs/path/from-main-only.jsonl"
+    }
+  ]
+}
+```
+
+输出对齐 `NativeRuntimeSearchResult`：
+
+- `implementation` 必须是 `rust-sidecar`。
+- `matches[].matchedRanges` 使用 UTF-16 code unit offset 还是 byte offset必须在实现前锁定。首版建议在 sidecar 内只返回 byte offset，再由 main process 用原文 snippet 转换 / 校验；若不能可靠转换，则 contract 不通过。
+- `snippet` 必须有长度上限，不允许返回整条 prompt 或完整 JSONL 行。
+- `filePath` 返回前由 main process 再次校验和脱敏；renderer 不显示 binary path 或 cache path。
+
+首版 search 只做 literal search，不接受 regex pattern。
+
+### `tail_jsonl`
+
+输入：
+
+```json
+{
+  "requestId": "tail-1",
+  "fileKind": "pipeline-records",
+  "sessionId": "session-1",
+  "filePath": "/abs/path/from-main-only.jsonl",
+  "cursor": "opaque",
+  "limit": 100,
+  "direction": "backward"
+}
+```
+
+输出对齐 `NativeRuntimeTailResult`。
+
+Rules:
+
+- cursor 仍由 main process 视为 opaque；sidecar 不决定 durable state。
+- Phase 2 的 cursor anchor 规则必须保持：recordId / createdAt anchor 不匹配时返回 cursor invalid typed error 或 fallback。
+- bad line、partial line、truncated file 不能 panic。
+
+### `shutdown`
+
+用于 app quit、idle shutdown 或 test cleanup。
+
+Rules:
+
+- shutdown 超时后 main process 可 kill child process。
+- sidecar 不写业务事实源；退出前只允许 flush native-cache。
+
+## Main Process Fallback Matrix
+
+| 状态 | 触发 | main process 行为 | Renderer 可见状态 |
+| --- | --- | --- | --- |
+| `disabled` | feature flag 关闭 | 不启动 sidecar，走 TS fallback | 简短 fallback 状态 |
+| `missing_binary` | bundled binary 不存在 | 走 TS fallback，diagnostics 记录缺失 | 不显示 binary path |
+| `unsupported_platform` | 当前平台无 binary | 走 TS fallback | 简短不可用状态 |
+| `version_mismatch` | protocolVersion 不匹配 | 本进程禁用 native | settings diagnostics 展示版本不兼容 |
+| `contract_violation` | schema 校验失败 / bad offset / unexpected enum | 本进程禁用 native，写 typed diagnostics | renderer 只看到 fallback |
+| `timeout` | request 超过 deadline | 当前请求 fallback；连续 timeout 后禁用 native | 搜索仍返回 fallback 结果 |
+| `crashed` | child exit / panic | 本进程禁用 native，清理 pending request | 不阻断 Agent / Pipeline |
+| `cache_corrupted` | cache manifest / index 损坏 | 隔离 / 清理 cache 后 fallback 或 rebuild | settings 可重建 / 清理 |
+
+不可自动放行：
+
+- `path_denied`
+- schema 校验失败后仍试图使用 native 结果
+- native 返回未脱敏 stderr / credentialed URL / token
+
+## Contract Parity Plan
+
+首版 parity 不要求完全复刻 TS 内部排序，但必须满足：
+
+- 同一 query、scope、limit、fixture source，命中集合与 TS fallback 一致或是 TS fallback 的可解释子集。
+- `NativeRuntimeSearchResult` / `NativeRuntimeTailResult` 通过 shared fixture shape 校验。
+- `implementation` 字段能准确区分 `typescript` 与 `rust-sidecar`。
+- bad JSON line、missing file、partial line、empty query、limit clamp、中文内容、credential-like 内容均有 fixture。
+- 所有 native result 在 main process 二次校验后才能进入旧 IPC / renderer。
+
+首批测试文件计划：
+
+```text
+apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts
+apps/electron/src/main/lib/native-runtime/native-runtime-service.test.ts
+apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts
+apps/electron/scripts/native-runtime-smoke.ts
+```
+
+## Packaged Smoke Plan
+
+Smoke script 目标路径：
+
+```text
+apps/electron/scripts/native-runtime-smoke.ts
+```
+
+未来脚本模式：
+
+```bash
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-available
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protocol-mismatch
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode crash
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode timeout
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode cache-corruption
+```
+
+Smoke cases:
+
+| Case | Setup | Expected |
+| --- | --- | --- |
+| native missing | 隐藏 bundled binary 或指向空 native package fixture | Diagnostics `missing_binary`，Search / Tail TS fallback 可用 |
+| native available | unpacked app 内存在 bundled binary | `status.implementation = rust-sidecar`，binary 来源为 bundled |
+| no PATH lookup | 系统 `PATH` 放置同名假 binary | app 不使用该 binary |
+| protocol mismatch | fake sidecar 返回不兼容 version | fallback reason = `version_mismatch` |
+| crash | fake sidecar 收到请求后退出 | fallback reason = `crashed`，后续请求走 TS |
+| timeout | fake sidecar 不响应 | 当前请求 fallback，pending request 被清理 |
+| cache corruption | 损坏 native-cache | cache 被隔离 / 清理，JSON / JSONL 事实源不变 |
+
+Smoke output rules:
+
+- 不打印 token、Authorization、credentialed URL、完整 home path。
+- 不把 `binaryPath` 推给 renderer。
+- 不读取用户真实 `~/.codeinsights/`；使用隔离 `CODEINSIGHTS_CONFIG_DIR` fixture。
+- 不 push、不创建 PR、不触发真实模型调用。
+
+## Performance Gate
+
+Rust sidecar 默认启用候选必须同时满足：
+
+- 100MB JSONL 搜索 P95 至少比当前 TS fallback 快 3 倍。
+- event loop delay 至少降低 70%。
+- native missing / crash / timeout fallback 后功能可用。
+- native 冷启动不让应用可交互时间增加超过 500ms。
+- packaged smoke 证明只使用 bundled binary。
+
+未达到门槛时：
+
+- 保留 TypeScript fallback。
+- Rust sidecar 可作为实验能力保留，但不得默认启用。
+- Review 必须写清继续优化、缩小范围或回滚 native 的判断。
+
+## 实现前禁止事项
+
+- 不创建 Rust / Go 代码。
+- 不安装依赖。
+- 不修改 `package.json` / `bun.lock` / `Cargo.toml` / `go.mod`。
+- 不创建 native binary。
+- 不修改 `electron-builder.yml`。
+- 不修改根 `README.md` / 根 `AGENTS.md`。
