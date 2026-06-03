@@ -1,5 +1,45 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 packaged app layout preflight smoke 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只新增真实 packaged app / node_modules 布局的只读 preflight smoke 入口：没有真实 packaged app 目录时必须 `skipped`，有显式 `--app-node-modules-root` 时只调用既有 bundled package resolver 检查当前平台 optional package manifest、`bin/{binaryName}`、可执行权限和 SHA-256；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不把 `@codeinsights/native-search-*` 加入 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。这个切片只把真实 packaged smoke 的执行入口和 summary schema 补齐，不能把真实 optional package / bundled binary smoke 标成完成。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `24d1b657`、`e95cd284`、`ce104a59`、`8226c992`、`e5b92fa7`。
+- [x] 运行 `git log -12 --oneline`，确认更早 fake sidecar / native smoke / benchmark 文档提交 `9fe91b03`、`fb7e2d73`、`2cc95b1b`、`9c102c0a`、`c6104eee`、`4f9c4d28` 仍在历史中。
+- [x] 确认当前边界：`packaged-manifest` 仍只是 manifest preflight + 临时 resolver fixture，summary 为 `bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`，不是真实 packaged app bundled binary smoke。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-smoke` 参数解析和 summary，新增 `packaged-app-layout` mode 与 `--app-node-modules-root`，锁住未提供真实 packaged app root 时 `skipped`，且 summary 不泄露 home / 临时路径。
+- [x] 新增 packaged app layout preflight case：仅在显式 `appNodeModulesRoot` 存在时调用 `resolveNativeSearchPackage()`，验证 current optional package 是否来自该 root；临时 fixture 只输出 `packagedAppLayoutVerified=true`，真实 packaged binary 仍必须保持 `realPackagedBinaryVerified=false`。
+- [x] 保留 `packaged-manifest` 既有 summary 边界，避免把临时 fixture 与真实 packaged app smoke 混淆。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不修改 `optionalDependencies`。
+- [x] 更新 Phase 5 sidecar protocol / smoke plan、development checklist、next-session-prompt.md 和必要 lessons，明确本轮只是 packaged app layout preflight 入口，真实 optional package / `optionalDependencies` / real packaged bundled binary 仍未完成。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`，确认无真实 app root 时 skipped 且 TS fallback 可用。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`，确认旧 summary 边界保持。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，并确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [x] 阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 已新增 `packaged-app-layout` smoke mode 和 `--app-node-modules-root` 参数。默认不传真实 packaged app root 时返回 skipped，仍先验证 TypeScript fallback 搜索可用，summary 显示 `requiresPrebuiltPackagedApp=true`、`realPackagedBinaryVerified=false`。
+- 显式传入 packaged `node_modules` root 时，smoke 只通过既有 `resolveNativeSearchPackage()` 校验当前平台 optional package 的 manifest、`bin/{binaryName}`、可执行权限、SHA-256 和 app `node_modules` allowlist；不从系统 `PATH` 查找。
+- 代码审查发现初版会把临时 fixture 误报为真实 packaged binary，且 failure detail 可能透传 raw resolver path。已修复为拆分 `packagedAppLayoutVerified`、`packagedAppEvidenceVerified`、`usesTemporaryFixture`、`realPackagedBinaryVerified`；临时 fixture 只能让 `packagedAppLayoutVerified=true`，不能让 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 为 true。失败 detail 只输出 package name 和 resolver reason code。
+- `packaged-manifest` 既有边界保持：`bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.142` 并同步 `bun.lock`；没有修改 `optionalDependencies`。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`（21 pass）；`bun run smoke:native-runtime -- --mode packaged-app-layout`；`bun run smoke:native-runtime -- --mode packaged-manifest`；`bun run typecheck`（在 `apps/electron/`）；`bun run build:main`（在 `apps/electron/`）；`bun install --frozen-lockfile --dry-run`；`git diff --check`；禁改文件检查无命中。
+- 说明：`bun run --filter='@codeinsights/electron' typecheck` / `build:main` 一开始因本地依赖树缺 root `node_modules` 而报 `tsc` / `esbuild` not found；`bun install --frozen-lockfile` 恢复依赖时又被 Electron postinstall 访问 `20.205.243.166:443` 超时阻断，但随后 package-local `bun run typecheck` 和 `bun run build:main` 已成功。该网络失败未改变 lockfile 依赖版本。
+- 边界保持：native search 继续显式 opt-in / default off；未创建 packaged native binary；未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；未 push，未创建 PR。真实 optional package / `optionalDependencies`、真实 packaged app bundled binary smoke、default enable 和 Phase 6-9 仍未完成。
+
 ## 2026-06-03 Rust/Go Phase 5 bundled resolver 恢复入口回填计划
 
 范围确认：用户要求再次更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调阶段性任务完成后自动做状态同步。当前实现基线为 `ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`，最新状态同步提交为 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`。本轮只做恢复入口回填和习惯固化，不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 packaged app layout preflight 边界
+
+- `packaged-app-layout` 这类只读 smoke 入口只能在没有真实 packaged app root 时返回 skipped；即使用临时目录模拟 `app.asar.unpacked/node_modules` 并通过 resolver，也只能标记 `packagedAppLayoutVerified=true`，不能把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
+- 真实 packaged app bundled binary smoke 必须同时证明真实 packaged app 证据、非临时目录、optional package manifest、`bin/{binaryName}`、可执行权限和 SHA-256；在没有真实 optional package / `optionalDependencies` / `electron-builder.yml` files 前，native 仍必须 default off。
+- packaged layout preflight 失败 detail 只能输出 package name 和 resolver reason code，不能透传 raw fs error、app root、temp path、`app.asar.unpacked`、binary path 或 `binaryPath` 字段。
+
 ## 2026-06-03 Rust / Go Phase 5 bundled resolver 状态回填习惯
 
 - 当阶段实现提交和状态同步提交都已存在时，用户再次要求“更新最新开发状态 / 完成未完成 / 下次启动提示词”，不能让仓库提示词停在实现提交；必须把最新已存在的 docs 提交（例如 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`）回填为最新已确认恢复入口。

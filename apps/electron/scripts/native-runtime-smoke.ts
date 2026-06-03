@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
 import {
   getNativeRuntimeCacheDir,
@@ -14,7 +14,10 @@ import {
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
-import { resolveNativeSearchPackage } from '../src/main/lib/native-runtime/native-runtime-package-resolver'
+import {
+  NativeSearchPackageResolutionError,
+  resolveNativeSearchPackage,
+} from '../src/main/lib/native-runtime/native-runtime-package-resolver'
 import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 
@@ -26,10 +29,12 @@ export type NativeRuntimeSmokeMode =
   | 'timeout'
   | 'cache-corruption'
   | 'packaged-manifest'
+  | 'packaged-app-layout'
 
 export interface NativeRuntimeSmokeOptions {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
+  appNodeModulesRoot?: string
   query: string
   env?: NodeJS.ProcessEnv
 }
@@ -45,7 +50,25 @@ export interface NativeRuntimeSmokeSummary {
   generatedAt: string
   mode: NativeRuntimeSmokeMode
   nativeSearchBinaryProvided: boolean
+  appNodeModulesRootProvided: boolean
+  bundledBinaryVerified: boolean
+  fixtureBundledPackageVerified: boolean
+  usesTemporaryFixture: boolean
+  packagedAppLayoutVerified: boolean
+  packagedAppEvidenceVerified: boolean
+  realPackagedBinaryVerified: boolean
+  requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
+}
+
+interface NativeRuntimeSmokeVerification {
+  bundledBinaryVerified?: boolean
+  fixtureBundledPackageVerified?: boolean
+  usesTemporaryFixture?: boolean
+  packagedAppLayoutVerified?: boolean
+  packagedAppEvidenceVerified?: boolean
+  realPackagedBinaryVerified?: boolean
+  requiresPrebuiltPackagedApp?: boolean
 }
 
 const DEFAULT_OPTIONS: NativeRuntimeSmokeOptions = {
@@ -67,6 +90,9 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
     } else if (arg === '--native-search-binary') {
       options.nativeSearchBinary = value
       index += 1
+    } else if (arg === '--app-node-modules-root') {
+      options.appNodeModulesRoot = value
+      index += 1
     } else if (arg === '--query') {
       options.query = value
       index += 1
@@ -84,13 +110,24 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
 export function buildNativeRuntimeSmokeSummary(input: {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
+  appNodeModulesRoot?: string
+  verification?: NativeRuntimeSmokeVerification
   cases: NativeRuntimeSmokeCase[]
 }): NativeRuntimeSmokeSummary {
+  const verification = input.verification ?? {}
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     mode: input.mode,
     nativeSearchBinaryProvided: Boolean(input.nativeSearchBinary),
+    appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
+    bundledBinaryVerified: Boolean(verification.bundledBinaryVerified),
+    fixtureBundledPackageVerified: Boolean(verification.fixtureBundledPackageVerified),
+    usesTemporaryFixture: Boolean(verification.usesTemporaryFixture),
+    packagedAppLayoutVerified: Boolean(verification.packagedAppLayoutVerified),
+    packagedAppEvidenceVerified: Boolean(verification.packagedAppEvidenceVerified),
+    realPackagedBinaryVerified: Boolean(verification.realPackagedBinaryVerified),
+    requiresPrebuiltPackagedApp: Boolean(verification.requiresPrebuiltPackagedApp),
     cases: input.cases.map((smokeCase) => ({
       ...smokeCase,
       detail: smokeCase.detail ? redactNativeRuntimeText(smokeCase.detail) : undefined,
@@ -102,6 +139,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
   const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-smoke-'))
   const previousConfigDir = process.env.CODEINSIGHTS_CONFIG_DIR
   const cases: NativeRuntimeSmokeCase[] = []
+  let verification: NativeRuntimeSmokeVerification = {}
 
   try {
     process.env.CODEINSIGHTS_CONFIG_DIR = join(rootDir, 'config')
@@ -149,6 +187,24 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
     } else if (options.mode === 'packaged-manifest') {
       cases.push(runPackagedManifestPreflightCase())
       cases.push(runPackagedResolverFixtureCase(rootDir))
+      verification = {
+        bundledBinaryVerified: false,
+        fixtureBundledPackageVerified: true,
+        usesTemporaryFixture: true,
+        realPackagedBinaryVerified: false,
+      }
+    } else if (options.mode === 'packaged-app-layout') {
+      const packagedAppResult = runPackagedAppLayoutCase(options.appNodeModulesRoot)
+      cases.push(packagedAppResult.case)
+      verification = {
+        bundledBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
+        fixtureBundledPackageVerified: false,
+        usesTemporaryFixture: packagedAppResult.usesTemporaryFixture,
+        packagedAppLayoutVerified: packagedAppResult.layoutVerified,
+        packagedAppEvidenceVerified: packagedAppResult.packagedAppEvidenceVerified,
+        realPackagedBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
+        requiresPrebuiltPackagedApp: true,
+      }
     } else {
       cases.push({
         name: options.mode,
@@ -160,6 +216,8 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
     return buildNativeRuntimeSmokeSummary({
       mode: options.mode,
       nativeSearchBinary: options.nativeSearchBinary,
+      appNodeModulesRoot: options.appNodeModulesRoot,
+      verification,
       cases,
     })
   } finally {
@@ -350,6 +408,149 @@ function runPackagedResolverFixtureCase(rootDir: string): NativeRuntimeSmokeCase
   }
 }
 
+interface PackagedAppLayoutCaseResult {
+  case: NativeRuntimeSmokeCase
+  layoutVerified: boolean
+  packagedAppEvidenceVerified: boolean
+  realPackagedBinaryVerified: boolean
+  usesTemporaryFixture: boolean
+}
+
+function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): PackagedAppLayoutCaseResult {
+  if (!appNodeModulesRoot) {
+    return {
+      case: {
+        name: 'packaged-app-layout',
+        status: 'skipped',
+        detail: '未提供 --app-node-modules-root；requiresPrebuiltPackagedApp=true; realPackagedBinaryVerified=false',
+      },
+      layoutVerified: false,
+      packagedAppEvidenceVerified: false,
+      realPackagedBinaryVerified: false,
+      usesTemporaryFixture: false,
+    }
+  }
+
+  if (!existsSync(appNodeModulesRoot)) {
+    return {
+      case: {
+        name: 'packaged-app-layout',
+        status: 'skipped',
+        detail: 'packaged app node_modules root 不存在；requiresPrebuiltPackagedApp=true; realPackagedBinaryVerified=false',
+      },
+      layoutVerified: false,
+      packagedAppEvidenceVerified: false,
+      realPackagedBinaryVerified: false,
+      usesTemporaryFixture: false,
+    }
+  }
+
+  const plan = getNativeSearchOptionalPackagePlan()
+  if (!plan) {
+    return {
+      case: {
+        name: 'packaged-app-layout',
+        status: 'skipped',
+        detail: '当前平台暂无 optional package plan；requiresPrebuiltPackagedApp=true; realPackagedBinaryVerified=false',
+      },
+      layoutVerified: false,
+      packagedAppEvidenceVerified: false,
+      realPackagedBinaryVerified: false,
+      usesTemporaryFixture: false,
+    }
+  }
+
+  const result = resolvePackagedAppLayout(appNodeModulesRoot, plan)
+  const usesTemporaryFixture = isPathInside(appNodeModulesRoot, tmpdir())
+  const packagedAppEvidenceVerified = hasPackagedAppEvidence(appNodeModulesRoot)
+  if (!result.ok) {
+    return {
+      case: {
+        name: 'packaged-app-layout',
+        status: 'failed',
+        detail: [
+          `package=${result.packageName ?? plan.packageName}`,
+          `reason=${result.reason}`,
+          'requiresPrebuiltPackagedApp=true',
+          'realPackagedBinaryVerified=false',
+        ].join('; '),
+      },
+      layoutVerified: false,
+      packagedAppEvidenceVerified,
+      realPackagedBinaryVerified: false,
+      usesTemporaryFixture,
+    }
+  }
+
+  const realPackagedBinaryVerified = packagedAppEvidenceVerified && !usesTemporaryFixture
+  return {
+    case: {
+      name: 'packaged-app-layout',
+      status: 'passed',
+      detail: [
+        `package=${result.packageName}`,
+        'source=bundled',
+        'packagedAppLayoutVerified=true',
+        `packagedAppEvidenceVerified=${String(packagedAppEvidenceVerified)}`,
+        `usesTemporaryFixture=${String(usesTemporaryFixture)}`,
+        `realPackagedBinaryVerified=${String(realPackagedBinaryVerified)}`,
+      ].join('; '),
+    },
+    layoutVerified: true,
+    packagedAppEvidenceVerified,
+    realPackagedBinaryVerified,
+    usesTemporaryFixture,
+  }
+}
+
+function resolvePackagedAppLayout(
+  appNodeModulesRoot: string,
+  plan: NonNullable<ReturnType<typeof getNativeSearchOptionalPackagePlan>>,
+): { ok: true; packageName: string } | { ok: false; packageName?: string; reason: string } {
+  try {
+    const packageJsonPath = join(appNodeModulesRoot, ...plan.packageName.split('/'), 'package.json')
+    const resolved = resolveNativeSearchPackage({
+      platform: plan.platform,
+      arch: plan.arch,
+      isPackaged: true,
+      appNodeModulesRoot,
+      moduleResolve: (specifier) => {
+        if (specifier === `${plan.packageName}/package.json`) return packageJsonPath
+        throw new Error(`missing ${specifier}`)
+      },
+    })
+
+    return { ok: true, packageName: resolved.packageName }
+  } catch (error) {
+    if (error instanceof NativeSearchPackageResolutionError) {
+      return {
+        ok: false,
+        packageName: error.packageName ?? plan.packageName,
+        reason: error.code,
+      }
+    }
+
+    return {
+      ok: false,
+      packageName: plan.packageName,
+      reason: 'layout_invalid',
+    }
+  }
+}
+
+function hasPackagedAppEvidence(appNodeModulesRoot: string): boolean {
+  if (basename(appNodeModulesRoot) !== 'node_modules') return false
+  const unpackedRoot = dirname(appNodeModulesRoot)
+  if (basename(unpackedRoot) !== 'app.asar.unpacked') return false
+  return existsSync(join(dirname(unpackedRoot), 'app.asar'))
+}
+
+function isPathInside(path: string, root: string): boolean {
+  const relativePath = relative(root, path)
+  return relativePath === ''
+    || (!relativePath.startsWith('..') && !isAbsolute(relativePath))
+}
+
 function buildFallbackSmokeCase(
   name: NativeRuntimeSmokeMode,
   actualFallbackReason: string | undefined,
@@ -524,6 +725,7 @@ function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
     || value === 'timeout'
     || value === 'cache-corruption'
     || value === 'packaged-manifest'
+    || value === 'packaged-app-layout'
   ) {
     return value
   }
