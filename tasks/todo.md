@@ -1,5 +1,43 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 bundled package resolver / packaged smoke fixture 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只推进 bundled package resolver 的可测试设计和 smoke fixture：允许用临时 fixture package + 临时可执行文件验证 manifest / SHA-256 / bundled source / no PATH lookup 逻辑；不创建真实 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现需要真实 optional package 发布、打包配置或真实 packaged app，立即停止并重新规划。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `8226c992`、`e5b92fa7`、`9fe91b03`、`fb7e2d73`、`2cc95b1b`。
+- [x] 运行 `git log -8 --oneline`，确认更早 native smoke / benchmark 文档提交 `9c102c0a`、`c6104eee`、`4f9c4d28` 仍在历史中。
+- [x] 确认当前结论：`packaged-manifest` 只证明 manifest schema / 平台矩阵和 TS fallback 可用，summary 为 `bundledBinaryVerified=false`，不是真实 bundled binary packaged smoke；native 继续显式 opt-in / default off。
+
+实现计划：
+
+- [x] 测试先行新增 bundled resolver helper 测试，使用临时 optional package fixture 验证当前平台 package manifest、binary 可执行性、SHA-256 校验、manifest / binaryName / platform / arch mismatch、缺失 manifest / binary 的失败语义。
+- [x] 新增 main process helper，只通过注入的 `moduleResolve` 解析 optional package `package.json`，从包根读取固定 manifest 文件和固定 binary name，返回 `source: "bundled"` 与 binary fingerprint；不从系统 `PATH` 查找，不把 binary path 写入 manifest / cache / smoke summary。
+- [x] 扩展 `smoke:native-runtime`，新增 fixture 级 packaged resolver case：在临时目录构造 optional package manifest + fake executable + PATH decoy，证明 resolver 选择 bundled fixture 且 SHA-256 匹配；summary 必须明确 `realPackagedBinaryVerified=false`，避免误称真实 packaged app smoke。
+- [ ] 更新 Phase 5 sidecar protocol / smoke plan、development checklist、next-session-prompt.md 和必要 lessons，明确“fixture resolver smoke”与“真实 packaged app bundled binary smoke”的边界。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不修改 `optionalDependencies`。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [ ] 阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 已新增 `apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.ts` 和测试。resolver 只通过 optional package `package.json` 的 module resolution 得到包根，再读取包内固定 `native-search-package.json` 和 `bin/{binaryName}`；不扫描 `node_modules`，不读取系统 `PATH`，不接受 manifest 里的路径字段。
+- resolver 校验范围：optional package 平台矩阵、manifest exact schema、package / platform / arch / binaryName 匹配、app `node_modules` realpath allowlist、binary 存在与可执行、SHA-256 fingerprint 匹配；失败只返回 `unsupported_platform` / `package_missing` / `manifest_missing` / `manifest_invalid` / `binary_missing` / `binary_not_executable` / `checksum_mismatch` 这类 reason，不把真实路径写入错误结构。
+- 代码审查子代理发现一个阻断问题：初版 resolver 虽然不查系统 `PATH`，但默认 `createRequire().resolve()` 可能沿 Node 规则解析到上级 / 用户 `node_modules` 的同名包。已修复为必须传过 app `node_modules` realpath allowlist，package.json 和 binary 都必须位于 allowlist 内；测试新增“拒绝 allowlist 外同名 package”回归。
+- `TypeScriptNativeRuntimeService` 的 native search 创建路径已接入 resolver，但仍受 `CODEINSIGHTS_NATIVE_RUNTIME=1` 与 `CODEINSIGHTS_NATIVE_SEARCH=1` 保护；显式 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 优先用于本地开发 / benchmark，没有显式 binary 时只有 Electron packaged 环境才尝试 bundled optional package，解析失败保持 TypeScript fallback，不走 PATH。已新增非 packaged 环境 feature flags 不自动解析 bundled package 的 service 级测试。
+- `smoke:native-runtime -- --mode packaged-manifest` 已新增 `packaged-resolver-fixture` case。该 case 使用临时 optional package + fake executable + PATH decoy 验证 resolver 选择 bundled fixture 且 SHA-256 匹配；summary 明确 `fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`，仍不等于真实 packaged app bundled binary smoke。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.141` 并同步 `bun.lock`；没有修改 `optionalDependencies`。
+- 已通过 targeted 验证：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-service.test.ts`（31 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+
 ## 2026-06-03 Rust/Go Phase 5 optional package manifest / packaged smoke 预检计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只把 optional package manifest 和 packaged smoke 从文档描述推进到可测试的 schema / fixture / 预检设计；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现需要真实 packaged binary、打包配置或新依赖，立即停止并重新规划。

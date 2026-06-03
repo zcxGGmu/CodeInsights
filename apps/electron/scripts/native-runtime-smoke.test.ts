@@ -189,11 +189,18 @@ describe('native-runtime-smoke', () => {
       status: 'passed',
     }))
     expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-resolver-fixture',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'typescript-fallback-search',
       status: 'passed',
     }))
     expect(JSON.stringify(summary)).toContain('bundledBinaryVerified=false')
+    expect(JSON.stringify(summary)).toContain('fixtureBundledPackageVerified=true')
+    expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
     expect(JSON.stringify(summary)).not.toContain('/Users/')
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary)).not.toContain('/codeinsights-native-runtime-smoke-')
   })
 })

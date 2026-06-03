@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { NATIVE_RUNTIME_FEATURE_FLAGS } from '@codeinsights/shared'
 import {
   getTypeScriptWorkspaceIndexService,
   getTypeScriptEventSearchService,
@@ -16,6 +17,9 @@ import { getWorkspaceFilesDir } from '../config-paths'
 
 const tempDirs: string[] = []
 const originalConfigDir = process.env.CODEINSIGHTS_CONFIG_DIR
+const originalNativeRuntimeEnabled = process.env[NATIVE_RUNTIME_FEATURE_FLAGS.RUNTIME]
+const originalNativeSearchEnabled = process.env[NATIVE_RUNTIME_FEATURE_FLAGS.SEARCH]
+const originalNativeSearchBinary = process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY
 
 afterEach(() => {
   if (originalConfigDir == null) {
@@ -23,6 +27,9 @@ afterEach(() => {
   } else {
     process.env.CODEINSIGHTS_CONFIG_DIR = originalConfigDir
   }
+  restoreEnv(NATIVE_RUNTIME_FEATURE_FLAGS.RUNTIME, originalNativeRuntimeEnabled)
+  restoreEnv(NATIVE_RUNTIME_FEATURE_FLAGS.SEARCH, originalNativeSearchEnabled)
+  restoreEnv('CODEINSIGHTS_NATIVE_SEARCH_BINARY', originalNativeSearchBinary)
 
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop()
@@ -31,6 +38,14 @@ afterEach(() => {
     }
   }
 })
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value == null) {
+    delete process.env[key]
+  } else {
+    process.env[key] = value
+  }
+}
 
 describe('native-runtime-service', () => {
   test('默认 facade 暴露 TypeScript diagnostics 和 EventSearchService', async () => {
@@ -43,6 +58,21 @@ describe('native-runtime-service', () => {
       fallbackReason: 'disabled',
     })
     expect(getTypeScriptEventSearchService()).toBeInstanceOf(TypeScriptEventSearchService)
+  })
+
+  test('非 packaged 环境下 feature flags 不会自动解析 bundled package', async () => {
+    process.env[NATIVE_RUNTIME_FEATURE_FLAGS.RUNTIME] = '1'
+    process.env[NATIVE_RUNTIME_FEATURE_FLAGS.SEARCH] = '1'
+    delete process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY
+    const service = new TypeScriptNativeRuntimeService()
+
+    const status = await service.getStatus()
+
+    expect(status).toMatchObject({
+      nativeEnabled: false,
+      implementation: 'typescript',
+      fallbackReason: 'disabled',
+    })
   })
 
   test('通用 native search IPC 尚未注册时不静默返回空结果', async () => {

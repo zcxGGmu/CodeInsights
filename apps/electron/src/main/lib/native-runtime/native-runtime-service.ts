@@ -15,6 +15,8 @@ import type {
 import {
   NATIVE_RUNTIME_FEATURE_FLAGS,
 } from '@codeinsights/shared'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
 import {
   buildNativeRuntimeDiagnostics,
   buildNativeRuntimeStatus,
@@ -28,6 +30,7 @@ import {
   NativeRuntimeSidecarError,
   NativeRuntimeSidecarManager,
 } from './native-runtime-sidecar-manager'
+import { tryResolveNativeSearchPackage } from './native-runtime-package-resolver'
 import type { NativeRuntimeAdapter } from './native-runtime-types'
 import { getConversationMessagesPath, getPipelineSessionRecordsPath, getWorkspaceFilesDir } from '../config-paths'
 import { getWorkspaceAttachedDirectories, listAgentWorkspaces } from '../agent-workspace-manager'
@@ -50,9 +53,24 @@ function createNativeSearchSidecarFromEnv(): NativeRuntimeSidecarManager | undef
   if (!isNativeSearchEnabled()) return undefined
 
   const binaryPath = process.env[NATIVE_SEARCH_BINARY_ENV]?.trim()
-  if (!binaryPath) return undefined
+  if (binaryPath) return new NativeRuntimeSidecarManager({ binaryPath })
 
-  return new NativeRuntimeSidecarManager({ binaryPath })
+  if (!resolveElectronPackaged()) return undefined
+
+  const bundledPackage = tryResolveNativeSearchPackage({ isPackaged: true })
+  if (!bundledPackage.ok) return undefined
+
+  return new NativeRuntimeSidecarManager({ binaryPath: bundledPackage.package.binaryPath })
+}
+
+function resolveElectronPackaged(): boolean {
+  try {
+    const cjsRequire = createRequire(typeof __filename === 'string' ? __filename : join(process.cwd(), 'package.json'))
+    const electronApp = cjsRequire('electron').app as { isPackaged?: boolean }
+    return Boolean(electronApp?.isPackaged)
+  } catch {
+    return false
+  }
 }
 
 export function getTypeScriptEventSearchService(): TypeScriptEventSearchService {

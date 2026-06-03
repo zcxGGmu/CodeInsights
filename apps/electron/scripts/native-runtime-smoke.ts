@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
@@ -13,6 +14,7 @@ import {
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
+import { resolveNativeSearchPackage } from '../src/main/lib/native-runtime/native-runtime-package-resolver'
 import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 
@@ -146,6 +148,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       cases.push(await runCacheCorruptionCase())
     } else if (options.mode === 'packaged-manifest') {
       cases.push(runPackagedManifestPreflightCase())
+      cases.push(runPackagedResolverFixtureCase(rootDir))
     } else {
       cases.push({
         name: options.mode,
@@ -309,6 +312,40 @@ function runPackagedManifestPreflightCase(): NativeRuntimeSmokeCase {
       `optionalPackagePlans=${NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.length}`,
       `currentPackage=${currentPlan?.packageName ?? 'unsupported'}`,
       'bundledBinaryVerified=false',
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
+  }
+}
+
+function runPackagedResolverFixtureCase(rootDir: string): NativeRuntimeSmokeCase {
+  const fixture = createNativeSearchPackageFixture(rootDir)
+  const resolved = resolveNativeSearchPackage({
+    platform: fixture.plan.platform,
+    arch: fixture.plan.arch,
+    isPackaged: true,
+    appNodeModulesRoot: fixture.nodeModulesRoot,
+    moduleResolve: (specifier) => {
+      if (specifier === `${fixture.plan.packageName}/package.json`) {
+        return fixture.packageJsonPath
+      }
+      throw new Error(`missing ${specifier}`)
+    },
+  })
+
+  const passed = resolved.source === 'bundled'
+    && resolved.packageName === fixture.plan.packageName
+    && resolved.binaryName === fixture.plan.binaryName
+    && resolved.binarySha256 === fixture.binarySha256
+    && resolved.binaryPath === fixture.binaryPath
+
+  return {
+    name: 'packaged-resolver-fixture',
+    status: passed ? 'passed' : 'failed',
+    detail: [
+      `currentPackage=${fixture.plan.packageName}`,
+      'fixtureBundledPackageVerified=true',
+      'usesTemporaryFixture=true',
+      'realPackagedBinaryVerified=false',
     ].join('; '),
   }
 }
@@ -427,6 +464,55 @@ process.stdin.on('data', (chunk) => {
 })
 `, 'utf-8')
   return scriptPath
+}
+
+function createNativeSearchPackageFixture(rootDir: string): {
+  plan: NonNullable<ReturnType<typeof getNativeSearchOptionalPackagePlan>>
+  nodeModulesRoot: string
+  packageJsonPath: string
+  binaryPath: string
+  binarySha256: string
+} {
+  const plan = getNativeSearchFixturePlan()
+  const nodeModulesRoot = join(rootDir, 'fixture-node-modules')
+  const packageRoot = join(nodeModulesRoot, ...plan.packageName.split('/'))
+  const packageJsonPath = join(packageRoot, 'package.json')
+  const manifestPath = join(packageRoot, 'native-search-package.json')
+  const binaryPath = join(packageRoot, 'bin', plan.binaryName)
+  const binaryContent = '#!/bin/sh\necho codeinsights native search fixture\n'
+  const binarySha256 = createHash('sha256').update(binaryContent).digest('hex')
+  const manifest = buildNativeSearchPackageManifest({
+    plan,
+    packageVersion: '0.0.2',
+    binarySha256,
+  })
+
+  mkdirSync(dirname(binaryPath), { recursive: true })
+  writeFileSync(packageJsonPath, `${JSON.stringify({
+    name: plan.packageName,
+    version: '0.0.2',
+  }, null, 2)}\n`, 'utf-8')
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8')
+  writeFileSync(binaryPath, binaryContent, 'utf-8')
+  chmodSync(binaryPath, 0o755)
+
+  return {
+    plan,
+    nodeModulesRoot,
+    packageJsonPath,
+    binaryPath,
+    binarySha256,
+  }
+}
+
+function getNativeSearchFixturePlan(): NonNullable<ReturnType<typeof getNativeSearchOptionalPackagePlan>> {
+  const currentPlan = getNativeSearchOptionalPackagePlan()
+  if (currentPlan) return currentPlan
+  const fallbackPlan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]
+  if (!fallbackPlan) {
+    throw new Error('native search optional package 平台矩阵为空')
+  }
+  return fallbackPlan
 }
 
 function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
