@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 const PROTOCOL_VERSION: u32 = 1;
 const CACHE_SCHEMA_VERSION: u32 = 1;
-const BINARY_VERSION: &str = "0.0.1-dev";
+const BINARY_VERSION: &str = "0.0.2-dev";
 const MAX_LIMIT: usize = 100;
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_SNIPPET_CHARS: usize = 160;
@@ -133,6 +133,7 @@ struct SearchIssueCounts {
 struct SearchState {
     total_matches: usize,
     matches: Vec<SearchMatch>,
+    has_more: bool,
     issues: SearchIssueCounts,
 }
 
@@ -297,20 +298,26 @@ fn search(params: SearchParams, deadline: Option<Instant>) -> Result<SearchResul
         deadline,
     };
 
-    let mut stopped_early = false;
     for (source_index, source) in params.sources.iter().enumerate() {
+        if state.has_more {
+            break;
+        }
         if state.matches.len() >= limit {
-            stopped_early = source_index < params.sources.len();
+            state.has_more = source_index < params.sources.len();
             break;
         }
         scan_source(source, &runtime, &mut state)?;
+        if state.matches.len() >= limit && source_index + 1 < params.sources.len() {
+            state.has_more = true;
+            break;
+        }
     }
 
     Ok(SearchResult {
         request_id,
         query,
         matches: state.matches,
-        has_more: state.total_matches > limit || stopped_early,
+        has_more: state.has_more || state.total_matches > limit,
         index_state: "ready",
         implementation: "rust-sidecar",
         searched_at: now_millis(),
@@ -354,7 +361,8 @@ fn scan_source(
 
         state.total_matches += 1;
         if state.matches.len() >= runtime.limit {
-            continue;
+            state.has_more = true;
+            break;
         }
 
         let snippet = build_snippet(&text, match_start, runtime.query_char_len);
@@ -747,6 +755,41 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(response["result"]["hasMore"], true);
         assert!(matches[0]["snippet"].as_str().unwrap().chars().count() <= 160);
+    }
+
+    #[test]
+    fn search_stops_after_limit_plus_one_match() {
+        let path = temp_jsonl(
+            "limit-early-stop",
+            concat!(
+                "{\"id\":\"one\",\"content\":\"needle one\"}\n",
+                "{\"id\":\"two\",\"content\":\"needle two\"}\n",
+                "{bad json after enough matches\n",
+            ),
+        );
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "search-limit-early-stop",
+            "method": "search",
+            "params": {
+                "requestId": "req-search-limit-early-stop",
+                "query": "needle",
+                "limit": 1,
+                "sources": [{
+                    "sourceKind": "chat_message",
+                    "filePath": path,
+                    "textFields": ["content"]
+                }]
+            }
+        });
+
+        let response = parse_response(&handle_protocol_line(&request.to_string()));
+        let _ = remove_file(path);
+
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["result"]["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(response["result"]["hasMore"], true);
+        assert_eq!(response["result"]["diagnostics"]["invalidJsonLines"], 0);
     }
 
     #[test]
