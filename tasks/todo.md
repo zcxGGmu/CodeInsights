@@ -1,5 +1,45 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 search 性能优化与 gate 复核计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”，基于 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate` 的 100MB benchmark 结果优化 Rust search 性能或重新规划 default-enable gate。当前 native 未通过 P95 / event loop 双门槛，必须保持显式 opt-in / default off。本轮不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / fallback / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支 `rust-go-refactor`，最近历史包含 `e4bcd123`、`fdb6997b`、`319f30e8`、`c76f3b33`、`e39682f1`。
+- [x] 确认本轮禁止事项：不生成 packaged native binary，不修改打包配置，不默认启用 native，不触碰根 `README.md` / 根 `AGENTS.md`。
+
+性能假设：
+
+- [x] 先复核 Rust sidecar 是否为了计算 `total_matches / hasMore` 扫完整个 100MB JSONL，导致 `limit=100` 查询仍完整解析文件。
+- [x] 若假设成立，优先实现 limit 满后的早停策略：找到第 `limit + 1` 个命中即可设置 `hasMore=true` 并停止扫描，保持 UI 分页语义，不追求精确 total。
+- [x] 优化必须保持 bad JSON diagnostics、missing file diagnostics、UTF-16 matchedRanges、snippet 脱敏、Chat legacy snippet parity 和 main process fallback contract。
+- [x] 若早停后仍不达标，Review 中重新规划下一步：可评估 source-level substring prefilter、字段级 parse 优化或接受 default-enable gate 暂不推进。
+
+测试与验证：
+
+- [x] 补 Rust 单测覆盖 limit 早停不会继续扫描后续坏 JSON 行，且 `hasMore=true`。
+- [x] 运行 `cargo test --manifest-path native/search/Cargo.toml`。
+- [x] 运行 `cargo fmt --check --manifest-path native/search/Cargo.toml`。
+- [x] 运行 `cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings`。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 100MB native benchmark，对比 TS / Rust Chat 与 Agent P95、event loop delay 和 gate 结论。
+- [x] 运行 `git diff --check` 和 `git status --short --branch`。
+
+### Review
+
+- 根因确认：`native/search` 在单 source `limit=100` 查询中仍会为了精确 `total_matches / hasMore` 扫完整个 100MB JSONL；Chat 每 10 行命中一次、Agent 每 5 行命中一次，首屏只需要 100 条时完整扫描造成 P95 输给 TS fallback。
+- 已实现 `limit + 1` 早停：第 `limit + 1` 个命中只用于设置 `hasMore=true`，不构建 snippet / match，不继续解析后续行。这个取舍保持 UI 分页语义，但不再追求 native 精确 total；limit 后的后续坏 JSON diagnostics 不再统计，已用 Rust 单测锁住。
+- Rust crate 已递增到 `0.0.2`，`BINARY_VERSION` 更新为 `0.0.2-dev`，`Cargo.lock` 已同步；未新增依赖，未创建 packaged native binary。
+- 100MB benchmark 命令：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20 --native-search-binary /Users/zq/Desktop/ai-projs/posp/RV-Insights/native/search/target/release/codeinsights-native-search`。
+- Benchmark 结果：TS Chat 99,527,780 bytes，P95 491.319ms，event loop delay 82.650ms；Rust native Chat P95 25.593ms，event loop delay 2.432ms。TS Agent 102,397,780 bytes，P95 547.352ms，event loop delay 2.092ms；Rust native Agent P95 10.573ms，event loop delay 3.546ms。
+- Gate 结论：Chat native P95 和 event loop gate 均明显改善；Agent native P95 明显改善，但 event loop delay 比本轮 TS fallback 更高，且还缺少稳定复跑、optional package 和 packaged smoke。因此 native 仍不得默认启用，只能保持显式 opt-in / default off。
+- 验证通过：`cargo test --manifest-path native/search/Cargo.toml`（12 pass）；`cargo fmt --check --manifest-path native/search/Cargo.toml`；`cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings`；`cargo build --release --manifest-path native/search/Cargo.toml`；`bun test apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`（18 pass）；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' typecheck`；`git diff --check`。
+- 边界保持：未默认启用 native，未创建 packaged native binary，未修改 `electron-builder.yml`，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+- 阶段实现已提交：`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`。本 Review、development checklist、next-session prompt 和 lessons 作为状态同步单独提交。
+
 ## 2026-06-03 Rust/Go Phase 5 sidecar manager 状态同步复核计划
 
 范围确认：用户要求再次更新文档最新开发状态、标清已完成 / 未完成，并给出下次启动可直接复制的提示词，同时强调“每个阶段性任务完成后自动去做”。当前实现提交 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate` 和状态同步提交 `fdb6997b docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态` 已存在。本轮只做恢复入口回填和状态文档复核，不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

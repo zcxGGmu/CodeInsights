@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片，尚未接入 Electron main process，尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate 和 search 早停性能优化，尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`
 
 ## 目标
 
@@ -30,13 +30,16 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `status`
 - literal `search`
 - `shutdown`
+- Electron main process sidecar manager 显式 binary path opt-in
+- Chat search fallback gate
+- `limit + 1` 早停性能优化
 
 当前仍未实现：
 
 - `tail_jsonl`（当前返回 typed `invalid_input`，等待 main process cursor / anchor contract parity）
-- Electron main process sidecar manager
-- native benchmark 对比
 - packaged smoke
+- optional package
+- default enable
 
 ## Transport 决策
 

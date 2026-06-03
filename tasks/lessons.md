@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 search 性能 gate 习惯
+
+- Rust search sidecar 做 `limit` 查询时，不要为了计算精确 `total_matches` 扫完整个 JSONL；主进程当前只需要 `matches` 和 `hasMore`，sidecar 可以在找到第 `limit + 1` 个命中后停止并返回 `hasMore=true`，避免 100MB 首屏查询被无谓完整解析拖慢。
+- 性能 gate 不能只看 P95 单项达标就默认启用 native。即使早停后 Chat / Agent native P95 明显快于 TS fallback，只要 event loop gate 有回退、结果只有单轮 benchmark、或 packaged smoke / optional package 尚未完成，native 仍必须保持显式 opt-in / default off。
+- 早停优化会让 limit 后的后续坏 JSON diagnostics 不再被统计；测试需要明确锁住这个取舍，并确保 limit 前的 bad JSON、UTF-16 matchedRanges、snippet 脱敏、Chat legacy snippet parity 和拒绝类错误不 fallback 仍通过。
+
 ## 2026-06-03 Rust / Go Phase 5 sidecar manager 恢复入口回填习惯
 
 - 阶段实现提交和状态同步提交都完成后，如果用户再次要求“更新文档最新状态 / 标注完成未完成 / 给下次启动提示词”，不能只口头确认已有文档；必须把最新状态同步提交号（例如 `fdb6997b docs(rust-go): 同步 Phase 5 sidecar manager 后续开发状态`）回填到 development checklist 和 next-session prompt，避免仍写“319f30e8 或其后的 docs 提交”这类需要读者推断的占位。

@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置决策
-> 状态：前置决策完成；后续已按本决策新增 `native/search/` search-only Rust 源码切片和 `Cargo.lock`，尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`
+> 状态：前置决策完成；后续已按本决策新增 `native/search/` search-only Rust 源码切片和 `Cargo.lock`，并完成 Electron main process sidecar manager、fallback gate、contract parity、native benchmark 与 search 早停性能优化；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`
 
 ## 决策摘要
 
@@ -11,11 +11,11 @@ Phase 5 可以进入“最小 Rust search sidecar”设计，但不能直接引�
 
 - 保留 TypeScript fallback 作为唯一稳定基线和回滚路径。
 - Rust sidecar 只接手 line-delimited JSON protocol、JSONL line parse、简单 substring / token search 和 Pipeline tail 对照。
-- Rust 首批候选依赖仅建议 `serde`、`serde_json` 和可选 `memchr`；当前 search-only 源码切片已在 `native/search/Cargo.toml` 固定直接依赖 `serde` / `serde_json`，未直接引入 `memchr`。
+- Rust 首批候选依赖仅建议 `serde`、`serde_json` 和可选 `memchr`；当前 search-only 源码切片已在 `native/search/Cargo.toml` 固定直接依赖 `serde` / `serde_json`，未直接引入 `memchr`；本轮性能优化通过 `limit + 1` 早停完成，仍未新增依赖。
 - 暂缓 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`，直到 benchmark 证明它们解决了明确瓶颈。
 - Go / `fsnotify` 不进入 Phase 5 默认实现，只保留 Phase 9 supervisor / watcher spike。
 
-本文件记录依赖搜索和取舍；进入 search-only 源码切片后，只新增 `native/search/Cargo.toml` 与 `native/search/Cargo.lock`，未修改 `go.mod`、`package.json`、`bun.lock` 或打包配置。
+本文件记录依赖搜索和取舍；进入 search-only 源码切片后，只新增 `native/search/Cargo.toml` 与 `native/search/Cargo.lock`，当前 Rust crate 已递增到 `0.0.2` / `0.0.2-dev`，未修改 `go.mod`、`package.json`、`bun.lock` 或打包配置。
 
 ## 数据来源
 
