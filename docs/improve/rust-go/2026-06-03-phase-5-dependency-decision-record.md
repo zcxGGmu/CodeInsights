@@ -2,7 +2,7 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置决策
-> 状态：前置决策完成，尚未安装依赖，尚未创建 Rust / Go 工程或 native binary
+> 状态：前置决策完成；后续已按本决策新增 `native/search/` search-only Rust 源码切片和 `Cargo.lock`，尚未创建 packaged native binary
 
 ## 决策摘要
 
@@ -10,11 +10,11 @@ Phase 5 可以进入“最小 Rust search sidecar”设计，但不能直接引�
 
 - 保留 TypeScript fallback 作为唯一稳定基线和回滚路径。
 - Rust sidecar 只接手 line-delimited JSON protocol、JSONL line parse、简单 substring / token search 和 Pipeline tail 对照。
-- Rust 首批候选依赖仅建议 `serde`、`serde_json` 和可选 `memchr`；是否实际加入 `Cargo.toml` 要等进入实现阶段再提交。
+- Rust 首批候选依赖仅建议 `serde`、`serde_json` 和可选 `memchr`；当前 search-only 源码切片已在 `native/search/Cargo.toml` 固定直接依赖 `serde` / `serde_json`，未直接引入 `memchr`。
 - 暂缓 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`，直到 benchmark 证明它们解决了明确瓶颈。
 - Go / `fsnotify` 不进入 Phase 5 默认实现，只保留 Phase 9 supervisor / watcher spike。
 
-本文件只记录依赖搜索和取舍，不修改 `Cargo.toml`、`go.mod`、`package.json` 或 lockfile。
+本文件记录依赖搜索和取舍；进入 search-only 源码切片后，只新增 `native/search/Cargo.toml` 与 `native/search/Cargo.lock`，未修改 `go.mod`、`package.json`、`bun.lock` 或打包配置。
 
 ## 数据来源
 

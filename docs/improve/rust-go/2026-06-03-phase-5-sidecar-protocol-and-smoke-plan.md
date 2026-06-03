@@ -2,13 +2,13 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成，尚未实现 Rust sidecar，尚未创建 native binary
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片，尚未接入 Electron main process，尚未创建 packaged native binary
 
 ## 目标
 
 Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有业务编排、权限、路径白名单、脱敏、diagnostics UI、IPC 和 renderer 状态仍留在 TypeScript / Electron 主进程。
 
-首版 sidecar 只允许覆盖：
+首版完整 sidecar 只允许覆盖：
 
 - `status`
 - `search`
@@ -23,6 +23,19 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - path safety 权威判定
 - 全文索引 / Tantivy cache
 - Go supervisor / watcher
+
+当前 search-only 源码切片已覆盖：
+
+- `status`
+- literal `search`
+- `shutdown`
+
+当前仍未实现：
+
+- `tail_jsonl`（当前返回 typed `invalid_input`，等待 main process cursor / anchor contract parity）
+- Electron main process sidecar manager
+- native benchmark 对比
+- packaged smoke
 
 ## Transport 决策
 

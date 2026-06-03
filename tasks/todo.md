@@ -1,5 +1,43 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 TS fallback benchmark gate 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”，但当前步骤只重新跑现有 TypeScript fallback benchmark，确认 100MB 级 JSONL 搜索仍有足够 native 试点收益空间。先不安装依赖，不创建 native binary，不修改打包配置，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若 benchmark 不支持收益门槛，则停在 Review 并重新规划，不硬进入 Rust 实现。
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / fallback / smoke plan 和 next-session prompt。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最新恢复入口为 `aee300a0 docs(rust-go): 同步 Phase 5 前置开发状态与下次启动入口`，当前分支为 `rust-go-refactor`。
+- [x] 复核 `apps/electron/scripts/native-runtime-benchmark.ts` 参数与输出字段，确定 100MB 级 JSONL 搜索的运行命令。
+- [x] 运行当前 TS fallback benchmark，记录 `chat-search-large-history`、`agent-runtime-search`、`pipeline-tail-large-records`、`workspace-file-name-search` 和 `large-log-preview` 的 P50 / P95 / P99、event loop delay、memory delta 和数据规模。
+- [x] 对照 Phase 5 Performance Gate：100MB JSONL 搜索 native 候选需 P95 至少比当前 TS fallback 快 3 倍，event loop delay 至少降低 70%；若当前 TS fallback 已经足够低或数据规模不达标，先调整 benchmark 或停下重新规划。
+- [x] 根据 benchmark 结果决定是否进入最小 Rust search sidecar 实现；若进入，实现前再次写清测试先行、依赖与文件边界。
+- [ ] 在本节追加 Review，记录命令、结果、是否允许进入 Rust 实现以及未触碰的禁止事项。
+
+Benchmark gate 结论：
+
+- [x] 快速门禁命令已通过：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 50000 --payload-bytes 1900 --workspace-files 100000 --log-bytes 524288000 --iterations 3`。Chat JSONL 99,752,780 bytes，P95 292.814ms，event loop delay 10.051ms；Agent JSONL 101,187,780 bytes，P95 195.374ms，event loop delay 1.061ms。
+- [x] 稳定门禁命令已通过：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20`。Chat JSONL 99,527,780 bytes，P95 279.622ms，event loop delay 10.020ms；Agent JSONL 102,397,780 bytes，P95 216.859ms，event loop delay 1.248ms。
+- [x] Rust search sidecar 进入实现条件成立，但首个默认候选只覆盖 100MB 级 JSONL literal search：Chat native P95 目标约 `<= 93ms`，event loop delay 目标约 `<= 3ms`；Agent native P95 目标约 `<= 108ms`。Pipeline tail 20 次迭代 P95 0.618ms、workspace warm search P95 33.556ms，暂不作为首个默认 native 能力；large-log-preview 属于 Phase 6，不纳入 Phase 5 默认范围。
+
+最小 Rust search sidecar 实现计划：
+
+- [x] 测试先行：新增 Rust sidecar 协议 / search 单测，覆盖 `status`、literal `search`、empty query、limit clamp、bad JSON、missing file、中文命中、snippet 长度上限、基础脱敏、long query、deadline、UTF-16 offset 和 ASCII query + Unicode prefix offset。
+- [x] 新增最小 Rust 工程目录，只实现 stdin / stdout line-delimited JSON protocol 和 JSONL literal search；不实现 workspace walk、全文索引、native cache、packaged binary 或 Go supervisor。
+- [x] 依赖遵守 decision record：只使用直接依赖 `serde` / `serde_json`；未引入直接依赖 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy` 或 Go 依赖。`Cargo.lock` 中 `memchr` 为 `serde_json` 的传递依赖。
+- [x] 不提交编译产物或 native binary；`target/` 已被 `.gitignore` 忽略，验证后已清理本地 `native/search/target/`。
+- [x] 验证 Rust 单测和现有 TypeScript fallback 测试；若需要接入 main process，再先补 sidecar manager contract 测试。
+
+### Review
+
+- 启动基线已确认：`git status --short --branch` 输出 `## rust-go-refactor`；`git log -5 --oneline` 最新为 `aee300a0 docs(rust-go): 同步 Phase 5 前置开发状态与下次启动入口`，其后包含 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验`。
+- 用户给出的 `docs/improve/rust-go/2026-03-phase-5-dependency-decision-record.md` 在仓库中不存在；实际读取并沿用当前文件 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`。
+- TS fallback 100MB 级 benchmark 已重新跑两轮。稳定门禁命令：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20`；Chat JSONL 99,527,780 bytes，P95 279.622ms，event loop delay 10.020ms；Agent JSONL 102,397,780 bytes，P95 216.859ms，event loop delay 1.248ms。
+- Gate 结论：100MB JSONL search 仍有 Rust 试点空间；Chat native P95 目标约 `<= 93ms`，event loop delay 目标约 `<= 3ms`；Agent native P95 目标约 `<= 108ms`。Pipeline tail 20 次迭代 P95 0.618ms、workspace warm search P95 33.556ms，暂不进入首个默认 native 能力；large-log-preview 仍归 Phase 6。
+- 已新增 `native/search/` 最小 Rust sidecar 源码：`status` 返回 protocol / capability；`search` 支持 JSONL literal search、坏行跳过、缺失 source diagnostics、limit clamp、query 长度上限、deadline typed timeout、snippet 上限、基础脱敏、UTF-16 matchedRanges 和中英文命中；`shutdown` 返回 ack；`tail_jsonl` 当前明确返回 typed `invalid_input`，因为本切片只做 search。
+- 依赖边界：已用 `cargo search serde --limit 1` 和 `cargo search serde_json --limit 1` 复核版本，`Cargo.toml` 固定 `serde = 1.0.228`、`serde_json = 1.0.150`；未运行 `cargo add`，未改 `package.json` / `bun.lock` / `electron-builder.yml`。
+- 代码审查发现并已修复：禁止 fallback 到整条 raw JSON record；long query 超过 128 chars 返回 typed `invalid_input`；snippet/matchedRanges 改为 UTF-16 code unit offset；`deadlineMs` 返回 typed `timeout`；selected text 进入 snippet 前做基础 Bearer / Authorization / credentialed URL 脱敏；`shutdown` 返回 ack 后 CLI 会退出 stdin loop。
+- 验证通过：`cargo test`（11 pass）、`cargo fmt --check`、`cargo clippy -- -D warnings`、CLI shutdown smoke、`bun test apps/electron/src/main/lib/native-runtime`（28 pass）、`bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/shared' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`git diff --check`。
+- 本轮未完成 / 未进入：未接入 `native-runtime-sidecar-manager.ts`，未让 Electron main process 调用 Rust sidecar，未做 native benchmark 对比，未创建 packaged native binary，未新增 optional package，未修改打包配置，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+
 ## 2026-06-03 Rust/Go Phase 5 前置状态同步计划
 
 范围确认：用户要求更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调“每个阶段性任务完成后自动去做”。本轮只做 Phase 5 前置状态同步，不进入 Rust 实现，不安装依赖，不创建 native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
