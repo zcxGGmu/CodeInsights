@@ -1,5 +1,44 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 native smoke script 与 cache schema 设计计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮在 native 继续 default off 的前提下，优先补 smoke script 和 native-cache schema 的可执行基础；optional package 只做设计记录，不修改 `optionalDependencies`，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现偏向 default enable 或 packaged binary，立即停止并重新规划。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/next-session-prompt.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最近历史包含 `4f9c4d28`、`40f0b06e`、`28e8a504`、`1e851056`、`65c67c52`。
+- [x] 确认当前结论：native P95 稳定达标，Chat event-loop/work-delay gate 达标，Agent native work delay 仍小幅高于 TS fallback，native 继续显式 opt-in / default off。
+
+实现计划：
+
+- [x] 测试先行新增 `native-runtime-smoke` 脚本测试，锁住参数解析、summary 脱敏、不传 binary 时跳过 native available smoke、不从系统 `PATH` 查找 native。
+- [x] 新增 smoke script，只使用显式 `--native-search-binary` 或 env 指定的本地 sidecar；覆盖 TypeScript fallback、missing binary fallback、native status/search/shutdown available smoke 和 contract summary，不生成 packaged binary。
+- [x] 测试先行新增 native-cache schema manifest 测试，锁住 cache root 位于 `getConfigDir()/native-cache`、manifest schema / protocol / package plan 字段、corruption fallback 语义和路径脱敏。
+- [x] 新增 main process native-cache schema helper，仅定义 / 读写 manifest 约定，不替代 JSON / JSONL 事实源，不接入 default enable。
+- [x] 新增或更新 Phase 5 optional package / smoke / cache 设计文档，明确 optional package 后续候选包名、平台矩阵、builder files 变更仍未实施。
+- [x] 递增受影响 package patch 版本并同步 `bun.lock`；不改 `optionalDependencies`。
+
+验证计划：
+
+- [x] 运行 smoke/cache 相关 targeted tests。
+- [x] 运行 native runtime 相关 Bun tests。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `build:main`。
+- [x] 运行 `git diff --check`，确认未修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [x] 更新 development checklist、next-session-prompt、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 启动检查已确认：当前分支 `rust-go-refactor`，最近历史包含 `4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`、`40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态`、`65c67c52 docs(rust-go): 回填 Phase 5 search 性能优化最新恢复入口`。
+- 已新增 `apps/electron/scripts/native-runtime-smoke.ts` 和 `smoke:native-runtime` 脚本。脚本使用隔离 `CODEINSIGHTS_CONFIG_DIR` fixture，不读取真实 `~/.codeinsights/`；`native-available` 只接受显式 `--native-search-binary` 或 `CODEINSIGHTS_NATIVE_SEARCH_BINARY`，未提供时标记 skipped，不从系统 `PATH` 查找；`native-missing` 验证 TS fallback 搜索可用，并验证缺失 binary 返回 `missing_binary`。
+- 已新增 `apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.ts`。cache root 固定为 `getConfigDir()/native-cache`，manifest 文件为 `manifest.json`，记录 schema / protocol / `rust-sidecar` search package plan，不记录 binary path；读取损坏 manifest 返回 `cache_corrupted` 并脱敏路径。代码审查后已补白名单归一化写入、top-level / packagePlan path-like 字段拒绝、`native-cache` symlink 拒绝和 realpath 边界校验。
+- 已更新 Phase 5 protocol / smoke plan：明确当前 smoke 子集、optional package 候选包名、平台矩阵和包内 manifest 字段；本轮没有修改 `optionalDependencies`，没有修改 `electron-builder.yml`，没有创建 packaged native binary。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.138` 并同步 `bun.lock`；新增脚本入口不会默认启用 native。
+- sidecar manager / benchmark 调度成本只读分析结论：0.1ms 级 Agent work-delay 回退更可能来自 sidecar protocol 调度常数项、baseline mismatch 和 timer jitter；当前不建议改产品链路，native 仍 default off。
+- 代码审查已完成并修复可立即处理的问题：manifest 不再透传额外路径字段，`native-cache` symlink 不会写到配置目录外，env binary smoke 语义已用测试锁住；`protocol-mismatch` / `crash` / `timeout` / `cache-corruption` smoke 仍作为后续 fixture 工作保留。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts`（5 pass）；`bun test apps/electron/scripts/native-runtime-smoke.test.ts`（5 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing --native-search-binary /tmp/codeinsights-missing-native-search`；`bun test apps/electron/src/main/lib/native-runtime apps/electron/scripts/native-runtime-benchmark.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`（64 pass）；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`git diff --check`。
+- 边界保持：native search 继续显式 opt-in / default off；未 push，未创建 PR；未修改根 `README.md` / 根 `AGENTS.md`；未修改 `electron-builder.yml`；未创建 packaged native binary。
+
 ## 2026-06-03 Rust/Go Phase 5 新 event-loop 字段稳定 benchmark 复跑计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只用新增 event-loop samples / baseline / work delay 字段复跑 100MB / 20 iterations 稳定 benchmark，重新评估 Agent event-loop gate，并同步状态文档。默认 native 继续关闭；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

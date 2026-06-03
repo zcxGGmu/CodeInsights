@@ -1,6 +1,6 @@
 {
   "name": "@codeinsights/electron",
-  "version": "0.0.137",
+  "version": "0.0.138",
   "description": "CodeInsights next gen ai software with general agents - Electron App",
   "main": "dist/main.cjs",
   "author": {
@@ -39,7 +39,8 @@
     "smoke:agent-opencode": "bun run scripts/agent-opencode-smoke.ts",
     "smoke:agent-history-reload-ui": "bun run scripts/agent-history-reload-ui-smoke.ts",
     "smoke:pipeline-fixture": "bun run scripts/pipeline-fixture-smoke.ts",
-    "native-runtime:benchmark": "bun run scripts/native-runtime-benchmark.ts"
+    "native-runtime:benchmark": "bun run scripts/native-runtime-benchmark.ts",
+    "smoke:native-runtime": "bun run scripts/native-runtime-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.123",

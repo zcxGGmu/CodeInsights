@@ -1,0 +1,238 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
+import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
+import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
+
+export type NativeRuntimeSmokeMode =
+  | 'native-missing'
+  | 'native-available'
+  | 'protocol-mismatch'
+  | 'crash'
+  | 'timeout'
+  | 'cache-corruption'
+
+export interface NativeRuntimeSmokeOptions {
+  mode: NativeRuntimeSmokeMode
+  nativeSearchBinary?: string
+  query: string
+  env?: NodeJS.ProcessEnv
+}
+
+export interface NativeRuntimeSmokeCase {
+  name: string
+  status: 'passed' | 'failed' | 'skipped'
+  detail?: string
+}
+
+export interface NativeRuntimeSmokeSummary {
+  schemaVersion: number
+  generatedAt: string
+  mode: NativeRuntimeSmokeMode
+  nativeSearchBinaryProvided: boolean
+  cases: NativeRuntimeSmokeCase[]
+}
+
+const DEFAULT_OPTIONS: NativeRuntimeSmokeOptions = {
+  mode: 'native-missing',
+  query: '关键字',
+}
+
+export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeOptions {
+  const options: NativeRuntimeSmokeOptions = { ...DEFAULT_OPTIONS }
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    const value = args[index + 1]
+    if (!value) continue
+
+    if (arg === '--mode') {
+      options.mode = parseSmokeMode(value)
+      index += 1
+    } else if (arg === '--native-search-binary') {
+      options.nativeSearchBinary = value
+      index += 1
+    } else if (arg === '--query') {
+      options.query = value
+      index += 1
+    }
+  }
+
+  if (!options.nativeSearchBinary) {
+    const envBinary = process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY?.trim()
+    if (envBinary) options.nativeSearchBinary = envBinary
+  }
+
+  return options
+}
+
+export function buildNativeRuntimeSmokeSummary(input: {
+  mode: NativeRuntimeSmokeMode
+  nativeSearchBinary?: string
+  cases: NativeRuntimeSmokeCase[]
+}): NativeRuntimeSmokeSummary {
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    mode: input.mode,
+    nativeSearchBinaryProvided: Boolean(input.nativeSearchBinary),
+    cases: input.cases.map((smokeCase) => ({
+      ...smokeCase,
+      detail: smokeCase.detail ? redactNativeRuntimeText(smokeCase.detail) : undefined,
+    })),
+  }
+}
+
+export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions): Promise<NativeRuntimeSmokeSummary> {
+  const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-smoke-'))
+  const previousConfigDir = process.env.CODEINSIGHTS_CONFIG_DIR
+  const cases: NativeRuntimeSmokeCase[] = []
+
+  try {
+    process.env.CODEINSIGHTS_CONFIG_DIR = join(rootDir, 'config')
+    mkdirSync(process.env.CODEINSIGHTS_CONFIG_DIR, { recursive: true })
+    const fixturePath = join(rootDir, 'chat.jsonl')
+    writeFileSync(fixturePath, `${JSON.stringify({
+      id: 'msg-1',
+      role: 'assistant',
+      content: `这里包含${options.query}`,
+      createdAt: 1,
+    })}\n`, 'utf-8')
+
+    cases.push(await runTypeScriptFallbackCase(fixturePath, options.query))
+
+    if (options.mode === 'native-missing') {
+      cases.push(await runNativeMissingCase(options.nativeSearchBinary ?? join(rootDir, 'missing-native-search')))
+    } else if (options.mode === 'native-available') {
+      cases.push(await runNativeAvailableCase(options.nativeSearchBinary, fixturePath, options.query, options.env))
+    } else {
+      cases.push({
+        name: options.mode,
+        status: 'skipped',
+        detail: `${options.mode} smoke 尚未接入真实 packaged fixture，本轮只保留计划入口。`,
+      })
+    }
+
+    return buildNativeRuntimeSmokeSummary({
+      mode: options.mode,
+      nativeSearchBinary: options.nativeSearchBinary,
+      cases,
+    })
+  } finally {
+    if (previousConfigDir == null) {
+      delete process.env.CODEINSIGHTS_CONFIG_DIR
+    } else {
+      process.env.CODEINSIGHTS_CONFIG_DIR = previousConfigDir
+    }
+    rmSync(rootDir, { recursive: true, force: true })
+  }
+}
+
+async function runTypeScriptFallbackCase(filePath: string, query: string): Promise<NativeRuntimeSmokeCase> {
+  const service = new TypeScriptEventSearchService()
+  const result = await service.searchMatchesInSource<Record<string, unknown>, string>({
+    requestId: 'native-runtime-smoke-ts-fallback',
+    query,
+    filePath,
+    sourceKind: 'chat_message',
+    sourceId: 'smoke-chat',
+    title: 'Smoke Chat',
+    limit: 10,
+    getRecordId: (record) => typeof record.id === 'string' ? record.id : '',
+    getRecordText: (record) => typeof record.content === 'string' ? record.content : null,
+    toLegacyResult: ({ record }) => typeof record.id === 'string' ? record.id : '',
+  })
+
+  return {
+    name: 'typescript-fallback-search',
+    status: result.searchResult.matches.length > 0 ? 'passed' : 'failed',
+    detail: `TS fallback matches=${result.searchResult.matches.length}`,
+  }
+}
+
+async function runNativeMissingCase(binaryPath: string): Promise<NativeRuntimeSmokeCase> {
+  const manager = new NativeRuntimeSidecarManager({ binaryPath })
+  const status = await manager.getStatus()
+  await manager.shutdown().catch(() => false)
+  return {
+    name: 'native-missing',
+    status: status.fallbackReason === 'missing_binary' ? 'passed' : 'failed',
+    detail: `fallbackReason=${status.fallbackReason ?? 'none'}`,
+  }
+}
+
+async function runNativeAvailableCase(
+  binaryPath: string | undefined,
+  filePath: string,
+  query: string,
+  env?: NodeJS.ProcessEnv,
+): Promise<NativeRuntimeSmokeCase> {
+  if (!binaryPath) {
+    return {
+      name: 'native-available',
+      status: 'skipped',
+      detail: '未提供显式 native-search binary；smoke 不从系统 PATH 查找。',
+    }
+  }
+
+  const manager = new NativeRuntimeSidecarManager({ binaryPath, env })
+  try {
+    const status = await manager.getStatus()
+    if (!status.nativeEnabled) {
+      return {
+        name: 'native-available',
+        status: 'failed',
+        detail: `native status fallbackReason=${status.fallbackReason ?? 'none'}`,
+      }
+    }
+
+    const result = await manager.search({
+      requestId: 'native-runtime-smoke-native-search',
+      query,
+      limit: 10,
+      sources: [{
+        sourceKind: 'chat_message',
+        sourceId: 'smoke-chat',
+        sessionId: 'smoke-chat',
+        title: 'Smoke Chat',
+        filePath,
+        textFields: ['content'],
+        idField: 'id',
+      }],
+    })
+
+    return {
+      name: 'native-available',
+      status: result.matches.length > 0 ? 'passed' : 'failed',
+      detail: `implementation=${status.implementation}; matches=${result.matches.length}`,
+    }
+  } finally {
+    await manager.shutdown().catch(() => false)
+  }
+}
+
+function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
+  if (
+    value === 'native-missing'
+    || value === 'native-available'
+    || value === 'protocol-mismatch'
+    || value === 'crash'
+    || value === 'timeout'
+    || value === 'cache-corruption'
+  ) {
+    return value
+  }
+  return DEFAULT_OPTIONS.mode
+}
+
+if (import.meta.main) {
+  try {
+    const summary = await runNativeRuntimeSmoke(parseNativeRuntimeSmokeArgs(process.argv.slice(2)))
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`[Native Runtime Smoke] ${redactNativeRuntimeText(message)}\n`)
+    process.exitCode = 1
+  }
+}

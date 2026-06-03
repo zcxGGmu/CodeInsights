@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate 和 search 早停性能优化，尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本和 native-cache manifest schema helper，尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`
 
 ## 目标
 
@@ -40,6 +40,14 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - packaged smoke
 - optional package
 - default enable
+
+当前新增的 smoke / cache 基础：
+
+- `apps/electron/scripts/native-runtime-smoke.ts` 已接入 `smoke:native-runtime`，支持 `native-missing` 与 `native-available` 基础入口。
+- `native-available` 只有显式传 `--native-search-binary` 或 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 时才尝试 native；未提供时标记 skipped，不从系统 `PATH` 查找。
+- `native-missing` 使用隔离 `CODEINSIGHTS_CONFIG_DIR` fixture，验证 TypeScript fallback 搜索可用，并验证缺失 binary 返回 `missing_binary`。
+- `apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.ts` 已定义 `getConfigDir()/native-cache/manifest.json` manifest 约定，记录 schema / protocol / package plan，不记录 binary path；损坏 manifest 返回 `cache_corrupted`。
+- 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
 
@@ -256,12 +264,47 @@ Smoke cases:
 | timeout | fake sidecar 不响应 | 当前请求 fallback，pending request 被清理 |
 | cache corruption | 损坏 native-cache | cache 被隔离 / 清理，JSON / JSONL 事实源不变 |
 
+当前已实现的 smoke 子集：
+
+```bash
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing --native-search-binary /tmp/codeinsights-missing-native-search
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-available --native-search-binary /abs/path/to/local/codeinsights-native-search
+```
+
+- `native-missing` 已作为非 packaged smoke 可执行，输出 JSON summary，不打印 binary path。
+- `native-available` 仅验证显式本地 binary 的 status / search / shutdown；它不是 bundled binary smoke。
+- `protocol-mismatch`、`crash`、`timeout`、`cache-corruption` 目前保留入口并标记 skipped，后续应接入 fake sidecar / isolated cache fixture。
+
 Smoke output rules:
 
 - 不打印 token、Authorization、credentialed URL、完整 home path。
 - 不把 `binaryPath` 推给 renderer。
 - 不读取用户真实 `~/.codeinsights/`；使用隔离 `CODEINSIGHTS_CONFIG_DIR` fixture。
 - 不 push、不创建 PR、不触发真实模型调用。
+
+## Optional Package Plan
+
+本轮只记录设计，不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改 `electron-builder.yml`。
+
+后续若进入 packaged native binary 阶段，候选包名按平台拆分：
+
+| Platform | Package | Binary |
+| --- | --- | --- |
+| darwin arm64 | `@codeinsights/native-search-darwin-arm64` | `codeinsights-native-search` |
+| darwin x64 | `@codeinsights/native-search-darwin-x64` | `codeinsights-native-search` |
+| win32 x64 | `@codeinsights/native-search-win32-x64` | `codeinsights-native-search.exe` |
+| linux x64 | `@codeinsights/native-search-linux-x64` | `codeinsights-native-search` |
+
+包内 manifest 应至少包含：
+
+- package name / version
+- app protocol version
+- native cache schema version
+- binary name
+- platform / arch
+- SHA-256 fingerprint
+
+主进程仍必须显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。
 
 ## Performance Gate
 

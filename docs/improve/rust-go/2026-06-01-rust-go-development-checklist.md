@@ -9,9 +9,9 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-03
-> 最新开发基线：`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`。
-> 最新已确认恢复入口：`40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`；本轮状态同步提交后，以 `git log -5 --oneline` 中最新的 `docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论` 为实际恢复入口。
-> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search opt-in fallback 边界、Rust vs TS contract parity、100MB native benchmark 对比、search `limit + 1` 早停性能优化和 benchmark event-loop 口径增强；尚未实现 packaged native binary、optional package、packaged smoke 或 Go supervisor。
+> 最新开发基线：`4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`。
+> 最新已确认恢复入口：`4f9c4d28 docs(rust-go): 同步 Phase 5 新 event-loop benchmark 结论`；本轮实现与状态同步提交后，以 `git log -5 --oneline` 中最新的 `feat(rust-go): 补齐 Phase 5 native smoke 与 cache schema 基础` 或后续 docs 提交为实际恢复入口。
+> 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search opt-in fallback 边界、Rust vs TS contract parity、100MB native benchmark 对比、search `limit + 1` 早停性能优化、benchmark event-loop 口径增强、基础 `smoke:native-runtime` 脚本和 native-cache manifest schema helper；尚未实现 packaged native binary、optional package、packaged smoke 或 Go supervisor。
 > 当前策略：Phase 5 native search 仍不能默认启用。本轮已用新增 event-loop samples / baseline / work delay 字段复跑 2 轮 100MB / 20 iterations 稳定 benchmark；Rust native Chat / Agent P95 仍远超性能门槛，Chat work delay gate 达标，但 Agent native `eventLoopWorkDelayP95Ms` 两轮仍高于 TS fallback（0.065ms vs 0ms；0.164ms vs 0.047ms），未扣 baseline 的 Agent `eventLoopDelayP95Ms` 也两轮小幅回退（1.199ms vs 1.121ms；1.191ms vs 1.114ms）。这些差异绝对值很小，但方向仍不支持 default enable；在 packaged smoke、optional package、native-cache schema、smoke script 和 default-enable 风险评估完成前，native 必须继续保持显式 opt-in / default off。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
 ### 当前阶段完成状态
@@ -26,7 +26,7 @@
 - [x] Phase 2：Pipeline records cursor / tail 与全局搜索接入。
 - [x] Phase 3：Workspace 文件索引 TS cache 与 watcher invalidation。
 - [x] Phase 4：前端可见体验、Jotai 状态和 diagnostics。
-- [~] Phase 5：Rust search sidecar 试点（前置依赖决策、protocol / smoke 计划、100MB TS fallback benchmark gate、最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、fallback gate、contract parity、native benchmark 对比、search 早停性能优化、2 轮稳定 benchmark 复跑、benchmark event-loop 口径增强和新字段稳定 benchmark 复跑已完成；Agent event-loop work delay 仍小幅回退，packaged smoke、optional package、native-cache schema 与 default-enable 风险评估未完成，default enable 与 packaged smoke 尚未完成）。
+- [~] Phase 5：Rust search sidecar 试点（前置依赖决策、protocol / smoke 计划、100MB TS fallback benchmark gate、最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、fallback gate、contract parity、native benchmark 对比、search 早停性能优化、2 轮稳定 benchmark 复跑、benchmark event-loop 口径增强、新字段稳定 benchmark 复跑、基础 smoke script 和 native-cache manifest schema helper 已完成；Agent event-loop work delay 仍小幅回退，packaged smoke、optional package、default-enable 风险评估未完成，default enable 与 packaged smoke 尚未完成）。
 - [ ] Phase 6：大文件 / 日志 chunk preview。
 - [ ] Phase 7：PathSafety 与 GitOutputParser 抽象。
 - [ ] Phase 8：打包、CI、版本与发布收口。
@@ -51,7 +51,9 @@
 - [x] Phase 5 稳定 benchmark gate 已复跑 2 轮。本轮先发现本地 release binary 仍报告 `0.0.1-dev`，已用 `cargo build --release --manifest-path native/search/Cargo.toml` 重建并确认 `0.0.2-dev` 后再跑 benchmark。第 1 轮：TS Chat P95 277.973ms / event loop 62.511ms，Rust native Chat P95 3.516ms / event loop 1.651ms；TS Agent P95 227.239ms / event loop 1.269ms，Rust native Agent P95 2.203ms / event loop 1.732ms。第 2 轮：TS Chat P95 267.874ms / event loop 9.793ms，Rust native Chat P95 3.429ms / event loop 1.478ms；TS Agent P95 220.111ms / event loop 1.127ms，Rust native Agent P95 2.201ms / event loop 1.416ms。结论：P95 gate 稳定达标，Chat event loop gate 达标；Agent event loop delay 绝对值很小但两轮均高于 TS，default enable 仍阻断。
 - [x] Benchmark event-loop 口径增强已完成：旧 `eventLoopDelayMs` 保持为 max 兼容字段；新增 `eventLoopDelaySamplesMs`、`eventLoopDelayMaxMs`、`eventLoopDelayP95Ms`、`eventLoopBaselineMs`、`eventLoopBaselineP95Ms`、`eventLoopWorkDelayMs`、`eventLoopWorkDelayP95Ms`、`eventLoopWorkDelaySamplesMs`，并新增 `native-sidecar-status-cache-overhead` case。小规模 native smoke 已确认本地 `0.0.2-dev` release binary 输出新字段；样例中 native Agent event-loop delay 1.159ms、baseline 1.261ms、work delay 0ms。
 - [x] Phase 5 新 event-loop 字段稳定 benchmark 已复跑 2 轮。本轮先用 release sidecar `status` 确认本地 ignored binary 为 `0.0.2-dev`，未重建、未创建 packaged native binary。第 1 轮：TS Chat P95 280.989ms / delay P95 3.146ms / work delay P95 2.004ms，Rust native Chat P95 3.921ms / delay P95 1.208ms / work delay P95 0.044ms；TS Agent P95 220.475ms / delay P95 1.121ms / work delay P95 0ms，Rust native Agent P95 2.240ms / delay P95 1.199ms / work delay P95 0.065ms。第 2 轮：TS Chat P95 294.904ms / delay P95 1.528ms / work delay P95 0.370ms，Rust native Chat P95 4.957ms / delay P95 1.198ms / work delay P95 0.064ms；TS Agent P95 220.871ms / delay P95 1.114ms / work delay P95 0.047ms，Rust native Agent P95 2.432ms / delay P95 1.191ms / work delay P95 0.164ms。`native-sidecar-status-cache-overhead` P95 为 0.014ms / 0.013ms，work delay P95 为 0.311ms / 0.012ms。结论：P95 gate 继续稳定达标，Chat work delay gate 达标；Agent native work delay 仍两轮小幅高于 TS fallback，且 packaged smoke / optional package / native-cache schema / smoke script 未完成，native 继续显式 opt-in / default off。
-- [ ] Rust optional package、native-cache schema、smoke script、packaged smoke 和 default-enable 判断尚未实现。
+- [x] 基础 `smoke:native-runtime` 脚本已完成：支持 `native-missing`、`native-available` 入口，未显式提供 binary 时跳过 native available，不从系统 `PATH` 查找；native missing smoke 已验证 TS fallback 可用和 `missing_binary` fallback。
+- [x] native-cache manifest schema helper 已完成：cache root 固定为 `getConfigDir()/native-cache`，manifest 记录 schema / protocol / search package plan，不记录 binary path，损坏 manifest 返回 `cache_corrupted`。
+- [ ] Rust optional package、packaged smoke 和 default-enable 判断尚未实现。
 - [ ] Go supervisor 未进入主线，必须等 Phase 9 触发条件成立。
 - [ ] 根 `README.md` / 根 `AGENTS.md` 未同步；需要用户明确允许后才可修改。
 
@@ -688,10 +690,10 @@ git status --short --branch
 
 - [x] 阶段开始
 - [x] 依赖评估完成
-- [~] 测试先行完成（Rust search-only sidecar 单测已完成；sidecar manager / contract parity / packaged smoke 测试尚未完成）
-- [~] 实现完成（Rust search-only sidecar 源码切片已完成；Electron main process 集成尚未完成）
-- [~] 验证完成（Rust / TS fallback / typecheck 已通过；native benchmark / packaged smoke 尚未完成）
-- [~] 阶段 Review 完成（已记录前置 Review 和 search-only 源码切片 Review；完整 Phase 5 Review 尚未完成）
+- [~] 测试先行完成（Rust search-only sidecar、sidecar manager、contract parity、benchmark、smoke script 和 native-cache schema 基础测试已完成；packaged smoke 测试尚未完成）
+- [~] 实现完成（Rust search-only sidecar、Electron main process sidecar manager、Chat opt-in native search、benchmark 增强、基础 smoke script 和 native-cache schema helper 已完成；optional package、packaged binary 和 default enable 尚未完成）
+- [~] 验证完成（Rust / native runtime tests / typecheck / build:main / benchmark 已通过；packaged smoke 尚未完成）
+- [~] 阶段 Review 完成（已记录前置、search-only、sidecar manager、性能优化、benchmark gate、smoke/cache schema Review；完整 Phase 5 Review 尚未完成）
 - [ ] 阶段提交完成
 
 ### 目标
@@ -712,37 +714,39 @@ git status --short --branch
 - [x] 定义 sidecar protocol：首版采用 stdin / stdout line-delimited JSON protocol，详见 `2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
 - [~] 实现 `status`、`search`、`shutdown`；`tail_jsonl` 当前返回 typed `invalid_input`，因为 benchmark 显示 tail 不是首个 native 默认收益点。
 - [x] 实现 protocol version、cache schema version、capability handshake：`status` 返回 `protocolVersion = 1`、`cacheSchemaVersion = 1`、`capabilities = ["diagnostics", "indexed-search"]`。
-- [~] 所有返回 JSON 通过 Rust 单测覆盖基础 shape；TS fallback contract parity 测试尚未接入。
+- [x] 所有返回 JSON 通过 Rust 单测覆盖基础 shape；TS fallback contract parity 已接入真实 Rust sidecar。
 - [x] stdout 只输出 protocol JSON；当前 Rust sidecar 不写 stderr，search snippet 已限制长度并做基础 token / Authorization / credentialed URL 脱敏。
-- [~] 对 timeout、bad request 返回 typed error；panic / corrupted cache / crash fallback 需等 sidecar manager 阶段覆盖。
+- [x] 对 timeout、bad request 返回 typed error；sidecar manager 已覆盖 crash、timeout、contract violation、version mismatch 和 missing binary fallback。
 
 ### 主进程集成任务
 
-- [ ] 新增 `native-runtime-sidecar-manager.ts`，复用 opencode server manager 的 lifecycle 思路。
-- [ ] main process 启动时只做轻量探测，不阻塞应用可交互。
-- [ ] 首次搜索或 rebuild 时懒启动 sidecar。
-- [ ] sidecar crash 后本进程禁用 native 并 fallback TS。
-- [ ] contract violation 后本进程禁用 native，记录 diagnostics。
-- [ ] 所有 native 结果进入 service 前做 schema 校验和二次脱敏。
+- [x] 新增 `native-runtime-sidecar-manager.ts`，封装 sidecar lifecycle、status、search、shutdown、timeout 和 pending cleanup。
+- [x] main process 默认不启动 native；只有显式 env opt-in 且给出 binary path 时才创建 sidecar manager。
+- [x] 首次 `status` / `search` 时懒启动 sidecar。
+- [x] sidecar crash 后本进程禁用 native 并 fallback TS（拒绝类错误除外）。
+- [x] contract violation 后本进程禁用 native，记录 diagnostics。
+- [x] 所有 native 结果进入 service 前做 schema 校验和二次脱敏。
 
 ### 测试任务
 
-- [~] `cargo test` 覆盖 protocol parser、status、search、bad line、missing source、empty query、limit clamp、long query、deadline、snippet cap、redaction 和 UTF-16 offset；tail / cache corruption 尚未进入 search-only 切片。
-- [ ] Contract parity 测试：同一 fixture 对比 TS fallback 与 Rust 输出。
-- [ ] Sidecar manager 测试覆盖 missing binary、version mismatch、timeout、crash、shutdown。
+- [x] `cargo test` 覆盖 protocol parser、status、search、bad line、missing source、empty query、limit clamp、long query、deadline、snippet cap、redaction 和 UTF-16 offset；tail 仍未进入 search-only 切片。
+- [x] Contract parity 测试：同一 fixture 对比 TS fallback 与 Rust 输出。
+- [x] Sidecar manager 测试覆盖 missing binary、version mismatch、timeout、crash、shutdown、contract violation 和拒绝类错误不 fallback。
+- [x] 基础 smoke script 测试覆盖参数解析、脱敏、native available 无 binary 时跳过且不从系统 `PATH` 查找、native missing fallback。
 - [ ] Packaged smoke 覆盖 bundled binary path，不使用系统 `PATH`。
-- [ ] Benchmark 对比 Phase 0 / Phase 1 / Phase 5 的性能。
+- [x] Benchmark 对比 Phase 0 / Phase 1 / Phase 5 的性能。
 
 ### 触达文件
 
 - [x] `native/search/` 或最终确认的 Rust 目录。
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
-- [ ] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
-- [ ] `apps/electron/scripts/native-runtime-smoke.ts`
-- [ ] `apps/electron/package.json`
-- [ ] `electron-builder.yml`
-- [ ] `bun.lock`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-service.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-diagnostics.ts`
+- [x] `apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.ts`
+- [x] `apps/electron/scripts/native-runtime-smoke.ts`
+- [x] `apps/electron/package.json`
+- [skip] `electron-builder.yml`：本轮明确不创建 packaged native binary、不改打包配置。
+- [x] `bun.lock`
 
 ### 验证命令
 
