@@ -1,5 +1,25 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 bundled resolver 恢复入口回填计划
+
+范围确认：用户要求再次更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调阶段性任务完成后自动做状态同步。当前实现基线为 `ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`，最新状态同步提交为 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`。本轮只做恢复入口回填和习惯固化，不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最新提交为 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`。
+- [x] 更新 development checklist，把最新开发基线保持为 `ce104a59`，最新已确认恢复入口回填为 `e95cd284`，并确认完成 / 未完成清单仍准确。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把仓库内可复制提示词推进到 `e95cd284`，下一步继续指向真实 optional package / 真实 packaged app bundled binary smoke 或 Agent work-delay 分析。
+- [x] 更新 `tasks/lessons.md`，记录阶段任务完成后要自动做状态同步并回填真实 docs 提交，避免提示词停在实现提交。
+- [x] 更新本 `tasks/todo.md` Review，记录验证、禁止事项和最终下次入口。
+- [x] 运行 `git diff --check` 和禁改文件检查，确认未触碰根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml` / native binary。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 本轮只做状态文档同步，没有修改业务代码、Rust / Go 源码、打包配置或根文档。
+- 最新开发基线保持为 `ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`；最新已确认恢复入口已回填为 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`。若本轮状态同步再次提交，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 已完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 已完成 search sidecar、sidecar manager、fallback gate、contract parity、benchmark、fake sidecar / cache corruption smoke、native-cache schema、optional package manifest schema、packaged-manifest preflight 和 bundled package resolver fixture；真实 optional package / `optionalDependencies`、真实 packaged app bundled binary smoke、default enable、Phase 6-9 仍未完成。
+- 边界保持：native 继续显式 opt-in / default off；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+- 验证通过：`git diff --check`；`git diff --name-only | rg '(^README\.md$|^AGENTS\.md$|^apps/electron/electron-builder\.yml$|native/search/target|\.exe$|codeinsights-native-search$)' || true` 无命中；旧恢复入口 / 旧未完成措辞搜索无命中。
+
 ## 2026-06-03 Rust/Go Phase 5 bundled package resolver / packaged smoke fixture 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只推进 bundled package resolver 的可测试设计和 smoke fixture：允许用临时 fixture package + 临时可执行文件验证 manifest / SHA-256 / bundled source / no PATH lookup 逻辑；不创建真实 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现需要真实 optional package 发布、打包配置或真实 packaged app，立即停止并重新规划。

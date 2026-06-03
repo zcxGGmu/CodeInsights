@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 bundled resolver 状态回填习惯
+
+- 当阶段实现提交和状态同步提交都已存在时，用户再次要求“更新最新开发状态 / 完成未完成 / 下次启动提示词”，不能让仓库提示词停在实现提交；必须把最新已存在的 docs 提交（例如 `e95cd284 docs(rust-go): 同步 Phase 5 bundled resolver 后续状态`）回填为最新已确认恢复入口。
+- 仓库文档不能可靠写入自身提交 hash 时，要写清“若本轮再次产生状态同步提交，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口”；最终回复再给出本轮提交后的实际 HEAD。
+- 每个阶段性任务完成后自动执行同一闭环：`tasks/todo.md` 状态同步计划、development checklist、next-session prompt、lessons、Review、验证、单独提交、最终可复制提示词。不要等用户再次提醒。
+
 ## 2026-06-03 Rust / Go Phase 5 bundled package resolver fixture 边界
 
 - bundled package resolver 不能只依赖 Node module resolution：`createRequire().resolve()` 可能解析到上级、用户或全局 `node_modules` 的同名包；packaged resolver 必须把 package manifest 和 binary 的 realpath 限制在 app `node_modules` allowlist 内，并且不能从系统 `PATH` 查找。
