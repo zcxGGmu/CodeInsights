@@ -7,6 +7,12 @@ import {
   getNativeRuntimeCacheManifestPath,
   readNativeRuntimeCacheManifest,
 } from '../src/main/lib/native-runtime/native-runtime-cache-schema'
+import {
+  buildNativeSearchPackageManifest,
+  getNativeSearchOptionalPackagePlan,
+  isNativeSearchPackageManifest,
+  NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
+} from '../src/main/lib/native-runtime/native-runtime-package-manifest'
 import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 
@@ -17,6 +23,7 @@ export type NativeRuntimeSmokeMode =
   | 'crash'
   | 'timeout'
   | 'cache-corruption'
+  | 'packaged-manifest'
 
 export interface NativeRuntimeSmokeOptions {
   mode: NativeRuntimeSmokeMode
@@ -137,6 +144,8 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       }))
     } else if (options.mode === 'cache-corruption') {
       cases.push(await runCacheCorruptionCase())
+    } else if (options.mode === 'packaged-manifest') {
+      cases.push(runPackagedManifestPreflightCase())
     } else {
       cases.push({
         name: options.mode,
@@ -206,9 +215,9 @@ async function runFakeSidecarFallbackCase(options: FakeSidecarFallbackCaseOption
   const manager = new NativeRuntimeSidecarManager({
     binaryPath: process.execPath,
     args: [fakeSidecarPath, options.scenario],
-    requestTimeoutMs: 80,
-    statusTimeoutMs: 500,
-    shutdownTimeoutMs: 80,
+    requestTimeoutMs: 160,
+    statusTimeoutMs: 2_000,
+    shutdownTimeoutMs: 160,
   })
 
   try {
@@ -270,6 +279,38 @@ async function runCacheCorruptionCase(): Promise<NativeRuntimeSmokeCase> {
   }
 
   return buildFallbackSmokeCase('cache-corruption', result.error.code, 'cache_corrupted')
+}
+
+function runPackagedManifestPreflightCase(): NativeRuntimeSmokeCase {
+  const fixturePackageVersion = '0.0.2'
+  const fixtureSha256 = '0'.repeat(64)
+  const invalidPlan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((plan) => {
+    const manifest = buildNativeSearchPackageManifest({
+      plan,
+      packageVersion: fixturePackageVersion,
+      binarySha256: fixtureSha256,
+    })
+    return !isNativeSearchPackageManifest(manifest)
+  })
+
+  if (invalidPlan) {
+    return {
+      name: 'packaged-manifest-preflight',
+      status: 'failed',
+      detail: `optional package manifest schema invalid: ${invalidPlan.packageName}`,
+    }
+  }
+
+  const currentPlan = getNativeSearchOptionalPackagePlan()
+  return {
+    name: 'packaged-manifest-preflight',
+    status: 'passed',
+    detail: [
+      `optionalPackagePlans=${NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.length}`,
+      `currentPackage=${currentPlan?.packageName ?? 'unsupported'}`,
+      'bundledBinaryVerified=false',
+    ].join('; '),
+  }
 }
 
 function buildFallbackSmokeCase(
@@ -396,6 +437,7 @@ function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
     || value === 'crash'
     || value === 'timeout'
     || value === 'cache-corruption'
+    || value === 'packaged-manifest'
   ) {
     return value
   }

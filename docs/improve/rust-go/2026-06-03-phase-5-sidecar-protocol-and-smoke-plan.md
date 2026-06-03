@@ -49,6 +49,8 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.ts` 已定义 `getConfigDir()/native-cache/manifest.json` manifest 约定，记录 schema / protocol / package plan，不记录 binary path；损坏 manifest 返回 `cache_corrupted`。
 - `protocol-mismatch`、`crash`、`timeout` 已接入 `process.execPath + 临时 JS fake sidecar` fixture，分别验证 `version_mismatch`、`crashed`、`timeout` fallback，且每个 mode 都同时验证 TypeScript fallback 搜索仍可用。
 - `cache-corruption` 已接入隔离 `CODEINSIGHTS_CONFIG_DIR/native-cache/manifest.json` fixture，写入损坏 manifest 后验证 `readNativeRuntimeCacheManifest()` 返回 `cache_corrupted`，不读取真实 `~/.codeinsights/`。
+- `apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.ts` 已定义 optional package manifest schema helper，固定 4 个候选平台包、校验 package version / protocol / cache schema / platform / arch / binary name / SHA-256 fingerprint，并使用 exact-key 白名单拒绝 `binaryPath` / home / path-like 额外字段。
+- `packaged-manifest` 已作为非 packaged 预检 mode 接入 `smoke:native-runtime`，只验证 optional package manifest 形状和 TS fallback 可用，summary 明确输出 `bundledBinaryVerified=false`。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -252,6 +254,7 @@ bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protoco
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode crash
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode timeout
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode cache-corruption
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest
 ```
 
 Smoke cases:
@@ -265,6 +268,7 @@ Smoke cases:
 | crash | fake sidecar 收到请求后退出 | fallback reason = `crashed`，后续请求走 TS |
 | timeout | fake sidecar 不响应 | 当前请求 fallback，pending request 被清理 |
 | cache corruption | 损坏 native-cache | cache 被隔离 / 清理，JSON / JSONL 事实源不变 |
+| packaged manifest preflight | 临时 fixture 校验 optional package manifest schema | manifest schema / platform matrix 通过，`bundledBinaryVerified=false` |
 
 当前已实现的 smoke 子集：
 
@@ -275,12 +279,14 @@ bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode protoco
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode crash
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode timeout
 bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode cache-corruption
+bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest
 ```
 
 - `native-missing` 已作为非 packaged smoke 可执行，输出 JSON summary，不打印 binary path。
 - `native-available` 仅验证显式本地 binary 的 status / search / shutdown；它不是 bundled binary smoke。
 - `protocol-mismatch`、`crash`、`timeout` 已作为非 packaged fake sidecar smoke 可执行，输出 JSON summary，不打印 fake sidecar 路径。
 - `cache-corruption` 已作为 isolated cache smoke 可执行，使用临时 `CODEINSIGHTS_CONFIG_DIR`，不读取真实配置目录。
+- `packaged-manifest` 已作为 optional package manifest 预检可执行，校验 4 个平台包的 manifest 契约和当前平台计划；它仍不是 bundled binary packaged smoke。
 
 Smoke output rules:
 
@@ -310,6 +316,15 @@ Smoke output rules:
 - binary name
 - platform / arch
 - SHA-256 fingerprint
+
+当前已落地的 TypeScript manifest helper 约束：
+
+- schema version 固定为 `1`。
+- package plan 固定为 `@codeinsights/native-search-darwin-arm64`、`@codeinsights/native-search-darwin-x64`、`@codeinsights/native-search-win32-x64`、`@codeinsights/native-search-linux-x64`。
+- `packageVersion` 必须是简单 semver 形态。
+- `binarySha256` 必须是 64 位 hex SHA-256 字符串，写入时统一小写。
+- manifest 使用 exact-key 白名单；不允许 `binaryPath`、`path`、`*Path`、`home`、`homeDir`、`homePath` 或任意额外字段。
+- manifest helper 只描述包元数据，不解析真实 `node_modules`，不证明 binary 存在，也不替代后续 packaged smoke。
 
 主进程仍必须显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。
 

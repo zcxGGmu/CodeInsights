@@ -1,5 +1,45 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 optional package manifest / packaged smoke 预检计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只把 optional package manifest 和 packaged smoke 从文档描述推进到可测试的 schema / fixture / 预检设计；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若实现需要真实 packaged binary、打包配置或新依赖，立即停止并重新规划。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最近历史包含 `9fe91b03`、`fb7e2d73`、`2cc95b1b`、`9c102c0a`、`c6104eee`。
+- [x] 运行 `git log -8 --oneline`，确认更早 benchmark 文档提交 `4f9c4d28` 仍在历史中。
+- [x] 确认当前结论：native P95 稳定达标，Chat event-loop/work-delay gate 达标，Agent native work delay 仍小幅高于 TS fallback；packaged smoke、optional package、default-enable 风险评估仍未完成，所以 native 继续显式 opt-in / default off。
+
+实现计划：
+
+- [x] 测试先行扩展 native-cache / package manifest schema，锁住 optional package manifest 的 package name、version、protocol、cache schema、platform、arch、binary name、sha256 字段，不允许 binary path / home path / 任意 path-like 字段进入 manifest。
+- [x] 新增或扩展 main process helper，用白名单生成当前平台 package manifest 计划；只描述 package / binary 元数据，不解析真实 node_modules、不写真实 binary。
+- [x] 扩展 `smoke:native-runtime`，新增 packaged manifest fixture / preflight mode：使用临时 manifest fixture 验证 packaged smoke 未来所需字段、平台矩阵和不从系统 `PATH` 查找的设计边界；不得把它命名为真实 bundled binary smoke 通过。
+- [x] 更新 Phase 5 sidecar protocol / smoke plan，把 optional package manifest 字段、packaged smoke 分层、禁止实施项和后续真实 packaged smoke 入口写清。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不修改 `optionalDependencies`。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，确认未修改 `electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [ ] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 已新增 `apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.ts`，固定 4 个候选平台包：darwin arm64、darwin x64、win32 x64、linux x64。helper 只生成 / 校验 package manifest 元数据，不读取真实 `node_modules`，不解析 bundled binary path，不写 native binary。
+- optional package manifest schema 已锁住：`schemaVersion`、`packageName`、`packageVersion`、`protocolVersion`、`cacheSchemaVersion`、`platform`、`arch`、`binaryName`、`binarySha256`。`packageVersion` 必须为简单 semver，`binarySha256` 必须为 64 位 hex，manifest 使用 exact-key 白名单，拒绝 `binaryPath`、`path`、`*Path`、`home`、`homeDir`、`homePath` 和任意额外字段。
+- 已新增 `packaged-manifest` smoke 预检 mode。该 mode 先验证 TypeScript fallback 搜索可用，再校验 optional package manifest 平台矩阵和当前平台计划；summary 明确输出 `bundledBinaryVerified=false`，不宣称 bundled binary packaged smoke 已通过。
+- 已把 fake sidecar smoke 的 status timeout 放宽，避免并行验证时 `crash` / `timeout` 在 status handshake 阶段被误判；search request 仍保持短超时以验证目标 fallback。
+- 已更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，明确 `packaged-manifest` 是非 packaged 预检、真实 optional package / bundled binary packaged smoke 仍未完成。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.140` 并同步 `bun.lock`；没有修改 `optionalDependencies`。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-cache-schema.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`（19 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode crash`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode timeout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 代码审查子代理发现 1 个 warning：manifest schema 初版不是闭合校验。已补 exact-key 白名单、`packageVersion` 校验、额外字段 / 嵌套 path-like 负例测试后复跑通过。其余建议确认：`packaged-manifest` 仍只是自生成 fixture 预检，后续真实 packaged smoke 必须读取 optional package 内 manifest 和 bundled binary。
+- 边界保持：native search 继续显式 opt-in / default off；未创建 packaged native binary；未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；未 push，未创建 PR。下一步应实现 bundled package resolver / optionalDependencies 设计评审，或继续完善真实 packaged app smoke，但在用户未允许前不能修改打包配置。
+
 ## 2026-06-03 Rust/Go Phase 5 fake sidecar smoke 恢复入口回填计划
 
 范围确认：用户要求更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可复制提示词；同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步，把当前已确认状态同步提交 `fb7e2d73 docs(rust-go): 同步 Phase 5 fake sidecar smoke 后续状态` 回填为恢复入口；不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

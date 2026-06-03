@@ -175,4 +175,25 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).toContain('fallbackReason=cache_corrupted')
     expect(JSON.stringify(summary)).not.toContain('/codeinsights-native-runtime-smoke-')
   })
+
+  test('packaged manifest smoke 只验证 optional package manifest 预检，不证明 bundled binary', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'packaged-manifest',
+      query: '关键字',
+    })
+
+    expect(summary.mode).toBe('packaged-manifest')
+    expect(summary.nativeSearchBinaryProvided).toBe(false)
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-manifest-preflight',
+      status: 'passed',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'typescript-fallback-search',
+      status: 'passed',
+    }))
+    expect(JSON.stringify(summary)).toContain('bundledBinaryVerified=false')
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
 })
