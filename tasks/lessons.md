@@ -1,10 +1,16 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 bundled package resolver fixture 边界
+
+- bundled package resolver 不能只依赖 Node module resolution：`createRequire().resolve()` 可能解析到上级、用户或全局 `node_modules` 的同名包；packaged resolver 必须把 package manifest 和 binary 的 realpath 限制在 app `node_modules` allowlist 内，并且不能从系统 `PATH` 查找。
+- bundled resolver 只能在 Electron packaged 环境自动尝试；非 packaged dev 环境即使打开 native feature flags，也必须继续要求显式 `CODEINSIGHTS_NATIVE_SEARCH_BINARY`，否则本地 fixture / 用户依赖可能被误当成 bundled binary。
+- `packaged-resolver-fixture` smoke 只证明临时 optional package fixture 的 manifest / SHA-256 / no PATH lookup / allowlist 逻辑；只要 summary 仍写 `realPackagedBinaryVerified=false`，就不能把真实 optional package、`optionalDependencies`、`electron-builder.yml` files、签名、真实 packaged app bundled binary smoke 或 default enable 标成完成。
+
 ## 2026-06-03 Rust / Go Phase 5 optional package manifest 预检边界
 
-- `packaged-manifest` smoke 只能证明 optional package manifest schema / 平台矩阵和 TypeScript fallback 可用；只要 summary 仍写 `bundledBinaryVerified=false`，它就不等于 bundled binary packaged smoke，不能把 optionalDependencies、bundled package resolver、`apps/electron/electron-builder.yml` files、签名或默认启用标成完成。
+- manifest-only 版本的 `packaged-manifest` smoke 只能证明 optional package manifest schema / 平台矩阵和 TypeScript fallback 可用；只要 summary 仍写 `bundledBinaryVerified=false`，它就不等于 bundled binary packaged smoke，不能把 optionalDependencies、`apps/electron/electron-builder.yml` files、签名或默认启用标成完成。后续新增的 resolver fixture 可以证明 helper 边界，但仍不能证明真实 packaged app bundled binary。
 - optional package manifest schema 必须是闭合白名单：只允许 package name / version、protocol version、cache schema version、platform / arch、binary name 和 SHA-256 fingerprint；必须拒绝 `binaryPath`、home、path-like 字段和任意额外字段，避免把路径或用户信息夹带进 manifest。
-- Phase 5 状态同步要同时检查 development checklist 顶部状态和底部“下一轮启动入口”代码块；不能只更新顶部而让底部提示词继续停在 `2cc95b1b` / `fb7e2d73`。完成 manifest 预检后，下一步应推进 bundled package resolver / 真实 packaged smoke 设计，而不是重复做 optional package manifest schema。
+- Phase 5 状态同步要同时检查 development checklist 顶部状态和底部“下一轮启动入口”代码块；不能只更新顶部而让底部提示词继续停在 `2cc95b1b` / `fb7e2d73`。在 manifest-only 阶段完成后，下一步应推进 bundled package resolver / 真实 packaged smoke 设计，而不是重复做 optional package manifest schema；`ce104a59` resolver fixture 完成后，下一步应转向真实 optional package / 真实 packaged app bundled binary smoke 或 Agent event-loop 回退分析。
 
 ## 2026-06-03 Rust / Go Phase 5 恢复入口再次回填习惯
 

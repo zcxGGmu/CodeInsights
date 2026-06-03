@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper，以及 fake sidecar / isolated cache failure smoke；尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper，以及 bundled package resolver fixture；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`
 
 ## 目标
 
@@ -50,7 +50,8 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `protocol-mismatch`、`crash`、`timeout` 已接入 `process.execPath + 临时 JS fake sidecar` fixture，分别验证 `version_mismatch`、`crashed`、`timeout` fallback，且每个 mode 都同时验证 TypeScript fallback 搜索仍可用。
 - `cache-corruption` 已接入隔离 `CODEINSIGHTS_CONFIG_DIR/native-cache/manifest.json` fixture，写入损坏 manifest 后验证 `readNativeRuntimeCacheManifest()` 返回 `cache_corrupted`，不读取真实 `~/.codeinsights/`。
 - `apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.ts` 已定义 optional package manifest schema helper，固定 4 个候选平台包、校验 package version / protocol / cache schema / platform / arch / binary name / SHA-256 fingerprint，并使用 exact-key 白名单拒绝 `binaryPath` / home / path-like 额外字段。
-- `packaged-manifest` 已作为非 packaged 预检 mode 接入 `smoke:native-runtime`，只验证 optional package manifest 形状和 TS fallback 可用，summary 明确输出 `bundledBinaryVerified=false`。
+- `apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.ts` 已定义 bundled package resolver helper，只从 optional package `package.json` 派生包根，读取包内固定 `native-search-package.json` 和 `bin/{binaryName}`，校验 app `node_modules` realpath allowlist、manifest schema、平台矩阵、可执行权限和 SHA-256 fingerprint；不从系统 `PATH` 查找，也不接受 manifest path 字段。
+- `packaged-manifest` 已作为非 packaged 预检 mode 接入 `smoke:native-runtime`，包含 manifest preflight 和临时 optional package resolver fixture 两层：manifest preflight 验证 optional package manifest 形状和 TS fallback 可用；resolver fixture 用临时 package + fake executable + PATH decoy 验证 bundled source / SHA-256 / no PATH lookup 逻辑。summary 明确输出 `bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -269,6 +270,7 @@ Smoke cases:
 | timeout | fake sidecar 不响应 | 当前请求 fallback，pending request 被清理 |
 | cache corruption | 损坏 native-cache | cache 被隔离 / 清理，JSON / JSONL 事实源不变 |
 | packaged manifest preflight | 临时 fixture 校验 optional package manifest schema | manifest schema / platform matrix 通过，`bundledBinaryVerified=false` |
+| packaged resolver fixture | 临时 optional package + fake executable + PATH decoy | resolver 只接受 app `node_modules` allowlist 内 fixture，SHA-256 匹配，`fixtureBundledPackageVerified=true`，`realPackagedBinaryVerified=false` |
 
 当前已实现的 smoke 子集：
 
@@ -286,7 +288,8 @@ bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode package
 - `native-available` 仅验证显式本地 binary 的 status / search / shutdown；它不是 bundled binary smoke。
 - `protocol-mismatch`、`crash`、`timeout` 已作为非 packaged fake sidecar smoke 可执行，输出 JSON summary，不打印 fake sidecar 路径。
 - `cache-corruption` 已作为 isolated cache smoke 可执行，使用临时 `CODEINSIGHTS_CONFIG_DIR`，不读取真实配置目录。
-- `packaged-manifest` 已作为 optional package manifest 预检可执行，校验 4 个平台包的 manifest 契约和当前平台计划；它仍不是 bundled binary packaged smoke。
+- `packaged-manifest` 已作为 optional package manifest 预检和 packaged resolver fixture 可执行，校验 4 个平台包的 manifest 契约、当前平台计划、临时 optional package fixture 的 manifest / binary SHA-256 / no PATH lookup / app `node_modules` allowlist；它仍不是真实 packaged app bundled binary smoke。
+- `packaged-manifest` summary 当前边界必须保持：`bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`。
 
 Smoke output rules:
 
@@ -326,7 +329,15 @@ Smoke output rules:
 - manifest 使用 exact-key 白名单；不允许 `binaryPath`、`path`、`*Path`、`home`、`homeDir`、`homePath` 或任意额外字段。
 - manifest helper 只描述包元数据，不解析真实 `node_modules`，不证明 binary 存在，也不替代后续 packaged smoke。
 
-主进程仍必须显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。
+当前已落地的 bundled package resolver helper 约束：
+
+- 只通过 optional package `package.json` 的 module resolution 得到包根，不扫描 `node_modules`。
+- package manifest 固定为包内 `native-search-package.json`，binary 固定为 `bin/{manifest.binaryName}`。
+- package `package.json` 和 binary realpath 必须位于 app `node_modules` allowlist 内，防止解析到用户 / 上级 / 全局同名 package。
+- binary 必须存在、可执行，并且 SHA-256 fingerprint 必须等于 manifest。
+- Electron service 只有在 `app.isPackaged` 为 true 且 native feature flags 打开、没有显式 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 时才自动尝试 bundled resolver；非 packaged dev 环境继续要求显式 binary。
+
+主进程仍必须通过 bundled package resolver 显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。真实 optional package、`optionalDependencies`、`electron-builder.yml` files 和真实 packaged app bundled binary smoke 仍未完成。
 
 ## Performance Gate
 
