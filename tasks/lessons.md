@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 sidecar manager 安全与 benchmark 习惯
+
+- Native sidecar fallback 只能覆盖 `missing_binary`、`version_mismatch`、`contract_violation`、`timeout`、`crashed`、`cache_corrupted`、`unsupported_platform` 这类可用性 / 合约失败；`path_denied`、`invalid_input`、`operation_cancelled`、`io_error` 等拒绝类错误必须向上传播，不能被 TypeScript fallback 重新读取文件绕过。
+- sidecar stdout protocol 必须有硬上限；不能只等换行再解析，否则异常 sidecar 可用无换行超大 stdout 撑爆主进程内存。所有 native result 还要校验 source 边界、range、score、timestamp，并且不透传 sidecar 夹带的事实源路径。
+- Chat legacy 搜索语义不能由 Rust snippet 直接决定；native search 在未完全复刻 TS 规则前只负责定位 cursor，最终 snippet / matchedRanges 仍要回到 TypeScript `buildSearchSnippet()` 生成，避免大小写、ellipsis 和 matchStart 漂移。
+- Rust parity 测试不能在缺少 `cargo` 时静默通过；真实 parity gate 要失败或显式标记 gated，并用临时 `CARGO_TARGET_DIR` 避免污染 `native/search/target/`。benchmark binary path 应使用绝对路径，因为 `bun --filter` 会改变 cwd；benchmark CLI 失败路径也要脱敏，不能只在成功 summary 里隐藏 binary path。
+
 ## 2026-06-03 Rust / Go Phase 5 search-only sidecar 状态同步习惯
 
 - Phase 5 search-only Rust 源码切片提交后，状态同步必须把“已完成”和“未完成”拆开写：`native/search/`、TS fallback benchmark gate、Rust 单测和 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片` 已完成；Electron main process sidecar manager、fallback 集成、contract parity、native benchmark、optional package、packaged smoke 和默认启用判断未完成。

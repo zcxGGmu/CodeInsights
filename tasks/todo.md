@@ -51,6 +51,7 @@ git status --short --branch
 - Benchmark 结果：TS Chat 99,527,780 bytes，P95 413.818ms，event loop delay 44.914ms；Rust native Chat P95 456.835ms，event loop delay 1.812ms。Rust native Chat event loop gate 达标但 P95 比 TS 更慢。TS Agent 102,397,780 bytes，P95 343.416ms，event loop delay 1.564ms；Rust native Agent P95 808.661ms，event loop delay 1.134ms。结论：native 仍不得默认启用，只能保持显式 opt-in / default off。
 - 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts`；`bun test apps/electron/src/main/lib/native-runtime apps/electron/scripts/native-runtime-benchmark.test.ts`（53 pass）；`cargo test --manifest-path native/search/Cargo.toml`（11 pass）；`cargo fmt --check --manifest-path native/search/Cargo.toml`；`cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings`；`cargo build --release --manifest-path native/search/Cargo.toml`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
 - 边界保持：未创建 packaged native binary，未修改 `electron-builder.yml`，未修改根 `README.md` / 根 `AGENTS.md`，未新增 optional package，未 push，未创建 PR；`native/search/target/` 仅为本地 ignored 构建产物，不提交。
+- 阶段实现已提交：`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`。提交后已继续执行状态同步，更新 development checklist、next-session prompt 和 lessons；状态同步提交号以最终回复和后续 `git log -5 --oneline` 为准。
 
 ## 2026-06-03 Rust/Go Phase 5 search-only sidecar 状态同步计划
 
