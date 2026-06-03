@@ -22,7 +22,8 @@ interface BenchmarkCaseInput {
   name: string
   dataScale: BenchmarkDataScale
   samplesMs: number[]
-  eventLoopDelayMs: number
+  eventLoopBaselineSamplesMs: number[]
+  eventLoopDelaySamplesMs: number[]
   memoryDeltaBytes: number
 }
 
@@ -50,7 +51,21 @@ interface BenchmarkCaseSummary extends BenchmarkDataScale {
   p50Ms: number
   p95Ms: number
   p99Ms: number
+  /**
+   * 兼容旧 Review 的字段，语义等同于 eventLoopDelayMaxMs。
+   */
   eventLoopDelayMs: number
+  eventLoopDelayMaxMs: number
+  eventLoopDelayP95Ms: number
+  eventLoopDelaySamplesMs: number[]
+  /**
+   * 每轮 run 前单独采样的 idle setTimeout(0) delay，用于估计测量口径自身成本。
+   */
+  eventLoopBaselineMs: number
+  eventLoopBaselineP95Ms: number
+  eventLoopWorkDelayMs: number
+  eventLoopWorkDelayP95Ms: number
+  eventLoopWorkDelaySamplesMs: number[]
   memoryDeltaBytes: number
 }
 
@@ -150,17 +165,43 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
       nativeSearchBinaryProvided: Boolean(input.options.nativeSearchBinary),
     },
     ...(input.keepArtifacts ? { artifactDir: input.artifactDir } : {}),
-    cases: input.cases.map((benchmarkCase) => ({
-      name: benchmarkCase.name,
-      ...benchmarkCase.dataScale,
-      samplesMs: benchmarkCase.samplesMs.map((sample) => Number(sample.toFixed(3))),
-      p50Ms: percentile(benchmarkCase.samplesMs, 0.5),
-      p95Ms: percentile(benchmarkCase.samplesMs, 0.95),
-      p99Ms: percentile(benchmarkCase.samplesMs, 0.99),
-      eventLoopDelayMs: Number(benchmarkCase.eventLoopDelayMs.toFixed(3)),
-      memoryDeltaBytes: benchmarkCase.memoryDeltaBytes,
-    })),
+    cases: input.cases.map((benchmarkCase) => {
+      const eventLoopDelayMaxMs = maxSample(benchmarkCase.eventLoopDelaySamplesMs)
+      const eventLoopBaselineMaxMs = maxSample(benchmarkCase.eventLoopBaselineSamplesMs)
+      const eventLoopDelayP95Ms = percentile(benchmarkCase.eventLoopDelaySamplesMs, 0.95)
+      const eventLoopBaselineP95Ms = percentile(benchmarkCase.eventLoopBaselineSamplesMs, 0.95)
+      const eventLoopWorkDelaySamplesMs = benchmarkCase.eventLoopDelaySamplesMs.map((delay, index) => (
+        Math.max(0, delay - (benchmarkCase.eventLoopBaselineSamplesMs[index] ?? 0))
+      ))
+      return {
+        name: benchmarkCase.name,
+        ...benchmarkCase.dataScale,
+        samplesMs: benchmarkCase.samplesMs.map(roundMillis),
+        p50Ms: percentile(benchmarkCase.samplesMs, 0.5),
+        p95Ms: percentile(benchmarkCase.samplesMs, 0.95),
+        p99Ms: percentile(benchmarkCase.samplesMs, 0.99),
+        eventLoopDelayMs: roundMillis(eventLoopDelayMaxMs),
+        eventLoopDelayMaxMs: roundMillis(eventLoopDelayMaxMs),
+        eventLoopDelayP95Ms,
+        eventLoopDelaySamplesMs: benchmarkCase.eventLoopDelaySamplesMs.map(roundMillis),
+        eventLoopBaselineMs: roundMillis(eventLoopBaselineMaxMs),
+        eventLoopBaselineP95Ms,
+        eventLoopWorkDelayMs: maxSample(eventLoopWorkDelaySamplesMs),
+        eventLoopWorkDelayP95Ms: percentile(eventLoopWorkDelaySamplesMs, 0.95),
+        eventLoopWorkDelaySamplesMs: eventLoopWorkDelaySamplesMs.map(roundMillis),
+        memoryDeltaBytes: benchmarkCase.memoryDeltaBytes,
+      }
+    }),
   }
+}
+
+function roundMillis(value: number): number {
+  return Number(value.toFixed(3))
+}
+
+function maxSample(samples: number[]): number {
+  if (samples.length === 0) return 0
+  return roundMillis(Math.max(...samples))
 }
 
 export async function runBenchmark(options: BenchmarkOptions): Promise<BenchmarkSummary> {
@@ -226,6 +267,16 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
 
     if (nativeSearchManager) {
       await nativeSearchManager.getStatus()
+
+      cases.push(await measureCase(
+        'native-sidecar-status-cache-overhead',
+        {},
+        options.iterations,
+        async () => {
+          const status = await nativeSearchManager.getStatus()
+          return status.nativeEnabled ? 1 : 0
+        },
+      ))
 
       cases.push(await measureCase(
         'native-chat-search-large-history',
@@ -482,11 +533,14 @@ async function measureCase(
   run: () => number | Promise<number>,
 ): Promise<BenchmarkCaseInput> {
   const samplesMs: number[] = []
+  const eventLoopBaselineDelays: number[] = []
   const eventLoopDelays: number[] = []
   let maxMemoryDeltaBytes = 0
 
   for (let index = 0; index < iterations; index += 1) {
     const memoryBefore = process.memoryUsage.rss()
+    eventLoopBaselineDelays.push(await measureEventLoopDelay())
+
     const delayStart = performance.now()
     const delay = new Promise<number>((resolve) => {
       setTimeout(() => resolve(performance.now() - delayStart), 0)
@@ -503,9 +557,17 @@ async function measureCase(
     name,
     dataScale,
     samplesMs,
-    eventLoopDelayMs: Math.max(...eventLoopDelays),
+    eventLoopBaselineSamplesMs: eventLoopBaselineDelays,
+    eventLoopDelaySamplesMs: eventLoopDelays,
     memoryDeltaBytes: maxMemoryDeltaBytes,
   }
+}
+
+async function measureEventLoopDelay(): Promise<number> {
+  const delayStart = performance.now()
+  return await new Promise<number>((resolve) => {
+    setTimeout(() => resolve(performance.now() - delayStart), 0)
+  })
 }
 
 function readLargeLogPreview(filePath: string): number {

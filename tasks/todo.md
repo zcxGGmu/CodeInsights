@@ -1,5 +1,36 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 benchmark event-loop 口径复核计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”，本轮只复核 benchmark runner 的 event-loop 测量口径并最小化改进 benchmark summary 的可解释性；不默认启用 native，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/next-session-prompt.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最近历史包含 `1e851056`、`65c67c52`、`aaede459`、`0eb350ff`、`e4bcd123`。
+- [x] 确认最新开发基线为 `0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`，最新状态同步提交为 `1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态`。
+
+实现计划：
+
+- [x] 复核 `apps/electron/scripts/native-runtime-benchmark.ts` 的 `measureCase()`，明确当前 `eventLoopDelayMs` 是每个 case 所有 iterations 中最大的 `setTimeout(0)` delay，且采样从 `run()` 前开始、在 `run()` 后读取，包含同步阻塞、sidecar IPC callback scheduling 和 event-loop 噪声。
+- [x] 测试先行扩展 `native-runtime-benchmark.test.ts`：锁住 summary 同时输出 event-loop delay samples、P95 和 max，并保留旧字段兼容。
+- [x] 最小改动 benchmark runner：新增 `eventLoopDelaySamplesMs`、`eventLoopDelayP95Ms`、`eventLoopDelayMaxMs`，让旧 `eventLoopDelayMs` 继续等于 max，避免旧 Review / 文档语义断裂。
+- [x] 增加 event-loop baseline / work delay 字段和 `native-sidecar-status-cache-overhead` case，拆分 timer 口径自身成本、cached manager 调度成本和 run 包裹后的剩余 work delay。
+- [x] 更新 `@codeinsights/electron` patch 版本到 `0.0.137` 并同步 `bun.lock`；未修改 optionalDependencies、打包配置或默认 native feature flag。
+- [x] 运行 targeted Bun tests、`build:main`、`typecheck`、`git diff --check`；小规模 native benchmark 已确认新字段输出。
+- [x] Review 中明确：本轮不证明 default enable，只改善 measurement 可解释性；Agent native event-loop gate 仍需后续用新字段复跑稳定 benchmark 判断。
+
+### Review
+
+- 启动检查已确认：当前分支 `rust-go-refactor`，最近历史包含 `1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态`、`65c67c52 docs(rust-go): 回填 Phase 5 search 性能优化最新恢复入口`、`aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`e4bcd123 docs(rust-go): 回填 Phase 5 sidecar manager 最新恢复入口`。
+- 口径复核结论：旧 `eventLoopDelayMs` 是 `measureCase()` 每轮从 `run()` 前注册 `setTimeout(0)` 到 timer callback 执行的最大 delay，不是 P95，也不是搜索内核独立阻塞时间；native case 已预先 `getStatus()`，正常不包含 sidecar spawn，但会包含 request JSON encode、pending / timeout timer、stdin write、stdout callback scheduling、response validation 和 event-loop 噪声。
+- 已扩展 benchmark summary：新增 `eventLoopDelaySamplesMs`、`eventLoopDelayMaxMs`、`eventLoopDelayP95Ms`、`eventLoopBaselineMs`、`eventLoopBaselineP95Ms`、`eventLoopWorkDelayMs`、`eventLoopWorkDelayP95Ms`；兼容字段 `eventLoopDelayMs` 继续等于 max。
+- 已新增 `native-sidecar-status-cache-overhead` benchmark case，只测 cached `nativeSearchManager.getStatus()` 的 manager async/cache 调度成本，不触发新 protocol、不修改 Rust sidecar。
+- 小规模 native benchmark smoke 命令：`bun run --filter='@codeinsights/electron' native-runtime:benchmark --records 100 --payload-bytes 64 --workspace-files 50 --log-bytes 4096 --iterations 2 --native-search-binary /Users/zq/Desktop/ai-projs/posp/RV-Insights/native/search/target/release/codeinsights-native-search`。输出已包含新字段；样例中 `native-sidecar-status-cache-overhead` 的 `eventLoopDelayMs` 为 1.307ms、baseline 1.272ms、work delay 0.035ms，`native-agent-runtime-search` 的 `eventLoopDelayMs` 为 1.159ms、baseline 1.261ms、work delay 0ms，说明后续稳定 gate 可区分 timer baseline 与实际 work delay。
+- 本轮 release binary smoke 仅检查本地 ignored 产物：`status` 仍报告 `0.0.2-dev`；未创建 packaged native binary。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-benchmark.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts`（19 pass）；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`git diff --check`。
+- 边界保持：未默认启用 native，未创建 packaged native binary，未修改 `electron-builder.yml`，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。Agent native event-loop gate 仍需用新字段复跑 100MB / 20 iterations 稳定 benchmark 后再判断；本轮不进入 default enable。
+
 ## 2026-06-03 Rust/Go Phase 5 稳定 benchmark gate 与 default-enable 风险评估计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”，基于 `0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能` 后的状态复跑稳定 benchmark gate，评估 Agent event loop 回退和 default-enable 风险。本轮不做业务代码优化，不默认启用 native，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

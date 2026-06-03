@@ -60,7 +60,8 @@ describe('native-runtime-benchmark helpers', () => {
           name: 'chat-search-large-history',
           dataScale: { records: 10, bytes: 2048 },
           samplesMs: [2, 4],
-          eventLoopDelayMs: 1,
+          eventLoopBaselineSamplesMs: [0.5, 1],
+          eventLoopDelaySamplesMs: [1, 3, 2],
           memoryDeltaBytes: 1024,
         },
       ],
@@ -75,8 +76,55 @@ describe('native-runtime-benchmark helpers', () => {
       p50Ms: 2,
       p95Ms: 4,
       p99Ms: 4,
+      eventLoopDelayMs: 3,
+      eventLoopDelayMaxMs: 3,
+      eventLoopDelayP95Ms: 3,
+      eventLoopDelaySamplesMs: [1, 3, 2],
+      eventLoopBaselineMs: 1,
+      eventLoopBaselineP95Ms: 1,
+      eventLoopWorkDelayMs: 2,
+      eventLoopWorkDelayP95Ms: 2,
+      eventLoopWorkDelaySamplesMs: [0.5, 2, 2],
     })
     expect(summary.artifactDir).toBeUndefined()
+  })
+
+  test('buildBenchmarkSummary 对空 event-loop 样本保持数值字段', () => {
+    const summary = buildBenchmarkSummary({
+      startedAt: '2026-06-01T12:00:00.000Z',
+      artifactDir: '/tmp/codeinsights-native-runtime-benchmark-demo',
+      keepArtifacts: false,
+      options: {
+        records: 0,
+        payloadBytes: 64,
+        workspaceFiles: 0,
+        logBytes: 0,
+        iterations: 0,
+        keepArtifacts: false,
+      },
+      cases: [
+        {
+          name: 'empty-samples',
+          dataScale: {},
+          samplesMs: [],
+          eventLoopBaselineSamplesMs: [],
+          eventLoopDelaySamplesMs: [],
+          memoryDeltaBytes: 0,
+        },
+      ],
+    })
+
+    expect(summary.cases[0]).toMatchObject({
+      p50Ms: 0,
+      eventLoopDelayMs: 0,
+      eventLoopDelayMaxMs: 0,
+      eventLoopDelayP95Ms: 0,
+      eventLoopBaselineMs: 0,
+      eventLoopBaselineP95Ms: 0,
+      eventLoopWorkDelayMs: 0,
+      eventLoopWorkDelayP95Ms: 0,
+      eventLoopWorkDelaySamplesMs: [],
+    })
   })
 
   test('runBenchmark 输出 workspace cold build 与 warm search 指标', async () => {
@@ -101,6 +149,10 @@ describe('native-runtime-benchmark helpers', () => {
     })
     expect(coldBuild?.p50Ms).toBeGreaterThanOrEqual(0)
     expect(warmSearch?.eventLoopDelayMs).toBeGreaterThanOrEqual(0)
+    expect(warmSearch?.eventLoopBaselineMs).toBeGreaterThanOrEqual(0)
+    expect(warmSearch?.eventLoopWorkDelayMs).toBeGreaterThanOrEqual(0)
+    expect(warmSearch?.eventLoopDelaySamplesMs).toHaveLength(1)
+    expect(warmSearch?.eventLoopWorkDelaySamplesMs).toHaveLength(1)
     expect(warmSearch?.memoryDeltaBytes).toBeGreaterThanOrEqual(0)
   })
 })
