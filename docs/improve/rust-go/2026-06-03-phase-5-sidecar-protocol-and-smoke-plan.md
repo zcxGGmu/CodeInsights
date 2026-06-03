@@ -3,6 +3,7 @@
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
 > 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片，尚未接入 Electron main process，尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`
 
 ## 目标
 

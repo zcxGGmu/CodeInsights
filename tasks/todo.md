@@ -1,5 +1,28 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 search-only sidecar 状态同步计划
+
+范围确认：用户要求在 Phase 5 最小 Rust search-only sidecar 源码切片提交后，更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词；同时再次强调该动作要成为每个阶段性任务完成后的默认习惯。本轮只做文档、任务记录和 lessons 同步，不进入 Electron main process 集成，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支 `rust-go-refactor`，最新开发提交为 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`。
+- [x] 复核 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / fallback / smoke plan 和 next-session prompt。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`：把最新开发基线回填为 `e39682f1`，明确 Phase 5 只完成 search-only Rust 源码切片，Electron main process 集成、fallback、native benchmark、packaged smoke 尚未完成。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`：移除旧占位表达，写清下次从 sidecar manager contract tests 继续。
+- [x] 更新 `tasks/lessons.md`：记录用户再次强调的阶段性任务完成后自动同步文档、任务 Review、lessons 和下次启动提示词习惯。
+- [x] 验证文档一致性：检查旧占位、Markdown fence、行尾空白、根 `README.md` / 根 `AGENTS.md` 未触碰。
+- [x] 单独提交本轮状态同步，提交信息使用详细中文；最终回复给出本轮提交后的实际 HEAD 和可复制提示词。
+
+### Review
+
+- 最新开发基线已回填为 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`；development checklist 与 next-session prompt 均不再把 `aee300a0` 或 `16cbb3e1` 写成最新恢复入口。
+- 完成项已标清：Phase 0-4 已完成；Phase 5 已完成前置计划、dependency decision record、sidecar protocol / fallback / packaged smoke 计划、100MB 级 TS fallback benchmark gate 和 `native/search/` search-only Rust 源码切片。
+- 未完成项已标清：Electron main process sidecar manager、fallback 集成、contract parity、Rust vs TS native benchmark、optional package、packaged smoke、默认启用判断和 Phase 6-9 尚未完成；完整 Phase 5 仍为 `[~]`。
+- 下次启动入口已改为从 `native-runtime-sidecar-manager.ts` contract tests 开始，覆盖 missing binary、version mismatch、timeout、crash、shutdown 和 contract violation fallback；不要求重复跑已通过的 TS fallback gate，也不要求重新创建 Rust crate。
+- 已更新 `tasks/lessons.md`：把“每个阶段性任务完成后自动同步 development checklist、next-session prompt、tasks/todo.md Review、必要 lessons，并单独提交”的习惯固化为默认工作流。
+- 只读复核指出的历史段落误导已修正：Phase 5 前置 lessons / Review 均改为“当时入口”，并明确已被 `e39682f1` search-only 源码切片更新。
+- 验证通过：旧占位扫描无命中；`git diff --check` 通过；Markdown fence 检查输出 `balanced fences: 116`；`git diff --name-only | rg '^(README\\.md|AGENTS\\.md)$'` 无命中，根 `README.md` / 根 `AGENTS.md` 未触碰。
+- 边界保持：未进入 Electron main process 集成，未创建 packaged native binary，未修改 `electron-builder.yml`、package / lockfile、根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。本轮状态同步提交号以最终回复和 `git log -5 --oneline` 为准。
+
 ## 2026-06-03 Rust/Go Phase 5 TS fallback benchmark gate 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”，但当前步骤只重新跑现有 TypeScript fallback benchmark，确认 100MB 级 JSONL 搜索仍有足够 native 试点收益空间。先不安装依赖，不创建 native binary，不修改打包配置，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。若 benchmark 不支持收益门槛，则停在 Review 并重新规划，不硬进入 Rust 实现。
@@ -10,7 +33,7 @@
 - [x] 运行当前 TS fallback benchmark，记录 `chat-search-large-history`、`agent-runtime-search`、`pipeline-tail-large-records`、`workspace-file-name-search` 和 `large-log-preview` 的 P50 / P95 / P99、event loop delay、memory delta 和数据规模。
 - [x] 对照 Phase 5 Performance Gate：100MB JSONL 搜索 native 候选需 P95 至少比当前 TS fallback 快 3 倍，event loop delay 至少降低 70%；若当前 TS fallback 已经足够低或数据规模不达标，先调整 benchmark 或停下重新规划。
 - [x] 根据 benchmark 结果决定是否进入最小 Rust search sidecar 实现；若进入，实现前再次写清测试先行、依赖与文件边界。
-- [ ] 在本节追加 Review，记录命令、结果、是否允许进入 Rust 实现以及未触碰的禁止事项。
+- [x] 在本节追加 Review，记录命令、结果、是否允许进入 Rust 实现以及未触碰的禁止事项。
 
 Benchmark gate 结论：
 
@@ -55,7 +78,7 @@ Benchmark gate 结论：
 - 状态同步已完成：development checklist 与 next-session prompt 均标明 Phase 0-4 已完成，Phase 5 仅完成前置计划 / dependency decision record / sidecar protocol / fallback / packaged smoke 计划和性能收益门槛，Rust sidecar 实现尚未开始。
 - 已新增并纳入恢复入口：`docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`。
 - 已更新 `tasks/lessons.md`：再次固化“阶段性任务完成后自动同步 docs / todo Review / lessons / next-session prompt 并单独提交”的习惯；对 Phase 5 前置完成但实现未开始的状态要求使用 `[~]` 或明确文字。
-- 下一步入口：先重新跑当前 TS fallback benchmark，确认 100MB JSONL 搜索 P95 至少快 3 倍、event loop delay 降低 70% 等收益门槛仍成立，再进入最小 Rust search sidecar 实现。
+- 前置状态同步当时入口：先重新跑当前 TS fallback benchmark，确认 100MB JSONL 搜索 P95 至少快 3 倍、event loop delay 降低 70% 等收益门槛仍成立，再进入最小 Rust search sidecar 实现。该入口已被 `e39682f1` 后续 search-only 源码切片更新；当前下一步应从 sidecar manager contract tests 继续。
 - 验证通过：`git diff --check`；行尾空白扫描无命中；Markdown code fence 检查通过；根 `README.md` / 根 `AGENTS.md` / package / lockfile / `electron-builder.yml` 无 diff。
 - 边界保持：未写 Rust / Go，未安装依赖，未创建 native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
 
@@ -193,7 +216,7 @@ git status --short --branch
 - Protocol 结论：首版使用 stdin / stdout line-delimited JSON protocol，初始 method 为 `status`、`search`、`tail_jsonl`、`shutdown`；stdout 只输出 protocol JSON，stderr 只允许脱敏 diagnostics。
 - Fallback 结论：`disabled`、`missing_binary`、`unsupported_platform`、`version_mismatch`、`contract_violation`、`timeout`、`crashed`、`cache_corrupted` 都必须可恢复到 TS fallback；native result 进入业务前必须经 main process schema 校验、二次脱敏和路径边界检查。
 - Packaged smoke 结论：未来 smoke 必须覆盖 native missing / available、protocol mismatch、crash、timeout、cache corruption 和“不使用系统 PATH”；本轮只写计划，不创建 binary、不修改 `electron-builder.yml`。
-- 当前未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未写 sidecar manager，尚未新增 smoke script，尚未修改打包配置。
+- 当时未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未写 sidecar manager，尚未新增 smoke script，尚未修改打包配置。该前置计划 Review 已被后续 benchmark gate 和 `e39682f1` search-only 源码切片更新；当前仍未完成的是 sidecar manager、fallback 集成、contract parity、native benchmark、optional package 和 packaged smoke。
 
 ## 2026-06-02 Rust/Go Phase 4 前端可见体验、Jotai 状态与 Diagnostics 计划
 

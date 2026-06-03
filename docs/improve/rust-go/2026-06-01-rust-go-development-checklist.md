@@ -9,8 +9,8 @@
 ## 最新开发状态
 
 > 更新时间：2026-06-03
-> 最新开发基线：当前工作树已在 `aee300a0 docs(rust-go): 同步 Phase 5 前置开发状态与下次启动入口` 之后新增 Phase 5 最小 Rust search-only sidecar 源码切片；提交后以实际 `git log -5 --oneline` 为准。
-> 最新已确认恢复入口：本文件所在的 Phase 5 search-only sidecar 开发提交；如果本文件所在提交之后还有 Rust / Go 状态同步提交，下次启动时以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交为准。
+> 最新开发基线：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`。
+> 最新已确认恢复入口：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`；如果 `git log -5 --oneline` 中存在 `e39682f1` 之后的 `docs(rust-go): 同步 Phase 5 search-only sidecar 后续开发状态` 提交，下次启动时以最新的 Rust / Go docs / tasks / feat 提交为准。
 > 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划和性能收益门槛；当前已重新跑 100MB 级 TS fallback benchmark，并新增 `native/search/` 最小 Rust search-only sidecar 源码切片，尚未接入 Electron main process，尚未实现 packaged native binary、optional package、packaged smoke 或 Go supervisor。
 > 当前策略：Phase 5 下一步应先补 `native-runtime-sidecar-manager.ts` contract 测试与 main process fallback 集成，再做 Rust vs TS contract parity / benchmark 对比；未证明 native P95 与 event loop gate 前，不默认启用 native。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
@@ -54,7 +54,7 @@
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
 2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0 基线、契约与 benchmark 已完成；Phase 1 TypeScript fallback 与 EventSearchService 重构已完成；Phase 2 Pipeline records cursor / tail 与全局搜索接入已完成；Phase 3 Workspace 文件索引 TS cache 与 watcher invalidation 已完成；Phase 4 前端可见体验、Jotai 状态和 diagnostics 已完成；Phase 5 前置依赖决策与 protocol / smoke 计划已完成；100MB 级 TS fallback benchmark gate 已完成；最小 Rust search-only sidecar 源码切片已完成；main process 集成、fallback manager、native benchmark 和 packaged smoke 尚未完成”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验` 或其后的 Rust / Go 状态同步提交。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片` 或其后的 Rust / Go 状态同步提交。
 4. 如果继续 Phase 5，先读取 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`，确认当前只完成 search-only Rust 源码切片，未完成 Electron main process 集成。
 5. 下一步不要创建 packaged native binary 或修改打包配置；先补 sidecar manager contract 测试、missing / crash / timeout / version mismatch fallback，再接入 main process 可替换边界并做 native vs TS benchmark 对比。
 
@@ -774,7 +774,7 @@ git status --short
 - 依赖结论：进入实现阶段时只建议评估 `serde`、`serde_json` 和可选 `memchr`；暂缓 `regex`、`walkdir`、`ignore`、`memmap2`、`tantivy`；Go / `fsnotify` 不进入 Phase 5 默认实现。
 - 新增 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，确定首版采用 stdin / stdout line-delimited JSON protocol，初始 method 为 `status`、`search`、`tail_jsonl`、`shutdown`。
 - Fallback / smoke 结论：native missing / available、protocol mismatch、crash、timeout、cache corruption 和“不使用系统 PATH”必须进入后续 smoke；所有 native result 仍需 main process schema 校验、二次脱敏和路径白名单。
-- 当前未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未创建 native binary，尚未新增 sidecar manager / smoke script / optional package / 打包配置。
+- 当时未完成：尚未重新跑大规模 benchmark，尚未创建 Rust 工程，尚未安装依赖，尚未创建 native binary，尚未新增 sidecar manager / smoke script / optional package / 打包配置。该前置 Review 已被后续 search-only 源码切片 Review 更新；当前仍未完成的是 Electron main process sidecar manager、fallback 集成、contract parity、native benchmark、optional package 和 packaged smoke。
 
 Search-only Rust sidecar 源码切片 Review：
 
@@ -783,6 +783,7 @@ Search-only Rust sidecar 源码切片 Review：
 - 当前 Rust sidecar 只实现 search-only 源码切片：stdin / stdout line-delimited JSON protocol、`status`、literal `search`、`shutdown`；`tail_jsonl` 明确返回 typed `invalid_input`，不伪装为已实现。
 - 已按代码审查修复安全边界：不再 fallback 到整条 JSON record；query 上限为 128 chars；snippet 上限为 160 chars；matchedRanges 使用 UTF-16 code unit offset；selected text 进入 snippet 前做基础 Bearer / Authorization / credentialed URL 脱敏；`deadlineMs` 会返回 typed `timeout`；`shutdown` 返回 ack 后 CLI 会退出 stdin loop。
 - 验证通过：`cargo test`（11 pass）、`cargo fmt --check`、`cargo clippy -- -D warnings`、CLI shutdown smoke、`bun test apps/electron/src/main/lib/native-runtime`（28 pass）、`bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/shared' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`git diff --check`。`build:main` 仅有既有 bundle size 警告。
+- Search-only 源码切片提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`。完整 Phase 5 尚未完成，因此阶段状态仍保持 `[~]`。
 - 本切片未完成 / 未进入：未接入 `native-runtime-sidecar-manager.ts`，未让 Electron main process 调用 Rust sidecar，未做 Rust vs TS native benchmark 对比，未创建 packaged native binary，未新增 optional package，未修改打包配置，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
 
 ## Phase 6：大文件 / 日志 Chunk Preview
@@ -1230,5 +1231,13 @@ git status --short
 可直接复制给下一次 Codex：
 
 ```text
-请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md 和 docs/improve/rust-go/next-session-prompt.md。当前状态是：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”、Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”和 Phase 4“前端可见体验、Jotai 状态和 diagnostics”已经完成。Phase 4 已新增 Native Runtime diagnostics IPC / preload / Jotai atoms / 全局 listener / Settings 运行诊断面板，SearchDialog 已具备 source filter、fallback / rebuilding 状态和更多结果控制，PipelineRecords 已具备 tail loading / retry 状态。目前尚未实现 Rust sidecar、Go supervisor、native binary、native optional package 或大文件 / 日志 chunk preview。最新已确认开发基线是 16cbb3e1 feat(rust-go): 完成 Phase 4 Native Runtime diagnostics 前端体验。请先运行 git status --short --branch 和 git log -5 --oneline，若存在其后的 Rust / Go 状态同步提交，以最新提交为准。下一步应从 Phase 5“Rust search sidecar 试点”开始；先在 tasks/todo.md 写 Phase 5 计划，明确范围、触达文件、验证命令、收益门槛、依赖 decision record 和禁止事项。用户已明确计划写清后无需等待确认；不要直接写 Rust / Go 代码或安装依赖，必须先做 Rust 依赖搜索 / decision record、sidecar protocol / fallback / packaged smoke 计划，不修改根 README.md / AGENTS.md。
+请继续 CodeInsights Rust / Go 优化重构迭代。先读取 tasks/lessons.md、tasks/todo.md、docs/improve/rust-go/2026-06-01-rust-go-optimization-plan.md、docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md、docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md、docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md、docs/improve/rust-go/next-session-prompt.md 和 native/search/。
+
+当前进度：Rust / Go 优化方案、开发跟踪清单、阶段提交纪律、Phase 0“基线、契约与 benchmark”、Phase 1“TypeScript fallback 与 EventSearchService 重构”、Phase 2“Pipeline records cursor / tail 与全局搜索接入”、Phase 3“Workspace 文件索引 TS cache 与 watcher invalidation”和 Phase 4“前端可见体验、Jotai 状态和 diagnostics”已经完成。Phase 5 已完成前置计划、依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB 级 TS fallback benchmark gate，以及 `native/search/` 最小 Rust search-only sidecar 源码切片。最新开发基线是 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`；如果存在其后的 Rust / Go 文档状态同步提交，以 `git log -5 --oneline` 中最新的 Rust / Go docs / tasks / feat 提交作为恢复入口。
+
+已完成的 Phase 5 search-only 切片：Rust crate 直接依赖固定为 `serde = 1.0.228`、`serde_json = 1.0.150`；实现 stdin / stdout line-delimited JSON protocol、`status`、literal `search`、`shutdown` 和 explicit out-of-scope `tail_jsonl` typed error；覆盖 bad JSON、missing source、empty query、limit clamp、long query、deadline、snippet cap、基础脱敏、中文命中、ASCII query + Unicode prefix offset 和 UTF-16 matchedRanges。尚未完成：Electron main process sidecar manager、fallback 集成、contract parity、Rust vs TS native benchmark、optional package、packaged smoke、默认启用判断、Phase 6-9。
+
+启动后先运行 `git status --short --branch` 和 `git log -5 --oneline`。下一步继续 Phase 5“Rust search sidecar 试点”：先补 `native-runtime-sidecar-manager.ts` contract 测试，覆盖 missing binary、version mismatch、timeout、crash、shutdown 和 contract violation fallback；再接入 Electron main process 可替换边界，并做 Rust vs TS contract parity 与 100MB benchmark 对比。未达到 P95 / event loop gate 前不得默认启用 native。不要创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+请遵守阶段纪律：每完成一个阶段并通过验证后，立即更新 development checklist、next-session-prompt.md、tasks/todo.md Review 和必要的 lessons，然后单独提交该阶段相关文件，提交信息使用详细中文。
 ```

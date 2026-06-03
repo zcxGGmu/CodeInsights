@@ -1,10 +1,17 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 search-only sidecar 状态同步习惯
+
+- Phase 5 search-only Rust 源码切片提交后，状态同步必须把“已完成”和“未完成”拆开写：`native/search/`、TS fallback benchmark gate、Rust 单测和 `e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片` 已完成；Electron main process sidecar manager、fallback 集成、contract parity、native benchmark、optional package、packaged smoke 和默认启用判断未完成。
+- 阶段完成后的恢复入口不能继续写“提交后以实际 git log 为准”或“本文件所在提交”这类不可执行占位；仓库文档至少要回填最近真实开发基线 `e39682f1`，并要求下次启动用 `git log -5 --oneline` 识别其后的 Rust / Go docs 状态同步提交。
+- 用户再次强调“每个阶段性任务完成后自动去做”时，要把这视为长期默认工作流：阶段实现提交后立即同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，验证后单独提交，并在最终回复给可直接复制的下一次启动提示词。
+- 下次启动提示词必须直接指向下一步可执行工作：先补 `native-runtime-sidecar-manager.ts` contract tests（missing binary、version mismatch、timeout、crash、shutdown、contract violation fallback），再接入 main process 和 Rust vs TS benchmark；不能让恢复会话重复跑已经通过的 TS fallback gate 或重新创建 Rust crate。
+
 ## 2026-06-03 Rust / Go Phase 5 前置状态同步习惯
 
 - 用户要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”并再次强调阶段完成后自动执行时，即使刚写过前置文档，也要新建 `tasks/todo.md` 状态同步计划，更新 development checklist、next-session prompt、`tasks/todo.md` Review 和本文件，验证后单独提交状态同步。
 - Phase 5 这类“前置决策完成但 Rust 实现未开始”的状态必须用 `[~]` 或明确文字表达，不能把 Phase 5 标成已完成；已完成项只能写依赖 decision record、protocol / fallback / packaged smoke 计划和性能门槛，未完成项必须列出 benchmark、Rust 工程、sidecar manager、smoke script、optional package、packaged smoke。
-- 下次启动提示词要把下一步写成“先重新跑 TS fallback benchmark，确认收益门槛仍成立，再进入最小 Rust search sidecar 实现”，避免恢复会话直接安装依赖、创建 native binary 或修改打包配置。
+- 本条前置阶段规则仅适用于 `e39682f1` 之前、Rust search-only 源码切片尚未开始时；`e39682f1` 之后的下次启动提示词必须从 sidecar manager contract tests 和 main process fallback 集成继续，不能重复要求重新跑已完成的 TS fallback gate 或重新创建 Rust crate。
 
 ## 2026-06-02 Rust / Go Native Runtime diagnostics 前端边界
 
