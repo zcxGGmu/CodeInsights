@@ -1,5 +1,36 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 新 event-loop 字段稳定 benchmark 复跑计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只用新增 event-loop samples / baseline / work delay 字段复跑 100MB / 20 iterations 稳定 benchmark，重新评估 Agent event-loop gate，并同步状态文档。默认 native 继续关闭；不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/next-session-prompt.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支为 `rust-go-refactor`，最近历史包含 `40f0b06e`、`28e8a504`、`1e851056`、`65c67c52`、`aaede459`。
+- [x] 确认最新恢复入口为 `40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`，最新 benchmark 口径实现基线为 `28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`。
+
+验证计划：
+
+- [x] 用 release sidecar `status` 确认本地 ignored binary 版本仍为源码期望的 `0.0.2-dev`；如版本不一致，只允许 `cargo build --release --manifest-path native/search/Cargo.toml` 重建本地产物。
+- [x] 复跑至少 2 轮 100MB / 20 iterations native benchmark，命令使用绝对 `--native-search-binary`，记录 TS / native Chat 与 Agent 的 P50 / P95 / P99、event-loop max / P95 / baseline / work delay、memory delta 和 `native-sidecar-status-cache-overhead`。
+- [x] 对照 gate 重新判断：Chat native P95 至少快 3 倍且 event-loop 降低 70%；Agent native P95 至少快 2 倍，并重点用 work delay / baseline 判断是否仍存在 native event-loop 回退。
+- [x] 若 P95 / event-loop gate 未同时达标，或 packaged smoke / optional package / native-cache schema 仍未完成，Review 中明确 native 继续显式 opt-in / default off。
+- [x] 运行必要验证：Rust test / fmt / clippy、native runtime 相关 Bun tests、`build:main`、`typecheck`、`git diff --check`。
+- [x] 更新 development checklist、next-session-prompt.md、`tasks/todo.md` Review 和必要 lessons；阶段完成后单独提交状态同步。
+
+### Review
+
+- 启动检查已确认：当前分支 `rust-go-refactor`，最近历史包含 `40f0b06e docs(rust-go): 同步 Phase 5 benchmark 口径增强状态`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`1e851056 docs(rust-go): 同步 Phase 5 stable benchmark gate 状态`、`65c67c52 docs(rust-go): 回填 Phase 5 search 性能优化最新恢复入口`、`aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`。
+- Release sidecar 版本检查：源码 `BINARY_VERSION` 为 `0.0.2-dev`，本地 ignored `native/search/target/release/codeinsights-native-search` 的 `status` 也报告 `binaryVersion: 0.0.2-dev`，本轮未重建 release binary，未创建 packaged native binary。
+- Benchmark 命令：`bun run native-runtime:benchmark --records 100000 --payload-bytes 900 --workspace-files 100000 --log-bytes 524288000 --iterations 20 --native-search-binary /Users/zq/Desktop/ai-projs/posp/RV-Insights/native/search/target/release/codeinsights-native-search`，在 `apps/electron/` 下运行 2 轮并保存完整 JSON 到 `/tmp/codeinsights-native-benchmark-round1.json`、`/tmp/codeinsights-native-benchmark-round2.json`。
+- 第 1 轮结果：TS Chat 99,527,780 bytes，P95 280.989ms，delay P95 3.146ms，work delay P95 2.004ms；Rust native Chat P95 3.921ms，delay P95 1.208ms，work delay P95 0.044ms。TS Agent 102,397,780 bytes，P95 220.475ms，delay P95 1.121ms，work delay P95 0ms；Rust native Agent P95 2.240ms，delay P95 1.199ms，work delay P95 0.065ms。`native-sidecar-status-cache-overhead` P95 0.014ms，work delay P95 0.311ms。
+- 第 2 轮结果：TS Chat 99,527,780 bytes，P95 294.904ms，delay P95 1.528ms，work delay P95 0.370ms；Rust native Chat P95 4.957ms，delay P95 1.198ms，work delay P95 0.064ms。TS Agent 102,397,780 bytes，P95 220.871ms，delay P95 1.114ms，work delay P95 0.047ms；Rust native Agent P95 2.432ms，delay P95 1.191ms，work delay P95 0.164ms。`native-sidecar-status-cache-overhead` P95 0.013ms，work delay P95 0.012ms。
+- Gate 结论：Chat native P95 提升 71.663x / 59.492x，work delay P95 降低 97.804% / 82.703%，达标；Agent native P95 提升 98.426x / 90.819x，达标，但 Agent native work delay P95 两轮均高于 TS fallback（0.065ms vs 0ms；0.164ms vs 0.047ms），未扣 baseline 的 Agent delay P95 也两轮小幅回退。差异绝对值很小，但方向仍不足以支持 default enable。
+- 结论保持：packaged smoke、optional package、native-cache schema、smoke script 和 default-enable 风险评估尚未完成，native 继续显式 opt-in / default off。下一步更适合在 default off 前提下设计 smoke script、optional package 与 native-cache schema，或继续分析 Agent native work delay 小幅回退的 sidecar manager / benchmark 调度成本。
+- 验证通过：`cargo test --manifest-path native/search/Cargo.toml`（12 pass）；`cargo fmt --check --manifest-path native/search/Cargo.toml`；`cargo clippy --manifest-path native/search/Cargo.toml -- -D warnings`；`bun test apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`（19 pass）；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`git diff --check`。
+- 文档同步：已更新 development checklist、next-session prompt 和 lessons；本轮未修改 `electron-builder.yml`，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+
 ## 2026-06-03 Rust/Go Phase 5 benchmark event-loop 口径复核计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”，本轮只复核 benchmark runner 的 event-loop 测量口径并最小化改进 benchmark summary 的可解释性；不默认启用 native，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

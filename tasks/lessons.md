@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 新 event-loop 字段 gate 习惯
+
+- 用 `eventLoopDelaySamplesMs` / `eventLoopBaselineMs` / `eventLoopWorkDelayMs` 复跑稳定 benchmark 后，default-enable 判断不能只看 native P95 大幅领先；如果 Agent native `eventLoopWorkDelayP95Ms` 连续高于 TS fallback，即使绝对差异只有 0.1ms 级，也要记录为 event-loop gate 未完全通过，native 继续显式 opt-in / default off。
+- `eventLoopWorkDelayP95Ms` 等于 0 时不要计算“降低百分比”来包装结论；应直接写出 TS 与 native 的原始值、样本方向和 baseline 噪声。Chat 达标不能替代 Agent gate，`native-sidecar-status-cache-overhead` 只能帮助解释 manager cache 成本，不能证明 packaged default enable。
+- 只要 optional package、native-cache schema、smoke script 和 packaged smoke 尚未完成，即使 P95 / event-loop 数字看起来通过，也不能默认启用 native；下一步应优先在 default off 前提下完成 smoke / package / cache 设计，而不是改 feature flag。
+
 ## 2026-06-03 Rust / Go Phase 5 stable benchmark gate 习惯
 
 - 跑 Rust native benchmark 前必须先用 sidecar `status` 检查本地 release binary 的 `binaryVersion` 是否与源码 `BINARY_VERSION` 一致；如果 `native/search/target/release/codeinsights-native-search` 仍报告旧版本（例如 `0.0.1-dev` 而源码为 `0.0.2-dev`），必须先 `cargo build --release --manifest-path native/search/Cargo.toml` 重建本地 ignored 产物，再开始性能结论记录。
