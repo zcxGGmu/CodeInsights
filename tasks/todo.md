@@ -1,5 +1,24 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-03 Rust/Go Phase 5 search 性能优化状态同步复核计划
+
+范围确认：用户要求再次更新文档最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调“每个阶段性任务完成后自动去做”。当前实现提交 `0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能` 和状态同步提交 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态` 已存在。本轮只做恢复入口回填和状态文档复核，不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认当前分支 `rust-go-refactor` 且最近历史包含 `aaede459`、`0eb350ff`、`e4bcd123`、`fdb6997b`、`319f30e8`。
+- [x] 复核 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md` 与 `docs/improve/rust-go/next-session-prompt.md` 已标清 Phase 0-4 完成、Phase 5 已完成 search 早停性能优化、未完成 default enable / optional package / packaged smoke / Phase 6-9。
+- [x] 将 latest recovery entry 从 `e4bcd123 docs(rust-go): 回填 Phase 5 sidecar manager 最新恢复入口` 回填为真实状态同步提交 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`。
+- [x] 更新 `tasks/lessons.md`，记录用户再次要求状态同步时必须把当前 HEAD 状态同步提交回填到恢复入口。
+- [x] 验证文档 diff、Markdown fence、禁止触碰文件和 git status。
+- [x] 单独提交本轮状态同步复核，提交信息使用详细中文；最终回复给出最新 HEAD 和可复制提示词。
+
+### Review
+
+- 最新开发基线保持为 `0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`；最新恢复入口已回填为 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`。
+- 已完成项明确：Phase 0-4；Phase 5 前置计划、依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、`native/search/` search-only Rust sidecar、Electron main process sidecar manager、Chat fallback gate、Rust vs TS contract parity、100MB native benchmark 和 Rust search `limit + 1` 早停性能优化。
+- 未完成项明确：default enable、optional package、native-cache schema、smoke script、packaged smoke、稳定 benchmark gate / Agent event loop 复核、Phase 6 大文件 / 日志 chunk preview、Phase 7 PathSafety / GitOutputParser、Phase 8 打包 / CI / 发布收口、Phase 9 Go supervisor 可选 spike。
+- 下次入口明确：先确认 `aaede459` 和 `0eb350ff` 在 `git log -5 --oneline` 中，再复跑稳定 benchmark gate，评估 Agent event loop 回退和 default-enable 风险；未过 P95 / event loop gate 前不得默认启用 native。
+- 边界保持：本轮不改业务代码，不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
 ## 2026-06-03 Rust/Go Phase 5 search 性能优化与 gate 复核计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”，基于 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate` 的 100MB benchmark 结果优化 Rust search 性能或重新规划 default-enable gate。当前 native 未通过 P95 / event loop 双门槛，必须保持显式 opt-in / default off。本轮不创建 packaged native binary，不修改 `electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

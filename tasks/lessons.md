@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-03 Rust / Go Phase 5 状态同步重复请求习惯
+
+- 用户在阶段实现和上一轮状态同步都完成后再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，仍要新建本轮 `tasks/todo.md` 同步计划和 Review，把当前 `git log` 可确认的最新状态同步提交（例如 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`）回填到 development checklist 和 next-session prompt；不能因为上一轮文档大体正确就只口头回复。
+- 最终回复里的可复制提示词要包含最新开发基线和最新恢复入口两个提交号；仓库内提示词如果本轮又产生新的 docs 提交，最终回复需要补充本轮提交后的实际 HEAD，避免恢复入口再次落后一轮。
+
 ## 2026-06-03 Rust / Go Phase 5 search 性能 gate 习惯
 
 - Rust search sidecar 做 `limit` 查询时，不要为了计算精确 `total_matches` 扫完整个 JSONL；主进程当前只需要 `matches` 和 `hasMore`，sidecar 可以在找到第 `limit + 1` 个命中后停止并返回 `hasMore=true`，避免 100MB 首屏查询被无谓完整解析拖慢。

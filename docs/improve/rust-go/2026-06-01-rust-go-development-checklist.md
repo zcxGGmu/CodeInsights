@@ -10,7 +10,7 @@
 
 > 更新时间：2026-06-03
 > 最新开发基线：`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`。
-> 最新已确认恢复入口：`e4bcd123 docs(rust-go): 回填 Phase 5 sidecar manager 最新恢复入口`。
+> 最新已确认恢复入口：`aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`。
 > 当前结论：Rust / Go 优化重构 Phase 0、Phase 1、Phase 2、Phase 3 和 Phase 4 已完成；已建立 shared NativeRuntime DTO / fixtures / benchmark，在 TypeScript fallback 内收敛 Chat / Agent / Pipeline 搜索 facade，完成 Pipeline records cursor tail 与 SearchDialog Pipeline 内容搜索接入，完成 TypeScript workspace 文件索引 cache、watcher invalidation、SearchDialog Workspace 文件分组和安全路径白名单，并补齐 Native Runtime diagnostics 的 IPC / preload / Jotai / Settings UI / SearchDialog 状态可见体验。Phase 5 已完成前置依赖 decision record、sidecar protocol / fallback / packaged smoke 计划、100MB TS fallback benchmark gate、`native/search/` 最小 Rust search-only sidecar 源码切片、Electron main process sidecar manager、Chat search opt-in fallback 边界、Rust vs TS contract parity、100MB native benchmark 对比和 search `limit + 1` 早停性能优化；尚未实现 packaged native binary、optional package、packaged smoke 或 Go supervisor。
 > 当前策略：Phase 5 native search 仍不能默认启用。最新 100MB benchmark 中 Rust native Chat / Agent P95 已明显快于 TS fallback，但 Agent native event loop delay 仍从 TS 2.092ms 回退到 3.546ms，且结果仅为单轮本地 benchmark；packaged smoke、optional package 和 default-enable 风险评估仍未完成。native 必须继续保持显式 opt-in / default off。下一步应先复跑稳定 gate、补充 default-enable 决策，或继续优化 event loop / benchmark 稳定性，再进入 optional package 与 packaged smoke。Go supervisor 仅作为 Phase 9 有条件 spike，不进入默认主线。
 
@@ -58,7 +58,7 @@
 
 1. 读取 `tasks/lessons.md`，特别是阶段提交、状态同步、路径安全、Git 防护、测试隔离、README / AGENTS 修改授权边界和 packaged smoke 纪律。
 2. 读取 Rust / Go 优化方案、本文和 `docs/improve/rust-go/next-session-prompt.md`，确认当前状态为“Phase 0-4 已完成；Phase 5 已完成前置依赖决策与 protocol / smoke 计划、100MB TS fallback benchmark gate、最小 Rust search-only sidecar、Electron main process sidecar manager、Chat search fallback gate、Rust vs TS contract parity 和 100MB native benchmark；native 未达默认启用门槛，packaged native binary / optional package / packaged smoke 尚未完成”。
-3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`e4bcd123 docs(rust-go): 回填 Phase 5 sidecar manager 最新恢复入口` 和 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`。
+3. 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `aaede459 docs(rust-go): 同步 Phase 5 search 性能优化后续状态`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能` 和 `319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`。
 4. 如果继续 Phase 5，先读取 `docs/improve/rust-go/2026-06-03-phase-5-dependency-decision-record.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`、`native/search/` 和 `apps/electron/src/main/lib/native-runtime/native-runtime-sidecar-manager.ts`，确认 native search 当前是显式 opt-in 且默认关闭。
 5. 下一步不要创建 packaged native binary 或修改打包配置；先复跑稳定 benchmark gate、评估 Agent event loop 回退和 default-enable 风险。只有 P95 / event loop gate 同时达标且 packaged smoke 计划进入可执行阶段后，才允许进入 optional package 与 packaged smoke。
 
