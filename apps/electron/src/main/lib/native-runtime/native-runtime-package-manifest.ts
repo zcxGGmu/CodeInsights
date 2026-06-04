@@ -40,6 +40,15 @@ export interface NativeSearchOptionalPackageInstallChainValidationResult {
   invalidInstalledPackages: string[]
 }
 
+export interface NativeSearchOptionalPackagePublicationValidationResult {
+  published: boolean
+  expectedPackages: string[]
+  publishedPackages: string[]
+  missingPackages: string[]
+  invalidPackages: string[]
+  unavailablePackages: string[]
+}
+
 export interface NativeSearchPackagingConfigValidationResult {
   verified: boolean
   expectedPackages: string[]
@@ -53,6 +62,12 @@ interface ValidateNativeSearchOptionalPackageInstallChainOptions {
   packageJson: unknown
   lockfileText?: string
   installedPackageManifests?: Record<string, unknown>
+}
+
+interface ValidateNativeSearchOptionalPackagePublicationOptions {
+  registryMetadata?: Record<string, unknown>
+  expectedPackageVersions?: Record<string, string>
+  unavailablePackages?: string[]
 }
 
 interface BuildNativeSearchPackageManifestOptions {
@@ -148,6 +163,18 @@ export function validateNativeSearchOptionalDependencies(
   }
 }
 
+export function getNativeSearchOptionalDependencyExpectedVersions(
+  packageJson: unknown,
+): Record<string, string> {
+  const versions: Record<string, string> = {}
+  for (const packageName of getNativeSearchOptionalDependencyNames()) {
+    const versionSpec = getOptionalDependencyVersionSpec(packageJson, packageName)
+    const exactVersion = extractExactPackageVersion(versionSpec, packageName)
+    if (exactVersion) versions[packageName] = exactVersion
+  }
+  return versions
+}
+
 export function validateNativeSearchOptionalPackageInstallChain(
   options: ValidateNativeSearchOptionalPackageInstallChainOptions,
 ): NativeSearchOptionalPackageInstallChainValidationResult {
@@ -194,6 +221,47 @@ export function validateNativeSearchOptionalPackageInstallChain(
   }
 }
 
+export function validateNativeSearchOptionalPackagePublication(
+  options: ValidateNativeSearchOptionalPackagePublicationOptions,
+): NativeSearchOptionalPackagePublicationValidationResult {
+  const expectedPackages = getNativeSearchOptionalDependencyNames()
+  const registryMetadata = options.registryMetadata ?? {}
+  const expectedPackageVersions = options.expectedPackageVersions ?? {}
+  const unavailablePackages = normalizePackageNameList(options.unavailablePackages ?? [], expectedPackages)
+  const publishedPackages: string[] = []
+  const missingPackages: string[] = []
+  const invalidPackages: string[] = []
+
+  for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
+    if (unavailablePackages.includes(plan.packageName)) continue
+
+    const metadata = registryMetadata[plan.packageName]
+    if (metadata == null) {
+      missingPackages.push(plan.packageName)
+      continue
+    }
+
+    if (!isNativeSearchRegistryPackument(metadata, plan, expectedPackageVersions[plan.packageName])) {
+      invalidPackages.push(plan.packageName)
+      continue
+    }
+
+    publishedPackages.push(plan.packageName)
+  }
+
+  return {
+    published: publishedPackages.length === expectedPackages.length
+      && missingPackages.length === 0
+      && invalidPackages.length === 0
+      && unavailablePackages.length === 0,
+    expectedPackages,
+    publishedPackages,
+    missingPackages,
+    invalidPackages,
+    unavailablePackages,
+  }
+}
+
 export function validateNativeSearchPackagingConfig(
   builderConfigText: string,
 ): NativeSearchPackagingConfigValidationResult {
@@ -221,6 +289,66 @@ export function validateNativeSearchPackagingConfig(
     blockingExcludes,
     tooBroadIncludes,
   }
+}
+
+function normalizePackageNameList(values: string[], expectedPackages: string[]): string[] {
+  return values.filter((value, index) => (
+    expectedPackages.includes(value) && values.indexOf(value) === index
+  ))
+}
+
+function isNativeSearchRegistryPackument(
+  value: unknown,
+  plan: NativeSearchOptionalPackagePlan,
+  expectedVersion?: string,
+): boolean {
+  if (!isRecord(value)) return false
+  if (value.name !== plan.packageName) return false
+  if (!isRecord(value.versions)) return false
+
+  if (expectedVersion != null) {
+    if (!isPackageVersion(expectedVersion)) return false
+    const expectedManifest = value.versions[expectedVersion]
+    return isRecord(expectedManifest)
+      && isNativeSearchRegistryVersionManifest(expectedManifest, plan, expectedVersion)
+  }
+
+  if (!isRecord(value['dist-tags'])) return false
+  const latest = value['dist-tags'].latest
+  if (typeof latest !== 'string' || !isPackageVersion(latest)) return false
+  const latestManifest = value.versions[latest]
+  return isRecord(latestManifest)
+    && isNativeSearchRegistryVersionManifest(latestManifest, plan, latest)
+}
+
+function isNativeSearchRegistryVersionManifest(
+  value: Record<string, unknown>,
+  plan: NativeSearchOptionalPackagePlan,
+  version: string,
+): boolean {
+  return value.name === plan.packageName
+    && value.version === version
+    && packageManifestTargetsPlatform(value.os, plan.platform)
+    && packageManifestTargetsArch(value.cpu, plan.arch)
+    && packageManifestHasExpectedBinary(value.bin, plan.binaryName)
+}
+
+function packageManifestTargetsPlatform(value: unknown, platform: NodeJS.Platform): boolean {
+  return Array.isArray(value)
+    && value.length === 1
+    && value[0] === platform
+}
+
+function packageManifestTargetsArch(value: unknown, arch: NodeJS.Architecture): boolean {
+  return Array.isArray(value)
+    && value.length === 1
+    && value[0] === arch
+}
+
+function packageManifestHasExpectedBinary(value: unknown, binaryName: string): boolean {
+  if (!isRecord(value)) return false
+  const binaryPath = value['codeinsights-native-search']
+  return binaryPath === `bin/${binaryName}`
 }
 
 function isValidOptionalDependencyVersionSpec(value: unknown, expectedPackageName: string): value is string {

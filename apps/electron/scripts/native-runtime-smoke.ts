@@ -14,11 +14,14 @@ import {
 } from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import {
   buildNativeSearchPackageManifest,
+  getNativeSearchOptionalDependencyExpectedVersions,
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
+  validateNativeSearchOptionalPackagePublication,
   validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
+  type NativeSearchOptionalPackagePublicationValidationResult,
   type NativeSearchPackagingConfigValidationResult,
   type NativeSearchOptionalPackageInstallChainValidationResult,
   type NativeSearchOptionalDependenciesValidationResult,
@@ -44,6 +47,7 @@ export interface NativeRuntimeSmokeOptions {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
   appNodeModulesRoot?: string
+  checkRegistry?: boolean
   query: string
   env?: NodeJS.ProcessEnv
 }
@@ -67,12 +71,17 @@ export interface NativeRuntimeSmokeSummary {
   packagedAppEvidenceVerified: boolean
   packagedAppIdentityVerified: boolean
   optionalDependenciesDeclared: boolean
+  optionalPackagePublicationChecked: boolean
+  optionalPackagesPublished: boolean
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
   packagingConfigVerified: boolean
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
+  missingPublishedOptionalPackages: string[]
+  invalidPublishedOptionalPackages: string[]
+  unavailablePublishedOptionalPackages: string[]
   missingOptionalDependencyLockfilePackages: string[]
   missingInstalledOptionalDependencies: string[]
   invalidInstalledOptionalDependencies: string[]
@@ -93,12 +102,17 @@ interface NativeRuntimeSmokeVerification {
   packagedAppEvidenceVerified?: boolean
   packagedAppIdentityVerified?: boolean
   optionalDependenciesDeclared?: boolean
+  optionalPackagePublicationChecked?: boolean
+  optionalPackagesPublished?: boolean
   optionalDependenciesInstallChainVerified?: boolean
   optionalDependenciesLockfileVerified?: boolean
   optionalDependenciesInstalledPackagesVerified?: boolean
   packagingConfigVerified?: boolean
   missingOptionalDependencies?: string[]
   invalidOptionalDependencies?: string[]
+  missingPublishedOptionalPackages?: string[]
+  invalidPublishedOptionalPackages?: string[]
+  unavailablePublishedOptionalPackages?: string[]
   missingOptionalDependencyLockfilePackages?: string[]
   missingInstalledOptionalDependencies?: string[]
   invalidInstalledOptionalDependencies?: string[]
@@ -119,6 +133,11 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
+    if (arg === '--check-registry') {
+      options.checkRegistry = true
+      continue
+    }
+
     const value = args[index + 1]
     if (!value) continue
 
@@ -154,12 +173,18 @@ export function buildNativeRuntimeSmokeSummary(input: {
 }): NativeRuntimeSmokeSummary {
   const verification = input.verification ?? {}
   const optionalDependenciesDeclared = Boolean(verification.optionalDependenciesDeclared)
+  const optionalPackagePublicationChecked = Boolean(verification.optionalPackagePublicationChecked)
+  const optionalPackagesPublished = optionalPackagePublicationChecked
+    && Boolean(verification.optionalPackagesPublished)
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
   const packagingConfigVerified = Boolean(verification.packagingConfigVerified)
   const packagedAppEvidenceVerified = Boolean(verification.packagedAppEvidenceVerified)
   const packagedAppIdentityVerified = Boolean(verification.packagedAppIdentityVerified)
-  const realPackagedBinaryVerified = optionalDependenciesInstallChainVerified
+  const usesTemporaryFixture = Boolean(verification.usesTemporaryFixture)
+  const realPackagedBinaryVerified = !usesTemporaryFixture
+    && optionalDependenciesInstallChainVerified
+    && optionalPackagesPublished
     && packagingConfigVerified
     && packagedAppEvidenceVerified
     && packagedAppIdentityVerified
@@ -174,11 +199,13 @@ export function buildNativeRuntimeSmokeSummary(input: {
     appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
     bundledBinaryVerified,
     fixtureBundledPackageVerified: Boolean(verification.fixtureBundledPackageVerified),
-    usesTemporaryFixture: Boolean(verification.usesTemporaryFixture),
+    usesTemporaryFixture,
     packagedAppLayoutVerified: Boolean(verification.packagedAppLayoutVerified),
     packagedAppEvidenceVerified,
     packagedAppIdentityVerified,
     optionalDependenciesDeclared,
+    optionalPackagePublicationChecked,
+    optionalPackagesPublished,
     optionalDependenciesInstallChainVerified,
     optionalDependenciesLockfileVerified: optionalDependenciesDeclared
       && Boolean(verification.optionalDependenciesLockfileVerified),
@@ -187,6 +214,9 @@ export function buildNativeRuntimeSmokeSummary(input: {
     packagingConfigVerified,
     missingOptionalDependencies: verification.missingOptionalDependencies ?? [],
     invalidOptionalDependencies: verification.invalidOptionalDependencies ?? [],
+    missingPublishedOptionalPackages: verification.missingPublishedOptionalPackages ?? [],
+    invalidPublishedOptionalPackages: verification.invalidPublishedOptionalPackages ?? [],
+    unavailablePublishedOptionalPackages: verification.unavailablePublishedOptionalPackages ?? [],
     missingOptionalDependencyLockfilePackages: verification.missingOptionalDependencyLockfilePackages ?? [],
     missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
     invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
@@ -199,6 +229,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
       benchmarkGatePassed: false,
       agentFacadeNativeExtractorDeclared: false,
       agentFacadeNativeParityEvaluated: false,
+      optionalPackagesPublished,
       optionalDependenciesDeclared,
       optionalDependenciesInstallChainVerified,
       packagingConfigVerified,
@@ -272,7 +303,12 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       cases.push(runPackagedManifestPreflightCase())
       const optionalDependenciesInstallChain = readCurrentNativeSearchOptionalPackageInstallChain()
       const optionalDependenciesResult = optionalDependenciesInstallChain.optionalDependencies
+      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(options.checkRegistry === true)
       const packagingConfig = readCurrentNativeSearchPackagingConfig()
+      cases.push(buildPackagedOptionalPackagePublicationPreflightCase(
+        optionalPackagePublication,
+        options.checkRegistry === true,
+      ))
       cases.push(runPackagedOptionalDependenciesPreflightCase(optionalDependenciesResult))
       cases.push(runPackagedOptionalDependenciesInstallChainPreflightCase(optionalDependenciesInstallChain))
       cases.push(buildPackagedPackagingConfigPreflightCase(
@@ -284,11 +320,22 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         bundledBinaryVerified: false,
         fixtureBundledPackageVerified: true,
         usesTemporaryFixture: true,
+        optionalPackagePublicationChecked: options.checkRegistry === true,
+        optionalPackagesPublished: optionalPackagePublication.published,
         optionalDependenciesDeclared: optionalDependenciesResult.declared,
         optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
         optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
         optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
         packagingConfigVerified: packagingConfig.verified,
+        missingPublishedOptionalPackages: options.checkRegistry === true
+          ? optionalPackagePublication.missingPackages
+          : [],
+        invalidPublishedOptionalPackages: options.checkRegistry === true
+          ? optionalPackagePublication.invalidPackages
+          : [],
+        unavailablePublishedOptionalPackages: options.checkRegistry === true
+          ? optionalPackagePublication.unavailablePackages
+          : [],
         missingOptionalDependencies: optionalDependenciesResult.missingPackages,
         invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
         missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
@@ -300,7 +347,16 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         realPackagedBinaryVerified: false,
       }
     } else if (options.mode === 'packaged-app-layout') {
-      const packagedAppResult = runPackagedAppLayoutCase(options.appNodeModulesRoot)
+      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(options.checkRegistry === true)
+      const packagedAppResult = runPackagedAppLayoutCase(
+        options.appNodeModulesRoot,
+        options.checkRegistry === true,
+        optionalPackagePublication,
+      )
+      cases.push(buildPackagedOptionalPackagePublicationPreflightCase(
+        optionalPackagePublication,
+        options.checkRegistry === true,
+      ))
       cases.push(packagedAppResult.case)
       verification = {
         bundledBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
@@ -309,11 +365,16 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         packagedAppLayoutVerified: packagedAppResult.layoutVerified,
         packagedAppEvidenceVerified: packagedAppResult.packagedAppEvidenceVerified,
         packagedAppIdentityVerified: packagedAppResult.packagedAppIdentityVerified,
+        optionalPackagePublicationChecked: packagedAppResult.optionalPackagePublicationChecked,
+        optionalPackagesPublished: packagedAppResult.optionalPackagesPublished,
         optionalDependenciesDeclared: packagedAppResult.optionalDependenciesDeclared,
         optionalDependenciesInstallChainVerified: packagedAppResult.optionalDependenciesInstallChainVerified,
         optionalDependenciesLockfileVerified: packagedAppResult.optionalDependenciesLockfileVerified,
         optionalDependenciesInstalledPackagesVerified: packagedAppResult.optionalDependenciesInstalledPackagesVerified,
         packagingConfigVerified: packagedAppResult.packagingConfigVerified,
+        missingPublishedOptionalPackages: packagedAppResult.missingPublishedOptionalPackages,
+        invalidPublishedOptionalPackages: packagedAppResult.invalidPublishedOptionalPackages,
+        unavailablePublishedOptionalPackages: packagedAppResult.unavailablePublishedOptionalPackages,
         missingOptionalDependencies: packagedAppResult.missingOptionalDependencies,
         invalidOptionalDependencies: packagedAppResult.invalidOptionalDependencies,
         missingOptionalDependencyLockfilePackages: packagedAppResult.missingOptionalDependencyLockfilePackages,
@@ -521,6 +582,44 @@ function runPackagedOptionalDependenciesPreflightCase(
   }
 }
 
+function buildPackagedOptionalPackagePublicationPreflightCase(
+  result: NativeSearchOptionalPackagePublicationValidationResult,
+  registryChecked: boolean,
+): NativeRuntimeSmokeCase {
+  if (!registryChecked) {
+    return {
+      name: 'packaged-optional-package-publication-preflight',
+      status: 'skipped',
+      detail: 'optionalPackagePublicationChecked=false; optionalPackagesPublished=false; realPackagedBinaryVerified=false',
+    }
+  }
+
+  if (result.published) {
+    return {
+      name: 'packaged-optional-package-publication-preflight',
+      status: 'passed',
+      detail: [
+        'optionalPackagePublicationChecked=true',
+        'optionalPackagesPublished=true',
+        `publishedOptionalPackages=${result.publishedPackages.length}`,
+      ].join('; '),
+    }
+  }
+
+  return {
+    name: 'packaged-optional-package-publication-preflight',
+    status: 'failed',
+    detail: [
+      'optionalPackagePublicationChecked=true',
+      'optionalPackagesPublished=false',
+      `missingPublishedOptionalPackages=${result.missingPackages.join(',') || 'none'}`,
+      `invalidPublishedOptionalPackages=${result.invalidPackages.join(',') || 'none'}`,
+      `unavailablePublishedOptionalPackages=${result.unavailablePackages.join(',') || 'none'}`,
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
+  }
+}
+
 function runPackagedOptionalDependenciesInstallChainPreflightCase(
   result: NativeSearchOptionalPackageInstallChainValidationResult,
 ): NativeRuntimeSmokeCase {
@@ -606,11 +705,16 @@ interface PackagedAppLayoutCaseResult {
   layoutVerified: boolean
   packagedAppEvidenceVerified: boolean
   packagedAppIdentityVerified: boolean
+  optionalPackagePublicationChecked: boolean
+  optionalPackagesPublished: boolean
   optionalDependenciesDeclared: boolean
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
   packagingConfigVerified: boolean
+  missingPublishedOptionalPackages: string[]
+  invalidPublishedOptionalPackages: string[]
+  unavailablePublishedOptionalPackages: string[]
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
   missingOptionalDependencyLockfilePackages: string[]
@@ -623,10 +727,15 @@ interface PackagedAppLayoutCaseResult {
   usesTemporaryFixture: boolean
 }
 
-function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): PackagedAppLayoutCaseResult {
+function runPackagedAppLayoutCase(
+  appNodeModulesRoot: string | undefined,
+  registryChecked: boolean,
+  optionalPackagePublication: NativeSearchOptionalPackagePublicationValidationResult,
+): PackagedAppLayoutCaseResult {
   const optionalDependenciesInstallChain = readCurrentNativeSearchOptionalPackageInstallChain()
   const optionalDependenciesResult = optionalDependenciesInstallChain.optionalDependencies
   const packagingConfig = readCurrentNativeSearchPackagingConfig()
+  const publicationFields = buildPackagedAppPublicationFields(registryChecked, optionalPackagePublication)
   if (!appNodeModulesRoot) {
     return {
       case: {
@@ -637,6 +746,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
       packagedAppIdentityVerified: false,
+      ...publicationFields,
       optionalDependenciesDeclared: optionalDependenciesResult.declared,
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
@@ -665,6 +775,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
       packagedAppIdentityVerified: false,
+      ...publicationFields,
       optionalDependenciesDeclared: optionalDependenciesResult.declared,
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
@@ -694,6 +805,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
       packagedAppIdentityVerified: false,
+      ...publicationFields,
       optionalDependenciesDeclared: optionalDependenciesResult.declared,
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
@@ -732,6 +844,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       layoutVerified: false,
       packagedAppEvidenceVerified,
       packagedAppIdentityVerified,
+      ...publicationFields,
       optionalDependenciesDeclared: optionalDependenciesResult.declared,
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
@@ -752,6 +865,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
 
   const realPackagedBinaryVerified = packagedAppEvidenceVerified
     && packagedAppIdentityVerified
+    && optionalPackagePublication.published
     && optionalDependenciesInstallChain.verified
     && packagingConfig.verified
     && !usesTemporaryFixture
@@ -766,6 +880,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
         `packagedAppEvidence=${packagedAppEvidence}`,
         `packagedAppEvidenceVerified=${String(packagedAppEvidenceVerified)}`,
         `packagedAppIdentityVerified=${String(packagedAppIdentityVerified)}`,
+        `optionalPackagesPublished=${String(optionalPackagePublication.published)}`,
         `optionalDependenciesDeclared=${String(optionalDependenciesResult.declared)}`,
         `optionalDependenciesInstallChainVerified=${String(optionalDependenciesInstallChain.verified)}`,
         `packagingConfigVerified=${String(packagingConfig.verified)}`,
@@ -776,6 +891,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
     layoutVerified: true,
     packagedAppEvidenceVerified,
     packagedAppIdentityVerified,
+    ...publicationFields,
     optionalDependenciesDeclared: optionalDependenciesResult.declared,
     optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
     optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
@@ -794,6 +910,26 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
   }
 }
 
+function buildPackagedAppPublicationFields(
+  registryChecked: boolean,
+  optionalPackagePublication: NativeSearchOptionalPackagePublicationValidationResult,
+): Pick<
+  PackagedAppLayoutCaseResult,
+  | 'optionalPackagePublicationChecked'
+  | 'optionalPackagesPublished'
+  | 'missingPublishedOptionalPackages'
+  | 'invalidPublishedOptionalPackages'
+  | 'unavailablePublishedOptionalPackages'
+> {
+  return {
+    optionalPackagePublicationChecked: registryChecked,
+    optionalPackagesPublished: registryChecked && optionalPackagePublication.published,
+    missingPublishedOptionalPackages: registryChecked ? optionalPackagePublication.missingPackages : [],
+    invalidPublishedOptionalPackages: registryChecked ? optionalPackagePublication.invalidPackages : [],
+    unavailablePublishedOptionalPackages: registryChecked ? optionalPackagePublication.unavailablePackages : [],
+  }
+}
+
 function readCurrentNativeSearchOptionalPackageInstallChain(): NativeSearchOptionalPackageInstallChainValidationResult {
   try {
     const packageJson = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8')) as unknown
@@ -808,6 +944,49 @@ function readCurrentNativeSearchOptionalPackageInstallChain(): NativeSearchOptio
       lockfileText: '',
       installedPackageManifests: {},
     })
+  }
+}
+
+async function readNativeSearchOptionalPackagePublication(
+  checkRegistry: boolean,
+): Promise<NativeSearchOptionalPackagePublicationValidationResult> {
+  if (!checkRegistry) {
+    return validateNativeSearchOptionalPackagePublication({})
+  }
+
+  const registryMetadata: Record<string, unknown> = {}
+  const unavailablePackages: string[] = []
+  for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
+    try {
+      const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(plan.packageName)}`, {
+        headers: {
+          accept: 'application/vnd.npm.install-v1+json, application/json',
+        },
+      })
+      if (response.status === 404) continue
+      if (!response.ok) {
+        unavailablePackages.push(plan.packageName)
+        continue
+      }
+      registryMetadata[plan.packageName] = await response.json() as unknown
+    } catch {
+      unavailablePackages.push(plan.packageName)
+    }
+  }
+
+  return validateNativeSearchOptionalPackagePublication({
+    registryMetadata,
+    expectedPackageVersions: readCurrentNativeSearchOptionalDependencyExpectedVersions(),
+    unavailablePackages,
+  })
+}
+
+function readCurrentNativeSearchOptionalDependencyExpectedVersions(): Record<string, string> {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8')) as unknown
+    return getNativeSearchOptionalDependencyExpectedVersions(packageJson)
+  } catch {
+    return {}
   }
 }
 

@@ -3,6 +3,7 @@ export type NativeSearchDefaultEnableBlocker =
   | 'native_benchmark_gate_not_passed'
   | 'agent_facade_native_extractor_not_declared'
   | 'agent_facade_native_parity_not_evaluated'
+  | 'optional_packages_not_published'
   | 'optional_dependencies_not_declared'
   | 'optional_package_install_chain_not_verified'
   | 'packaging_config_not_verified'
@@ -16,6 +17,7 @@ export interface NativeSearchDefaultEnableGates {
   benchmarkGatePassed: boolean
   agentFacadeNativeExtractorDeclared: boolean
   agentFacadeNativeParityEvaluated: boolean
+  optionalPackagesPublished: boolean
   optionalDependenciesDeclared: boolean
   optionalDependenciesInstallChainVerified: boolean
   packagingConfigVerified: boolean
@@ -43,6 +45,7 @@ export function evaluateNativeSearchDefaultEnableReadiness(
   if (!gates.benchmarkGatePassed) blockers.push('native_benchmark_gate_not_passed')
   if (!gates.agentFacadeNativeExtractorDeclared) blockers.push('agent_facade_native_extractor_not_declared')
   if (!gates.agentFacadeNativeParityEvaluated) blockers.push('agent_facade_native_parity_not_evaluated')
+  if (!gates.optionalPackagesPublished) blockers.push('optional_packages_not_published')
   if (!gates.optionalDependenciesDeclared) blockers.push('optional_dependencies_not_declared')
   if (!gates.optionalDependenciesInstallChainVerified) blockers.push('optional_package_install_chain_not_verified')
   if (!gates.packagingConfigVerified) blockers.push('packaging_config_not_verified')

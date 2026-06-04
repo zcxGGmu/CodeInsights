@@ -248,6 +248,7 @@ describe('native-runtime-benchmark helpers', () => {
       blockers: [
         'native_benchmark_gate_not_passed',
         'agent_facade_native_parity_not_evaluated',
+        'optional_packages_not_published',
         'optional_dependencies_not_declared',
         'optional_package_install_chain_not_verified',
         'packaging_config_not_verified',
@@ -261,6 +262,7 @@ describe('native-runtime-benchmark helpers', () => {
         benchmarkGatePassed: false,
         agentFacadeNativeExtractorDeclared: true,
         agentFacadeNativeParityEvaluated: false,
+        optionalPackagesPublished: false,
         optionalDependenciesDeclared: false,
         optionalDependenciesInstallChainVerified: false,
         packagingConfigVerified: false,
@@ -309,6 +311,7 @@ describe('native-runtime-benchmark helpers', () => {
       'native_benchmark_gate_not_passed',
       'agent_facade_native_extractor_not_declared',
       'agent_facade_native_parity_not_evaluated',
+      'optional_packages_not_published',
       'optional_dependencies_not_declared',
       'optional_package_install_chain_not_verified',
       'packaging_config_not_verified',
@@ -437,6 +440,7 @@ describe('native-runtime-benchmark helpers', () => {
       blockers: [
         'native_benchmark_not_evaluated',
         'native_benchmark_gate_not_passed',
+        'optional_packages_not_published',
         'optional_dependencies_not_declared',
         'optional_package_install_chain_not_verified',
         'packaging_config_not_verified',

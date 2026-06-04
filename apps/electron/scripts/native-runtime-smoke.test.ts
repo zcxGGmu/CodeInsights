@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import {
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalPackagePlan,
+  NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
 import {
   buildPackagedPackagingConfigPreflightCase,
@@ -16,6 +17,7 @@ import {
 } from './native-runtime-smoke'
 
 const originalNativeSearchBinary = process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY
+const originalFetch = globalThis.fetch
 
 afterEach(() => {
   if (originalNativeSearchBinary == null) {
@@ -23,6 +25,7 @@ afterEach(() => {
   } else {
     process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY = originalNativeSearchBinary
   }
+  globalThis.fetch = originalFetch
 })
 
 describe('native-runtime-smoke', () => {
@@ -49,11 +52,13 @@ describe('native-runtime-smoke', () => {
       'packaged-app-layout',
       '--app-node-modules-root',
       '/Applications/CodeInsights.app/Contents/Resources/app.asar.unpacked/node_modules',
+      '--check-registry',
     ])
 
     expect(options).toEqual({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app.asar.unpacked/node_modules',
+      checkRegistry: true,
       query: '关键字',
     })
   })
@@ -97,6 +102,7 @@ describe('native-runtime-smoke', () => {
         'native_benchmark_gate_not_passed',
         'agent_facade_native_extractor_not_declared',
         'agent_facade_native_parity_not_evaluated',
+        'optional_packages_not_published',
         'optional_dependencies_not_declared',
         'optional_package_install_chain_not_verified',
         'packaging_config_not_verified',
@@ -132,12 +138,51 @@ describe('native-runtime-smoke', () => {
     })
 
     expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.packagingConfigVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_dependencies_not_declared')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_packages_not_published')
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaging_config_not_verified')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
+  })
+
+  test('summary builder 不允许临时 fixture 证明真实 packaged binary', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        bundledBinaryVerified: true,
+        usesTemporaryFixture: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalDependenciesDeclared: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'usesTemporaryFixture=true; realPackagedBinaryVerified=true',
+      }],
+    })
+
+    expect(summary.usesTemporaryFixture).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(true)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(true)
+    expect(summary.packagingConfigVerified).toBe(true)
+    expect(summary.packagedAppEvidenceVerified).toBe(true)
+    expect(summary.packagedAppIdentityVerified).toBe(true)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
   })
 
@@ -151,6 +196,8 @@ describe('native-runtime-smoke', () => {
         packagedAppEvidenceVerified: false,
         packagedAppIdentityVerified: false,
         optionalDependenciesDeclared: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
         optionalDependenciesInstallChainVerified: true,
         optionalDependenciesLockfileVerified: true,
         optionalDependenciesInstalledPackagesVerified: true,
@@ -165,6 +212,7 @@ describe('native-runtime-smoke', () => {
     })
 
     expect(summary.optionalDependenciesDeclared).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(true)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(true)
     expect(summary.packagingConfigVerified).toBe(true)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
@@ -378,6 +426,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.packagedAppEvidenceVerified).toBe(true)
       expect(summary.packagedAppIdentityVerified).toBe(true)
       expect(summary.optionalDependenciesDeclared).toBe(false)
+      expect(summary.optionalPackagesPublished).toBe(false)
       expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
       expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
       expect(summary.realPackagedBinaryVerified).toBe(false)
@@ -389,6 +438,7 @@ describe('native-runtime-smoke', () => {
       expect(JSON.stringify(summary)).toContain('packagedAppEvidence=unpacked-app')
       expect(JSON.stringify(summary)).toContain('packagedAppIdentityVerified=true')
       expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
+      expect(JSON.stringify(summary)).toContain('optionalPackagesPublished=false')
       expect(JSON.stringify(summary)).toContain('optionalDependenciesInstallChainVerified=false')
       expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
@@ -548,6 +598,10 @@ describe('native-runtime-smoke', () => {
       status: 'skipped',
     }))
     expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-optional-package-publication-preflight',
+      status: 'skipped',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'packaged-packaging-config-preflight',
       status: 'skipped',
     }))
@@ -557,6 +611,8 @@ describe('native-runtime-smoke', () => {
     }))
     expect(JSON.stringify(summary)).toContain('bundledBinaryVerified=false')
     expect(JSON.stringify(summary)).toContain('fixtureBundledPackageVerified=true')
+    expect(JSON.stringify(summary)).toContain('optionalPackagePublicationChecked=false')
+    expect(JSON.stringify(summary)).toContain('optionalPackagesPublished=false')
     expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
     expect(JSON.stringify(summary)).toContain('optionalDependenciesInstallChainVerified=false')
     expect(JSON.stringify(summary)).toContain('packagingConfigVerified=false')
@@ -564,6 +620,11 @@ describe('native-runtime-smoke', () => {
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.fixtureBundledPackageVerified).toBe(true)
     expect(summary.usesTemporaryFixture).toBe(true)
+    expect(summary.optionalPackagePublicationChecked).toBe(false)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.missingPublishedOptionalPackages).toEqual([])
+    expect(summary.invalidPublishedOptionalPackages).toEqual([])
+    expect(summary.unavailablePublishedOptionalPackages).toEqual([])
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.optionalDependenciesLockfileVerified).toBe(false)
@@ -591,6 +652,7 @@ describe('native-runtime-smoke', () => {
         benchmarkGatePassed: false,
         agentFacadeNativeExtractorDeclared: false,
         agentFacadeNativeParityEvaluated: false,
+        optionalPackagesPublished: false,
         optionalDependenciesDeclared: false,
         optionalDependenciesInstallChainVerified: false,
         packagingConfigVerified: false,
@@ -600,6 +662,65 @@ describe('native-runtime-smoke', () => {
         riskReviewCompleted: false,
       },
     })
+  })
+
+  test('packaged manifest 显式 registry 检查会把未发布 optional packages 标记为 failed gate', async () => {
+    globalThis.fetch = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch
+
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'packaged-manifest',
+      query: '关键字',
+      checkRegistry: true,
+    })
+
+    expect(summary.optionalPackagePublicationChecked).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.missingPublishedOptionalPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.invalidPublishedOptionalPackages).toEqual([])
+    expect(summary.unavailablePublishedOptionalPackages).toEqual([])
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-optional-package-publication-preflight',
+      status: 'failed',
+    }))
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_packages_not_published')
+    expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
+
+  test('packaged app layout 显式 registry 检查会把未发布 optional packages 标记为 failed gate', async () => {
+    globalThis.fetch = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+        checkRegistry: true,
+      })
+
+      expect(summary.optionalPackagePublicationChecked).toBe(true)
+      expect(summary.optionalPackagesPublished).toBe(false)
+      expect(summary.missingPublishedOptionalPackages).toEqual(
+        NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      )
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-optional-package-publication-preflight',
+        status: 'failed',
+      }))
+      expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+      expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
+      expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
+      expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
   })
 })
 

@@ -238,6 +238,7 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
       benchmarkGatePassed: nativeSearchGate.benchmarkGatePassed,
       agentFacadeNativeExtractorDeclared: agentFacadeSearch.productionAgentNativeExtractorDeclared,
       agentFacadeNativeParityEvaluated: agentFacadeSearch.nativeParityEvaluated,
+      optionalPackagesPublished: false,
       optionalDependenciesDeclared: false,
       optionalDependenciesInstallChainVerified: false,
       packagingConfigVerified: false,

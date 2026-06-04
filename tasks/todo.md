@@ -1,5 +1,44 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-05 Rust/Go Phase 5 optional package 发布状态预检计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，最新开发基线为 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`，最新已确认恢复入口为 `60bdd3a3 docs(rust-go): 回填 Phase 5 packaging config 最新恢复入口`。本轮在 native default off / 显式 opt-in 不变的前提下，补齐真实 optional package 发布 / install-chain 前的只读 registry publication preflight：默认不联网、不安装、不声明依赖，只在显式传参时只读查询计划中的 `@codeinsights/native-search-*` npm registry 元数据，并把当前 package 未发布 / metadata 无法验证沉淀为 smoke/readiness 的机器可读 blocker。严格不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净、最新开发基线 `348e003d` 和最新恢复入口 `60bdd3a3` 均在最近历史中。
+- [x] 通过子代理只读复核 optional package / install-chain 与 packaged smoke / default-enable 两个方向；结论是当前不能声明真实 optionalDependencies 或修改 builder，合理下一步是补只读 publication / registry evidence gate。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-package-manifest.test.ts`、`native-runtime-default-enable-readiness.test.ts` 和 `native-runtime-smoke.test.ts`，锁住 publication 未验证 / 未发布时 native 继续 explicit opt-in，且不能绕过 install-chain、packaging config 和 real packaged binary gate。
+- [x] 在 `native-runtime-package-manifest.ts` 新增只读 optional package publication metadata 校验 helper：只接收 registry 元数据对象，不读取 binary、不安装、不输出路径；要求 4 个计划包都存在、版本为 exact semver、manifest name 匹配、platform / arch / os / cpu / binary metadata 与计划一致。
+- [x] 在 `native-runtime-default-enable-readiness.ts` 增加 `optionalPackagesPublished` gate 和 `optional_packages_not_published` blocker，让 default-enable 风险聚合显式区分“包已发布”和“声明 / lockfile / installed package 已验证”。
+- [x] 在 `smoke:native-runtime -- --mode packaged-manifest` 接入 publication preflight summary 字段；默认不联网时 case skipped 且 `optionalPackagesPublished=false`，显式 `--check-registry` 时只读 npm registry 元数据并报告 missing / invalid packages。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增 optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`，确认默认无 registry 查询但 summary 输出 `optionalPackagesPublished=false`。
+- [x] 运行显式只读 registry preflight（不安装）：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry`，确认当前若 registry 仍 E404 则输出 missing packages、保持 no-go；如果网络不可用，则记录无法验证而不把 gate 置 true。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 已新增 `validateNativeSearchOptionalPackagePublication()` 和 `getNativeSearchOptionalDependencyExpectedVersions()`。publication helper 只消费 registry packument 元数据和可选 expected exact version map，不读取 binary、不安装 package、不输出路径；无 expected version 时验证 `dist-tags.latest`，存在 expected version 时验证 `versions[expectedVersion]`，避免 publication 和 install-chain 各自证明不同版本。
+- `smoke:native-runtime` 新增 `--check-registry` 显式只读入口。默认 `packaged-manifest` / `packaged-app-layout` 不联网，publication case 为 skipped 且 `optionalPackagesPublished=false`；显式 `--check-registry` 时只读查询 npm registry，404 进入 `missingPublishedOptionalPackages`，非 OK / fetch error 进入 `unavailablePublishedOptionalPackages`，metadata 不匹配进入 `invalidPublishedOptionalPackages`。
+- 已把 `optionalPackagesPublished` 接入 `nativeSearchDefaultEnableReadiness` 和 smoke summary，新增 blocker `optional_packages_not_published`；`realPackagedBinaryVerified` / `bundledBinaryVerified` 现在必须同时满足非临时 fixture、optional package 已发布、optionalDependencies install-chain、packaging config、packaged evidence、packaged identity 和真实 resolver verification。
+- 代码审查子代理先指出 temporary fixture 可绕过 summary、`packaged-app-layout --check-registry` 不会失败、publication 只看 latest 三个风险；已补红灯测试并修复。复审未发现 Critical / High 阻断。
+- 当前真实 no-go：默认 `packaged-manifest` 仍为 exit 0 的预检视角，但 summary 为 `optionalPackagePublicationChecked=false`、`optionalPackagesPublished=false`、4 个 `missingOptionalDependencies`、4 个 lockfile / installed missing packages、`packagingConfigVerified=false`、4 个 `missingPackagingConfigPackages`、`blockingPackagingConfigExcludes=["!node_modules/@codeinsights/**"]`、`realPackagedBinaryVerified=false`。显式 registry `packaged-manifest --check-registry` 和 `packaged-app-layout --check-registry` 当前均 exit 1，4 个计划包都在 `missingPublishedOptionalPackages`，`optional_packages_not_published` blocker 生效。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.152` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：新增测试先红灯；实现后目标测试矩阵 `50 pass`；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-manifest --check-registry` 预期 exit 1 no-go；`smoke:native-runtime -- --mode packaged-app-layout`；`smoke:native-runtime -- --mode packaged-app-layout --check-registry` 预期 exit 1 no-go；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成。
+
 ## 2026-06-04 Rust/Go Phase 5 packaging config allowlist 恢复入口回填计划
 
 范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步，把当前 `git log` 可确认的最新 Rust / Go 状态同步提交 `f359dadc docs(rust-go): 同步 Phase 5 packaging config allowlist 后续状态` 回填为最新已确认恢复入口；最新开发基线保持为 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
