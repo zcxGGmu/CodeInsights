@@ -25,6 +25,7 @@ export interface NativeSearchPackageManifest {
 export interface NativeSearchOptionalDependenciesValidationResult {
   declared: boolean
   expectedPackages: string[]
+  presentPackages: string[]
   missingPackages: string[]
   invalidPackages: string[]
 }
@@ -37,6 +38,15 @@ export interface NativeSearchOptionalPackageInstallChainValidationResult {
   missingLockfilePackages: string[]
   missingInstalledPackages: string[]
   invalidInstalledPackages: string[]
+}
+
+export interface NativeSearchPackagingConfigValidationResult {
+  verified: boolean
+  expectedPackages: string[]
+  includedPackages: string[]
+  missingPackages: string[]
+  blockingExcludes: string[]
+  tooBroadIncludes: string[]
 }
 
 interface ValidateNativeSearchOptionalPackageInstallChainOptions {
@@ -113,6 +123,7 @@ export function validateNativeSearchOptionalDependencies(
     && isRecord(packageJson.optionalDependencies)
     ? packageJson.optionalDependencies
     : undefined
+  const presentPackages: string[] = []
   const missingPackages: string[] = []
   const invalidPackages: string[] = []
 
@@ -122,6 +133,7 @@ export function validateNativeSearchOptionalDependencies(
       missingPackages.push(packageName)
       continue
     }
+    presentPackages.push(packageName)
     if (!isValidOptionalDependencyVersionSpec(value, packageName)) {
       invalidPackages.push(packageName)
     }
@@ -130,6 +142,7 @@ export function validateNativeSearchOptionalDependencies(
   return {
     declared: missingPackages.length === 0 && invalidPackages.length === 0,
     expectedPackages,
+    presentPackages,
     missingPackages,
     invalidPackages,
   }
@@ -178,6 +191,35 @@ export function validateNativeSearchOptionalPackageInstallChain(
     missingLockfilePackages,
     missingInstalledPackages,
     invalidInstalledPackages,
+  }
+}
+
+export function validateNativeSearchPackagingConfig(
+  builderConfigText: string,
+): NativeSearchPackagingConfigValidationResult {
+  const expectedPackages = getNativeSearchOptionalDependencyNames()
+  const filesRules = extractElectronBuilderFilesRules(builderConfigText)
+  const plans = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+  const blockingExcludes = filesRules
+    .filter((rule) => rule.startsWith('!') && blocksNativeSearchRequiredPath(rule))
+  const tooBroadIncludes = filesRules
+    .filter((rule) => !rule.startsWith('!') && isTooBroadNativeSearchInclude(rule))
+  const includedPackages = plans.filter((plan) => (
+    getNativeSearchRequiredPackagePaths(plan).every((requiredPath) => (
+      filesRules.some((rule) => !rule.startsWith('!') && explicitlyIncludesNativeSearchPath(rule, plan, requiredPath))
+    ))
+  )).map((plan) => plan.packageName)
+  const missingPackages = plans.map((plan) => plan.packageName).filter((packageName) => (
+    !includedPackages.includes(packageName)
+  ))
+
+  return {
+    verified: missingPackages.length === 0 && blockingExcludes.length === 0 && tooBroadIncludes.length === 0,
+    expectedPackages,
+    includedPackages,
+    missingPackages,
+    blockingExcludes,
+    tooBroadIncludes,
   }
 }
 
@@ -289,6 +331,141 @@ function extractExactPackageVersion(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractElectronBuilderFilesRules(builderConfigText: string): string[] {
+  const rules: string[] = []
+  const lines = builderConfigText.split(/\r?\n/)
+  let inFilesBlock = false
+  let filesIndent = 0
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (trimmedLine.length === 0 || trimmedLine.startsWith('#')) continue
+
+    const indent = line.search(/\S/)
+    if (indent === 0 && /^files:\s*(?:#.*)?$/.test(trimmedLine)) {
+      inFilesBlock = true
+      filesIndent = indent
+      continue
+    }
+
+    if (!inFilesBlock) continue
+    if (indent <= filesIndent && /^[A-Za-z0-9_-]+:/.test(trimmedLine)) break
+
+    const listItem = trimmedLine.match(/^-\s*(.+)$/)
+    if (!listItem?.[1]) continue
+    rules.push(normalizeElectronBuilderFilesRule(listItem[1]))
+  }
+
+  return rules.filter((rule) => rule.length > 0)
+}
+
+function normalizeElectronBuilderFilesRule(value: string): string {
+  const withoutComment = stripYamlInlineComment(value.trim())
+  if (
+    (withoutComment.startsWith('"') && withoutComment.endsWith('"'))
+    || (withoutComment.startsWith("'") && withoutComment.endsWith("'"))
+  ) {
+    return withoutComment.slice(1, -1).trim()
+  }
+  return withoutComment
+}
+
+function stripYamlInlineComment(value: string): string {
+  let quote: '"' | "'" | null = null
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+    if ((char === '"' || char === "'") && value[index - 1] !== '\\') {
+      quote = quote === char ? null : quote ?? char
+      continue
+    }
+    if (char === '#' && quote == null && /\s/.test(value[index - 1] ?? ' ')) {
+      return value.slice(0, index).trim()
+    }
+  }
+  return value.trim()
+}
+
+function blocksNativeSearchRequiredPath(rule: string): boolean {
+  const normalizedRule = normalizeGlobRule(rule.slice(1))
+  return NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.some((plan) => (
+    getNativeSearchRequiredPackagePaths(plan).some((requiredPath) => (
+      globRuleMatchesPathOrAncestor(normalizedRule, requiredPath)
+    ))
+  ))
+}
+
+function explicitlyIncludesNativeSearchPath(
+  rule: string,
+  plan: NativeSearchOptionalPackagePlan,
+  requiredPath: string,
+): boolean {
+  const normalizedRule = normalizeGlobRule(rule)
+  const packageRoot = getNativeSearchPackageRoot(plan)
+
+  return normalizedRule === packageRoot
+    || normalizedRule === `${packageRoot}/**`
+    || normalizedRule === `${packageRoot}/**/*`
+    || normalizedRule === requiredPath
+}
+
+function isTooBroadNativeSearchInclude(rule: string): boolean {
+  const normalizedRule = normalizeGlobRule(rule)
+  return normalizedRule === 'node_modules/**'
+    || normalizedRule === 'node_modules/**/*'
+    || normalizedRule === 'node_modules/@codeinsights/*'
+    || normalizedRule === 'node_modules/@codeinsights/**'
+    || normalizedRule === 'node_modules/@codeinsights/**/*'
+    || normalizedRule.startsWith('node_modules/@codeinsights/native-search-*')
+}
+
+function getNativeSearchRequiredPackagePaths(plan: NativeSearchOptionalPackagePlan): string[] {
+  const packageRoot = getNativeSearchPackageRoot(plan)
+  return [
+    `${packageRoot}/package.json`,
+    `${packageRoot}/native-search-package.json`,
+    `${packageRoot}/bin/${plan.binaryName}`,
+  ]
+}
+
+function getNativeSearchPackageRoot(plan: NativeSearchOptionalPackagePlan): string {
+  return `node_modules/${plan.packageName}`
+}
+
+function globRuleMatchesPathOrAncestor(rule: string, requiredPath: string): boolean {
+  const pathSegments = requiredPath.split('/')
+  for (let length = pathSegments.length; length >= 1; length -= 1) {
+    if (globRuleMatchesPath(rule, pathSegments.slice(0, length).join('/'))) return true
+  }
+  return false
+}
+
+function globRuleMatchesPath(rule: string, path: string): boolean {
+  return globRuleToRegExp(rule).test(path)
+}
+
+function globRuleToRegExp(rule: string): RegExp {
+  let source = '^'
+  for (let index = 0; index < rule.length; index += 1) {
+    const char = rule[index]
+    const nextChar = rule[index + 1]
+    if (char === '*') {
+      if (nextChar === '*') {
+        source += '.*'
+        index += 1
+      } else {
+        source += '[^/]*'
+      }
+      continue
+    }
+    source += escapeRegExp(char ?? '')
+  }
+  return new RegExp(`${source}$`)
+}
+
+function normalizeGlobRule(rule: string): string {
+  return rule.trim().replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
 export function buildNativeSearchPackageManifest(

@@ -6,6 +6,7 @@ import {
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
   validateNativeSearchOptionalPackageInstallChain,
   validateNativeSearchOptionalDependencies,
+  validateNativeSearchPackagingConfig,
 } from './native-runtime-package-manifest'
 
 const VALID_SHA256 = 'a'.repeat(64)
@@ -132,6 +133,7 @@ describe('native-runtime-package-manifest', () => {
     })).toEqual({
       declared: true,
       expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      presentPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
       missingPackages: [],
       invalidPackages: [],
     })
@@ -145,6 +147,11 @@ describe('native-runtime-package-manifest', () => {
       optionalDependencies: incompleteOptionalDependencies,
     })
     expect(missingResult.declared).toBe(false)
+    expect(missingResult.presentPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+        .map((plan) => plan.packageName)
+        .filter((packageName) => packageName !== missingPackage),
+    )
     expect(missingResult.missingPackages).toEqual([missingPackage])
     expect(missingResult.invalidPackages).toEqual([])
 
@@ -158,6 +165,9 @@ describe('native-runtime-package-manifest', () => {
       },
     })
     expect(invalidResult.declared).toBe(false)
+    expect(invalidResult.presentPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
     expect(invalidResult.missingPackages).toEqual([])
     expect(invalidResult.invalidPackages).toEqual([
       missingPackage,
@@ -172,10 +182,28 @@ describe('native-runtime-package-manifest', () => {
       },
     })
     expect(pathLikeResult.declared).toBe(false)
+    expect(pathLikeResult.presentPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
     expect(pathLikeResult.invalidPackages).toEqual([
       missingPackage,
       invalidVersionPackage,
     ])
+
+    const partialResult = validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        [missingPackage]: '0.0.2',
+      },
+    })
+    expect(partialResult).toEqual({
+      declared: false,
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      presentPackages: [missingPackage],
+      missingPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+        .map((plan) => plan.packageName)
+        .filter((packageName) => packageName !== missingPackage),
+      invalidPackages: [],
+    })
   })
 
   test('允许安全的 npm registry alias，拒绝 alias 指向非 native search 包', () => {
@@ -191,6 +219,7 @@ describe('native-runtime-package-manifest', () => {
     })).toEqual({
       declared: true,
       expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      presentPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
       missingPackages: [],
       invalidPackages: [],
     })
@@ -258,6 +287,7 @@ describe('native-runtime-package-manifest', () => {
       optionalDependencies: {
         declared: true,
         expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+        presentPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
         missingPackages: [],
         invalidPackages: [],
       },
@@ -333,8 +363,134 @@ describe('native-runtime-package-manifest', () => {
     expect(result).toEqual({
       declared: false,
       expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      presentPackages: [],
       missingPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
       invalidPackages: [],
+    })
+  })
+
+  test('校验 electron-builder files 是否包含 native search optional packages 且未被 workspace 排除规则阻断', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const blockedConfig = `
+files:
+  - dist/**/*
+  - package.json
+  - "!node_modules/@codeinsights/**"
+`
+
+    expect(validateNativeSearchPackagingConfig(blockedConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: [],
+      missingPackages: expectedPackages,
+      blockingExcludes: ['!node_modules/@codeinsights/**'],
+      tooBroadIncludes: [],
+    })
+
+    const allowedConfig = `
+files:
+  - dist/**/*
+  - package.json
+  - node_modules/@codeinsights/native-search-darwin-arm64/**/*
+  - node_modules/@codeinsights/native-search-darwin-x64/**/*
+  - node_modules/@codeinsights/native-search-win32-x64/**/*
+  - node_modules/@codeinsights/native-search-linux-x64/**/*
+`
+
+    expect(validateNativeSearchPackagingConfig(allowedConfig)).toEqual({
+      verified: true,
+      expectedPackages,
+      includedPackages: expectedPackages,
+      missingPackages: [],
+      blockingExcludes: [],
+      tooBroadIncludes: [],
+    })
+
+    const packageSpecificExcludeConfig = `
+files:
+  - node_modules/@codeinsights/native-search-darwin-arm64/**/*
+  - node_modules/@codeinsights/native-search-darwin-x64/**/*
+  - node_modules/@codeinsights/native-search-win32-x64/**/*
+  - node_modules/@codeinsights/native-search-linux-x64/**/*
+  - "!node_modules/@codeinsights/native-search-darwin-arm64/**/*"
+`
+
+    expect(validateNativeSearchPackagingConfig(packageSpecificExcludeConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: expectedPackages,
+      missingPackages: [],
+      blockingExcludes: ['!node_modules/@codeinsights/native-search-darwin-arm64/**/*'],
+      tooBroadIncludes: [],
+    })
+
+    const broadExcludeConfig = `
+files: # top-level only
+  - node_modules/@codeinsights/native-search-darwin-arm64/**/*
+  - node_modules/@codeinsights/native-search-darwin-x64/**/*
+  - node_modules/@codeinsights/native-search-win32-x64/**/*
+  - node_modules/@codeinsights/native-search-linux-x64/**/*
+  - "!node_modules/**"
+  - "!node_modules/@codeinsights/*"
+  - "!node_modules/@codeinsights/native-search-*/bin/**"
+`
+
+    expect(validateNativeSearchPackagingConfig(broadExcludeConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: expectedPackages,
+      missingPackages: [],
+      blockingExcludes: [
+        '!node_modules/**',
+        '!node_modules/@codeinsights/*',
+        '!node_modules/@codeinsights/native-search-*/bin/**',
+      ],
+      tooBroadIncludes: [],
+    })
+
+    const wildcardIncludeConfig = `
+files:
+  - node_modules/@codeinsights/native-search-*/**/*
+`
+
+    expect(validateNativeSearchPackagingConfig(wildcardIncludeConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: [],
+      missingPackages: expectedPackages,
+      blockingExcludes: [],
+      tooBroadIncludes: ['node_modules/@codeinsights/native-search-*/**/*'],
+    })
+  })
+
+  test('未支持的 electron-builder files 写法必须保守地保持未验证', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const inlineArrayConfig = `
+files: ["node_modules/@codeinsights/native-search-darwin-arm64/**/*"]
+`
+
+    expect(validateNativeSearchPackagingConfig(inlineArrayConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: [],
+      missingPackages: expectedPackages,
+      blockingExcludes: [],
+      tooBroadIncludes: [],
+    })
+
+    const fileSetObjectConfig = `
+files:
+  - from: node_modules/@codeinsights/native-search-darwin-arm64
+    to: node_modules/@codeinsights/native-search-darwin-arm64
+`
+
+    expect(validateNativeSearchPackagingConfig(fileSetObjectConfig)).toEqual({
+      verified: false,
+      expectedPackages,
+      includedPackages: [],
+      missingPackages: expectedPackages,
+      blockingExcludes: [],
+      tooBroadIncludes: [],
     })
   })
 })

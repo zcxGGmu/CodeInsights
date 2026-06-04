@@ -8,6 +8,7 @@ import {
   getNativeSearchOptionalPackagePlan,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
 import {
+  buildPackagedPackagingConfigPreflightCase,
   buildNativeRuntimeSmokeSummary,
   getNativeRuntimeSmokeExitCode,
   parseNativeRuntimeSmokeArgs,
@@ -98,6 +99,7 @@ describe('native-runtime-smoke', () => {
         'agent_facade_native_parity_not_evaluated',
         'optional_dependencies_not_declared',
         'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
         'packaged_app_evidence_not_verified',
         'packaged_app_identity_not_verified',
         'packaged_app_bundled_binary_not_verified',
@@ -131,9 +133,11 @@ describe('native-runtime-smoke', () => {
 
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_dependencies_not_declared')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaging_config_not_verified')
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
   })
 
@@ -150,6 +154,7 @@ describe('native-runtime-smoke', () => {
         optionalDependenciesInstallChainVerified: true,
         optionalDependenciesLockfileVerified: true,
         optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
         realPackagedBinaryVerified: true,
       },
       cases: [{
@@ -161,6 +166,7 @@ describe('native-runtime-smoke', () => {
 
     expect(summary.optionalDependenciesDeclared).toBe(true)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(true)
+    expect(summary.packagingConfigVerified).toBe(true)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.packagedAppIdentityVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
@@ -190,6 +196,26 @@ describe('native-runtime-smoke', () => {
 
     expect(getNativeRuntimeSmokeExitCode(passedSummary)).toBe(0)
     expect(getNativeRuntimeSmokeExitCode(failedSummary)).toBe(1)
+  })
+
+  test('packaging config 预检在 optional package opt-in 开始后必须失败而不是 skipped', () => {
+    const result = {
+      verified: false,
+      expectedPackages: ['@codeinsights/native-search-darwin-arm64'],
+      includedPackages: [],
+      missingPackages: ['@codeinsights/native-search-darwin-arm64'],
+      blockingExcludes: ['!node_modules/@codeinsights/**'],
+      tooBroadIncludes: [],
+    }
+
+    expect(buildPackagedPackagingConfigPreflightCase(result, false)).toMatchObject({
+      name: 'packaged-packaging-config-preflight',
+      status: 'skipped',
+    })
+    expect(buildPackagedPackagingConfigPreflightCase(result, true)).toMatchObject({
+      name: 'packaged-packaging-config-preflight',
+      status: 'failed',
+    })
   })
 
   test('CLI 在任意 case failed 时返回非零退出码', () => {
@@ -522,6 +548,10 @@ describe('native-runtime-smoke', () => {
       status: 'skipped',
     }))
     expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-packaging-config-preflight',
+      status: 'skipped',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'typescript-fallback-search',
       status: 'passed',
     }))
@@ -529,6 +559,7 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).toContain('fixtureBundledPackageVerified=true')
     expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
     expect(JSON.stringify(summary)).toContain('optionalDependenciesInstallChainVerified=false')
+    expect(JSON.stringify(summary)).toContain('packagingConfigVerified=false')
     expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.fixtureBundledPackageVerified).toBe(true)
@@ -537,11 +568,14 @@ describe('native-runtime-smoke', () => {
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.optionalDependenciesLockfileVerified).toBe(false)
     expect(summary.optionalDependenciesInstalledPackagesVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
     expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
     expect(summary.invalidOptionalDependencies).toEqual([])
     expect(summary.missingOptionalDependencyLockfilePackages.length).toBeGreaterThan(0)
     expect(summary.missingInstalledOptionalDependencies.length).toBeGreaterThan(0)
     expect(summary.invalidInstalledOptionalDependencies).toEqual([])
+    expect(summary.missingPackagingConfigPackages.length).toBeGreaterThan(0)
+    expect(summary.blockingPackagingConfigExcludes).toEqual(['!node_modules/@codeinsights/**'])
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
@@ -559,6 +593,7 @@ describe('native-runtime-smoke', () => {
         agentFacadeNativeParityEvaluated: false,
         optionalDependenciesDeclared: false,
         optionalDependenciesInstallChainVerified: false,
+        packagingConfigVerified: false,
         packagedAppEvidenceVerified: false,
         packagedAppIdentityVerified: false,
         realPackagedBinaryVerified: false,

@@ -240,6 +240,7 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
       agentFacadeNativeParityEvaluated: agentFacadeSearch.nativeParityEvaluated,
       optionalDependenciesDeclared: false,
       optionalDependenciesInstallChainVerified: false,
+      packagingConfigVerified: false,
       packagedAppEvidenceVerified: false,
       packagedAppIdentityVerified: false,
       realPackagedBinaryVerified: false,

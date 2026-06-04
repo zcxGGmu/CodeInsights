@@ -5,6 +5,7 @@ export type NativeSearchDefaultEnableBlocker =
   | 'agent_facade_native_parity_not_evaluated'
   | 'optional_dependencies_not_declared'
   | 'optional_package_install_chain_not_verified'
+  | 'packaging_config_not_verified'
   | 'packaged_app_evidence_not_verified'
   | 'packaged_app_identity_not_verified'
   | 'packaged_app_bundled_binary_not_verified'
@@ -17,6 +18,7 @@ export interface NativeSearchDefaultEnableGates {
   agentFacadeNativeParityEvaluated: boolean
   optionalDependenciesDeclared: boolean
   optionalDependenciesInstallChainVerified: boolean
+  packagingConfigVerified: boolean
   packagedAppEvidenceVerified: boolean
   packagedAppIdentityVerified: boolean
   realPackagedBinaryVerified: boolean
@@ -43,6 +45,7 @@ export function evaluateNativeSearchDefaultEnableReadiness(
   if (!gates.agentFacadeNativeParityEvaluated) blockers.push('agent_facade_native_parity_not_evaluated')
   if (!gates.optionalDependenciesDeclared) blockers.push('optional_dependencies_not_declared')
   if (!gates.optionalDependenciesInstallChainVerified) blockers.push('optional_package_install_chain_not_verified')
+  if (!gates.packagingConfigVerified) blockers.push('packaging_config_not_verified')
   if (!gates.packagedAppEvidenceVerified) blockers.push('packaged_app_evidence_not_verified')
   if (!gates.packagedAppIdentityVerified) blockers.push('packaged_app_identity_not_verified')
   if (!gates.realPackagedBinaryVerified) blockers.push('packaged_app_bundled_binary_not_verified')

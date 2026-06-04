@@ -17,7 +17,9 @@ import {
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
+  validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
+  type NativeSearchPackagingConfigValidationResult,
   type NativeSearchOptionalPackageInstallChainValidationResult,
   type NativeSearchOptionalDependenciesValidationResult,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
@@ -68,11 +70,15 @@ export interface NativeRuntimeSmokeSummary {
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
+  packagingConfigVerified: boolean
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
   missingOptionalDependencyLockfilePackages: string[]
   missingInstalledOptionalDependencies: string[]
   invalidInstalledOptionalDependencies: string[]
+  missingPackagingConfigPackages: string[]
+  blockingPackagingConfigExcludes: string[]
+  tooBroadPackagingConfigIncludes: string[]
   realPackagedBinaryVerified: boolean
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
@@ -90,11 +96,15 @@ interface NativeRuntimeSmokeVerification {
   optionalDependenciesInstallChainVerified?: boolean
   optionalDependenciesLockfileVerified?: boolean
   optionalDependenciesInstalledPackagesVerified?: boolean
+  packagingConfigVerified?: boolean
   missingOptionalDependencies?: string[]
   invalidOptionalDependencies?: string[]
   missingOptionalDependencyLockfilePackages?: string[]
   missingInstalledOptionalDependencies?: string[]
   invalidInstalledOptionalDependencies?: string[]
+  missingPackagingConfigPackages?: string[]
+  blockingPackagingConfigExcludes?: string[]
+  tooBroadPackagingConfigIncludes?: string[]
   realPackagedBinaryVerified?: boolean
   requiresPrebuiltPackagedApp?: boolean
 }
@@ -146,9 +156,11 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const optionalDependenciesDeclared = Boolean(verification.optionalDependenciesDeclared)
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
+  const packagingConfigVerified = Boolean(verification.packagingConfigVerified)
   const packagedAppEvidenceVerified = Boolean(verification.packagedAppEvidenceVerified)
   const packagedAppIdentityVerified = Boolean(verification.packagedAppIdentityVerified)
   const realPackagedBinaryVerified = optionalDependenciesInstallChainVerified
+    && packagingConfigVerified
     && packagedAppEvidenceVerified
     && packagedAppIdentityVerified
     && Boolean(verification.realPackagedBinaryVerified)
@@ -172,11 +184,15 @@ export function buildNativeRuntimeSmokeSummary(input: {
       && Boolean(verification.optionalDependenciesLockfileVerified),
     optionalDependenciesInstalledPackagesVerified: optionalDependenciesDeclared
       && Boolean(verification.optionalDependenciesInstalledPackagesVerified),
+    packagingConfigVerified,
     missingOptionalDependencies: verification.missingOptionalDependencies ?? [],
     invalidOptionalDependencies: verification.invalidOptionalDependencies ?? [],
     missingOptionalDependencyLockfilePackages: verification.missingOptionalDependencyLockfilePackages ?? [],
     missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
     invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
+    missingPackagingConfigPackages: verification.missingPackagingConfigPackages ?? [],
+    blockingPackagingConfigExcludes: verification.blockingPackagingConfigExcludes ?? [],
+    tooBroadPackagingConfigIncludes: verification.tooBroadPackagingConfigIncludes ?? [],
     realPackagedBinaryVerified,
     nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
       benchmarkEvaluated: false,
@@ -185,6 +201,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
       agentFacadeNativeParityEvaluated: false,
       optionalDependenciesDeclared,
       optionalDependenciesInstallChainVerified,
+      packagingConfigVerified,
       packagedAppEvidenceVerified,
       packagedAppIdentityVerified,
       realPackagedBinaryVerified,
@@ -255,8 +272,13 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       cases.push(runPackagedManifestPreflightCase())
       const optionalDependenciesInstallChain = readCurrentNativeSearchOptionalPackageInstallChain()
       const optionalDependenciesResult = optionalDependenciesInstallChain.optionalDependencies
+      const packagingConfig = readCurrentNativeSearchPackagingConfig()
       cases.push(runPackagedOptionalDependenciesPreflightCase(optionalDependenciesResult))
       cases.push(runPackagedOptionalDependenciesInstallChainPreflightCase(optionalDependenciesInstallChain))
+      cases.push(buildPackagedPackagingConfigPreflightCase(
+        packagingConfig,
+        optionalDependenciesResult.presentPackages.length > 0,
+      ))
       cases.push(runPackagedResolverFixtureCase(rootDir))
       verification = {
         bundledBinaryVerified: false,
@@ -266,11 +288,15 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
         optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
         optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+        packagingConfigVerified: packagingConfig.verified,
         missingOptionalDependencies: optionalDependenciesResult.missingPackages,
         invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
         missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
         missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
         invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+        missingPackagingConfigPackages: packagingConfig.missingPackages,
+        blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+        tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
         realPackagedBinaryVerified: false,
       }
     } else if (options.mode === 'packaged-app-layout') {
@@ -287,11 +313,15 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         optionalDependenciesInstallChainVerified: packagedAppResult.optionalDependenciesInstallChainVerified,
         optionalDependenciesLockfileVerified: packagedAppResult.optionalDependenciesLockfileVerified,
         optionalDependenciesInstalledPackagesVerified: packagedAppResult.optionalDependenciesInstalledPackagesVerified,
+        packagingConfigVerified: packagedAppResult.packagingConfigVerified,
         missingOptionalDependencies: packagedAppResult.missingOptionalDependencies,
         invalidOptionalDependencies: packagedAppResult.invalidOptionalDependencies,
         missingOptionalDependencyLockfilePackages: packagedAppResult.missingOptionalDependencyLockfilePackages,
         missingInstalledOptionalDependencies: packagedAppResult.missingInstalledOptionalDependencies,
         invalidInstalledOptionalDependencies: packagedAppResult.invalidInstalledOptionalDependencies,
+        missingPackagingConfigPackages: packagedAppResult.missingPackagingConfigPackages,
+        blockingPackagingConfigExcludes: packagedAppResult.blockingPackagingConfigExcludes,
+        tooBroadPackagingConfigIncludes: packagedAppResult.tooBroadPackagingConfigIncludes,
         realPackagedBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
         requiresPrebuiltPackagedApp: true,
       }
@@ -521,6 +551,23 @@ function runPackagedOptionalDependenciesInstallChainPreflightCase(
   }
 }
 
+export function buildPackagedPackagingConfigPreflightCase(
+  result: NativeSearchPackagingConfigValidationResult,
+  optionalPackageOptInStarted: boolean,
+): NativeRuntimeSmokeCase {
+  return {
+    name: 'packaged-packaging-config-preflight',
+    status: result.verified ? 'passed' : optionalPackageOptInStarted ? 'failed' : 'skipped',
+    detail: [
+      `packagingConfigVerified=${String(result.verified)}`,
+      `missingPackagingConfigPackages=${result.missingPackages.join(',') || 'none'}`,
+      `blockingPackagingConfigExcludes=${result.blockingExcludes.join(',') || 'none'}`,
+      `tooBroadPackagingConfigIncludes=${result.tooBroadIncludes.join(',') || 'none'}`,
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
+  }
+}
+
 function runPackagedResolverFixtureCase(rootDir: string): NativeRuntimeSmokeCase {
   const fixture = createNativeSearchPackageFixture(rootDir)
   const resolved = resolveNativeSearchPackage({
@@ -563,11 +610,15 @@ interface PackagedAppLayoutCaseResult {
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
+  packagingConfigVerified: boolean
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
   missingOptionalDependencyLockfilePackages: string[]
   missingInstalledOptionalDependencies: string[]
   invalidInstalledOptionalDependencies: string[]
+  missingPackagingConfigPackages: string[]
+  blockingPackagingConfigExcludes: string[]
+  tooBroadPackagingConfigIncludes: string[]
   realPackagedBinaryVerified: boolean
   usesTemporaryFixture: boolean
 }
@@ -575,6 +626,7 @@ interface PackagedAppLayoutCaseResult {
 function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): PackagedAppLayoutCaseResult {
   const optionalDependenciesInstallChain = readCurrentNativeSearchOptionalPackageInstallChain()
   const optionalDependenciesResult = optionalDependenciesInstallChain.optionalDependencies
+  const packagingConfig = readCurrentNativeSearchPackagingConfig()
   if (!appNodeModulesRoot) {
     return {
       case: {
@@ -589,11 +641,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
       optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+      packagingConfigVerified: packagingConfig.verified,
       missingOptionalDependencies: optionalDependenciesResult.missingPackages,
       invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
       missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
       missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
       invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+      missingPackagingConfigPackages: packagingConfig.missingPackages,
+      blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+      tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -613,11 +669,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
       optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+      packagingConfigVerified: packagingConfig.verified,
       missingOptionalDependencies: optionalDependenciesResult.missingPackages,
       invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
       missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
       missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
       invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+      missingPackagingConfigPackages: packagingConfig.missingPackages,
+      blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+      tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -638,11 +698,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
       optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+      packagingConfigVerified: packagingConfig.verified,
       missingOptionalDependencies: optionalDependenciesResult.missingPackages,
       invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
       missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
       missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
       invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+      missingPackagingConfigPackages: packagingConfig.missingPackages,
+      blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+      tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -672,11 +736,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
       optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
       optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+      packagingConfigVerified: packagingConfig.verified,
       missingOptionalDependencies: optionalDependenciesResult.missingPackages,
       invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
       missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
       missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
       invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+      missingPackagingConfigPackages: packagingConfig.missingPackages,
+      blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+      tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture,
     }
@@ -685,6 +753,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
   const realPackagedBinaryVerified = packagedAppEvidenceVerified
     && packagedAppIdentityVerified
     && optionalDependenciesInstallChain.verified
+    && packagingConfig.verified
     && !usesTemporaryFixture
   return {
     case: {
@@ -699,6 +768,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
         `packagedAppIdentityVerified=${String(packagedAppIdentityVerified)}`,
         `optionalDependenciesDeclared=${String(optionalDependenciesResult.declared)}`,
         `optionalDependenciesInstallChainVerified=${String(optionalDependenciesInstallChain.verified)}`,
+        `packagingConfigVerified=${String(packagingConfig.verified)}`,
         `usesTemporaryFixture=${String(usesTemporaryFixture)}`,
         `realPackagedBinaryVerified=${String(realPackagedBinaryVerified)}`,
       ].join('; '),
@@ -710,11 +780,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
     optionalDependenciesInstallChainVerified: optionalDependenciesInstallChain.verified,
     optionalDependenciesLockfileVerified: optionalDependenciesInstallChain.lockfileVerified,
     optionalDependenciesInstalledPackagesVerified: optionalDependenciesInstallChain.installedPackagesVerified,
+    packagingConfigVerified: packagingConfig.verified,
     missingOptionalDependencies: optionalDependenciesResult.missingPackages,
     invalidOptionalDependencies: optionalDependenciesResult.invalidPackages,
     missingOptionalDependencyLockfilePackages: optionalDependenciesInstallChain.missingLockfilePackages,
     missingInstalledOptionalDependencies: optionalDependenciesInstallChain.missingInstalledPackages,
     invalidInstalledOptionalDependencies: optionalDependenciesInstallChain.invalidInstalledPackages,
+    missingPackagingConfigPackages: packagingConfig.missingPackages,
+    blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
+    tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
     realPackagedBinaryVerified,
     usesTemporaryFixture,
   }
@@ -742,6 +816,14 @@ function readCurrentLockfileText(): string {
     return readFileSync(join(import.meta.dir, '..', '..', '..', 'bun.lock'), 'utf-8')
   } catch {
     return ''
+  }
+}
+
+function readCurrentNativeSearchPackagingConfig(): NativeSearchPackagingConfigValidationResult {
+  try {
+    return validateNativeSearchPackagingConfig(readFileSync(join(import.meta.dir, '..', 'electron-builder.yml'), 'utf-8'))
+  } catch {
+    return validateNativeSearchPackagingConfig('')
   }
 }
 
