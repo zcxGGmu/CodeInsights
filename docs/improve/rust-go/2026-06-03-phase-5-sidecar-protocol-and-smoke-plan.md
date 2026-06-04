@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture，以及 packaged app layout preflight smoke；尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier，以及 `packagedAppIdentityVerified` gate；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`、`52613780 feat(rust-go): 补齐 Phase 5 packaged app layout 预检 smoke`、`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`、`31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证`
 
 ## 目标
 
@@ -53,6 +53,7 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.ts` 已定义 bundled package resolver helper，只从 optional package `package.json` 派生包根，读取包内固定 `native-search-package.json` 和 `bin/{binaryName}`，校验 app `node_modules` realpath allowlist、manifest schema、平台矩阵、可执行权限和 SHA-256 fingerprint；不从系统 `PATH` 查找，也不接受 manifest path 字段。
 - `packaged-manifest` 已作为非 packaged 预检 mode 接入 `smoke:native-runtime`，包含 manifest preflight 和临时 optional package resolver fixture 两层：manifest preflight 验证 optional package manifest 形状和 TS fallback 可用；resolver fixture 用临时 package + fake executable + PATH decoy 验证 bundled source / SHA-256 / no PATH lookup 逻辑。summary 明确输出 `bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`。
 - `packaged-app-layout` 已作为只读 preflight mode 接入 `smoke:native-runtime`：默认无 `--app-node-modules-root` 时 skipped；显式传入 packaged app `node_modules` root 时复用 bundled resolver 校验当前平台 optional package manifest、`bin/{binaryName}`、可执行权限、SHA-256 和 app `node_modules` allowlist。summary 拆分 `packagedAppLayoutVerified`、`packagedAppEvidenceVerified`、`usesTemporaryFixture` 和 `realPackagedBinaryVerified`；临时 fixture 只能证明 layout，不能把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
+- `packaged-app-layout` evidence classifier 已覆盖两种 packaged app 证据形态：`app.asar` + `app.asar.unpacked/node_modules`，以及当前 `asar: false` 配置对应的 `Resources/app/node_modules` + `Resources/app/package.json`。`31e37cbb` 已进一步加入 `packagedAppIdentityVerified`：当前仅 `unpacked-app` 可通过 app `package.json` 的 `name="@codeinsights/electron"` 与 `main="dist/main.cjs"` 校验，`asar-unpacked` 仍只能作为 evidence / preflight。detail 只输出 `packagedAppEvidence=asar-unpacked` / `unpacked-app` / `none`、package name 和 resolver reason code，不输出 packaged root 或 binary path；临时目录、缺少 identity 或缺少真实 optional package / binary 时，即使具备 evidence，也不能让 `realPackagedBinaryVerified=true`。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -273,7 +274,7 @@ Smoke cases:
 | cache corruption | 损坏 native-cache | cache 被隔离 / 清理，JSON / JSONL 事实源不变 |
 | packaged manifest preflight | 临时 fixture 校验 optional package manifest schema | manifest schema / platform matrix 通过，`bundledBinaryVerified=false` |
 | packaged resolver fixture | 临时 optional package + fake executable + PATH decoy | resolver 只接受 app `node_modules` allowlist 内 fixture，SHA-256 匹配，`fixtureBundledPackageVerified=true`，`realPackagedBinaryVerified=false` |
-| packaged app layout preflight | 显式传入已有 packaged app `node_modules` root | layout 可通过 resolver 校验；无 root 时 skipped；临时 fixture 只能 `packagedAppLayoutVerified=true`，真实 packaged binary 仍为 false |
+| packaged app layout preflight | 显式传入已有 packaged app `node_modules` root | layout 可通过 resolver 校验；无 root 时 skipped；支持 `asar-unpacked` / `unpacked-app` evidence 分类；`unpacked-app` 还需 app identity 校验；临时 fixture 或缺少 identity 不能证明真实 packaged binary |
 
 当前已实现的 smoke 子集：
 
@@ -294,7 +295,7 @@ bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode package
 - `cache-corruption` 已作为 isolated cache smoke 可执行，使用临时 `CODEINSIGHTS_CONFIG_DIR`，不读取真实配置目录。
 - `packaged-manifest` 已作为 optional package manifest 预检和 packaged resolver fixture 可执行，校验 4 个平台包的 manifest 契约、当前平台计划、临时 optional package fixture 的 manifest / binary SHA-256 / no PATH lookup / app `node_modules` allowlist；它仍不是真实 packaged app bundled binary smoke。
 - `packaged-manifest` summary 当前边界必须保持：`bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`realPackagedBinaryVerified=false`。
-- `packaged-app-layout` 已作为只读 packaged app layout preflight 可执行。无 `--app-node-modules-root` 时 summary 为 `requiresPrebuiltPackagedApp=true`、`realPackagedBinaryVerified=false` 且 case skipped；有显式 root 时只验证 resolver layout，不从 `PATH` 查找。临时 fixture 通过时只能设置 `packagedAppLayoutVerified=true`、`usesTemporaryFixture=true`，不能设置 `realPackagedBinaryVerified=true`。
+- `packaged-app-layout` 已作为只读 packaged app layout preflight 可执行。无 `--app-node-modules-root` 时 summary 为 `requiresPrebuiltPackagedApp=true`、`realPackagedBinaryVerified=false` 且 case skipped；有显式 root 时只验证 resolver layout，不从 `PATH` 查找。当前 evidence classifier 同时支持 `app.asar` + `app.asar.unpacked/node_modules` 和 `asar: false` 的 `Resources/app/node_modules` + `Resources/app/package.json`；`realPackagedBinaryVerified=true` 必须同时满足 resolver 成功、非临时 fixture、`packagedAppEvidenceVerified=true`、`packagedAppIdentityVerified=true` 和真实 optional package / binary 存在。临时 fixture、`asar-unpacked` 无 identity 或伪造 app identity 都不能设置 `realPackagedBinaryVerified=true`。
 
 Smoke output rules:
 
@@ -343,7 +344,7 @@ Smoke output rules:
 - binary 必须存在、可执行，并且 SHA-256 fingerprint 必须等于 manifest。
 - Electron service 只有在 `app.isPackaged` 为 true 且 native feature flags 打开、没有显式 `CODEINSIGHTS_NATIVE_SEARCH_BINARY` 时才自动尝试 bundled resolver；非 packaged dev 环境继续要求显式 binary。
 
-主进程仍必须通过 bundled package resolver 显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。`packaged-app-layout` 只能作为已有 packaged app 布局的只读 preflight；真实 optional package、`optionalDependencies`、`electron-builder.yml` files 和真实 packaged app bundled binary smoke 仍未完成。
+主进程仍必须通过 bundled package resolver 显式解析 bundled package path，不允许从系统 `PATH` 隐式查找同名 binary。`packaged-app-layout` 只能作为已有 packaged app 布局的只读 preflight；当前已能识别 `asar-unpacked` 和本项目 `asar: false` 的 `unpacked-app` evidence 形态，但真实 optional package、`optionalDependencies`、`electron-builder.yml` files 和真实 packaged app bundled binary smoke 仍未完成。
 
 ## Performance Gate
 

@@ -1,5 +1,43 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 packaged app evidence smoke 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只推进真实 packaged app bundled binary smoke 的证据模型，修正 `packaged-app-layout` 只识别 `app.asar.unpacked`、但本项目 `electron-builder.yml` 当前为 `asar: false` 的布局缺口。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。临时 fixture 仍不能证明真实 packaged binary，真实 optional package / `optionalDependencies` 仍不标记完成。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992`。
+- [x] 运行 `git log -12 --oneline`，确认更早 optional manifest / fake sidecar / native smoke / benchmark 文档提交 `e5b92fa7`、`9fe91b03`、`fb7e2d73`、`2cc95b1b`、`9c102c0a`、`c6104eee`、`4f9c4d28` 仍在历史中。
+- [x] 确认当前边界：`52613780` 只完成 packaged app layout preflight smoke；没有真实 optional package、没有 `optionalDependencies`、没有真实 packaged binary，native 仍必须 default off。
+
+实现计划：
+
+- [x] 测试先行扩展 `apps/electron/scripts/native-runtime-smoke.test.ts`，锁住 `packaged-app-layout` 对 `asar: false` packaged app layout 的证据识别：`Resources/app/node_modules` + `Resources/app/package.json` 可以作为 packaged app evidence，但临时目录仍必须让 `realPackagedBinaryVerified=false`。
+- [x] 保留 `app.asar` / `app.asar.unpacked/node_modules` 既有证据识别，并新增缺失 packaged evidence 时只能 layout verified、不能 real packaged binary verified 的回归测试。
+- [x] 更新 `apps/electron/scripts/native-runtime-smoke.ts`，把 packaged app evidence 判断从 boolean 提升为可维护的 layout evidence helper，失败 detail 继续只输出 package name 和 reason code，不泄露 root、`app.asar.unpacked`、binary path 或 raw fs error。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不修改 `optionalDependencies`。
+- [x] 更新 Phase 5 sidecar protocol / smoke plan、development checklist、next-session-prompt.md 和必要 lessons，明确本轮只修正真实 packaged app evidence 模型，真实 optional package / `optionalDependencies`、真实 packaged app bundled binary smoke 和 default enable 仍未完成。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`，确认无真实 app root 时 skipped 且 TS fallback 可用。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`，确认旧 summary 边界保持。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，并确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary。
+- [x] 阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 阶段实现已提交：`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`；代码审查发现 evidence 过宽、可能把非临时手工目录误判为真实 packaged binary，已用 `31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证` 修复。
+- 已把 `packaged-app-layout` 的 packaged app evidence 从单一 `app.asar` / `app.asar.unpacked` 检查改为分类模型：`asar-unpacked` 识别 `app.asar` + `app.asar.unpacked/node_modules`，`unpacked-app` 识别当前 `asar: false` 打包布局 `Resources/app/node_modules` + `Resources/app/package.json`。
+- summary 边界保持：默认无 `--app-node-modules-root` 时仍 skipped；临时 fixture 可以让 `packagedAppLayoutVerified=true`，但 `bundledBinaryVerified=false`、`realPackagedBinaryVerified=false` 必须保持。`realPackagedBinaryVerified=true` 现在必须同时满足 resolver 成功、非临时 fixture、`packagedAppEvidenceVerified=true`、`packagedAppIdentityVerified=true` 和真实 optional package / binary 存在。detail 只输出 `packagedAppEvidence=...`、package name 和 reason code，不输出 root、`app.asar.unpacked`、`Resources/app`、binary path 或 raw fs error。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.144` 并同步 `bun.lock`；没有修改 `optionalDependencies`。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`（23 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界保持：native search 继续显式 opt-in / default off；未创建 packaged native binary；未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；未 push，未创建 PR。真实 optional package / `optionalDependencies`、真实 packaged app bundled binary smoke、default enable 和 Phase 6-9 仍未完成。
+
 ## 2026-06-03 Rust/Go Phase 5 packaged app layout preflight smoke 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮保持 native default off / 显式 opt-in，只新增真实 packaged app / node_modules 布局的只读 preflight smoke 入口：没有真实 packaged app 目录时必须 `skipped`，有显式 `--app-node-modules-root` 时只调用既有 bundled package resolver 检查当前平台 optional package manifest、`bin/{binaryName}`、可执行权限和 SHA-256；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不把 `@codeinsights/native-search-*` 加入 `optionalDependencies`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。这个切片只把真实 packaged smoke 的执行入口和 summary schema 补齐，不能把真实 optional package / bundled binary smoke 标成完成。

@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 packaged app evidence smoke 边界
+
+- 本项目当前 `apps/electron/electron-builder.yml` 为 `asar: false`，真实 packaged app 的 `node_modules` evidence 不能只认 `app.asar` / `app.asar.unpacked/node_modules`；`packaged-app-layout` 这类 smoke 需要同时支持 `Resources/app/node_modules` + `Resources/app/package.json` 的 `unpacked-app` 证据形态。
+- `packagedAppEvidenceVerified=true` 只说明传入 root 看起来像 packaged app 布局；真实 packaged binary 验证还必须同时满足 resolver 成功、非临时 fixture、`packagedAppIdentityVerified=true` 和真实 optional package / binary 存在。只要路径位于临时目录、缺少真实 optional package / `optionalDependencies` / builder files / 真实 binary，仍不得把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
+- `packaged-app-layout` detail 只能输出 evidence 分类、package name 和 resolver reason code；不能输出 packaged root、`app.asar.unpacked`、`Resources/app`、binary path、raw fs error 或任何 home path。
+
 ## 2026-06-03 Rust / Go Phase 5 packaged app layout preflight 边界
 
 - `packaged-app-layout` 这类只读 smoke 入口只能在没有真实 packaged app root 时返回 skipped；即使用临时目录模拟 `app.asar.unpacked/node_modules` 并通过 resolver，也只能标记 `packagedAppLayoutVerified=true`，不能把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
