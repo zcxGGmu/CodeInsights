@@ -164,8 +164,8 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
   })
 
-  test('packaged app layout smoke 使用显式 packaged root 验证 bundled package 布局', async () => {
-    const fixture = createPackagedAppLayoutFixture()
+  test('packaged app layout smoke 使用显式 asar.unpacked packaged root 验证 bundled package 布局', async () => {
+    const fixture = createPackagedAppLayoutFixture('asar-unpacked')
     try {
       const summary = await runNativeRuntimeSmoke({
         mode: 'packaged-app-layout',
@@ -178,7 +178,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.requiresPrebuiltPackagedApp).toBe(true)
       expect(summary.bundledBinaryVerified).toBe(false)
       expect(summary.packagedAppLayoutVerified).toBe(true)
-      expect(summary.packagedAppEvidenceVerified).toBe(false)
+      expect(summary.packagedAppEvidenceVerified).toBe(true)
       expect(summary.realPackagedBinaryVerified).toBe(false)
       expect(summary.fixtureBundledPackageVerified).toBe(false)
       expect(summary.usesTemporaryFixture).toBe(true)
@@ -187,6 +187,37 @@ describe('native-runtime-smoke', () => {
         status: 'passed',
       }))
       expect(JSON.stringify(summary)).toContain('packagedAppLayoutVerified=true')
+      expect(JSON.stringify(summary)).toContain('packagedAppEvidence=asar-unpacked')
+      expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
+      expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
+      expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app layout smoke 支持 asar false 的 app/node_modules 证据布局', async () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+
+      expect(summary.mode).toBe('packaged-app-layout')
+      expect(summary.appNodeModulesRootProvided).toBe(true)
+      expect(summary.requiresPrebuiltPackagedApp).toBe(true)
+      expect(summary.bundledBinaryVerified).toBe(false)
+      expect(summary.packagedAppLayoutVerified).toBe(true)
+      expect(summary.packagedAppEvidenceVerified).toBe(true)
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.usesTemporaryFixture).toBe(true)
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-app-layout',
+        status: 'passed',
+      }))
+      expect(JSON.stringify(summary)).toContain('packagedAppEvidence=unpacked-app')
       expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
       expect(JSON.stringify(summary)).not.toContain('binaryPath')
@@ -332,7 +363,7 @@ describe('native-runtime-smoke', () => {
   })
 })
 
-function createPackagedAppLayoutFixture(): {
+function createPackagedAppLayoutFixture(layout: 'asar-unpacked' | 'unpacked-app'): {
   rootDir: string
   nodeModulesRoot: string
 } {
@@ -340,7 +371,10 @@ function createPackagedAppLayoutFixture(): {
   if (!plan) throw new Error('当前平台缺少 native search optional package plan')
 
   const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-packaged-layout-test-'))
-  const nodeModulesRoot = join(rootDir, 'app.asar.unpacked', 'node_modules')
+  const appRoot = layout === 'asar-unpacked'
+    ? join(rootDir, 'app.asar.unpacked')
+    : join(rootDir, 'CodeInsights.app', 'Contents', 'Resources', 'app')
+  const nodeModulesRoot = join(appRoot, 'node_modules')
   const packageRoot = join(nodeModulesRoot, ...plan.packageName.split('/'))
   const binaryPath = join(packageRoot, 'bin', plan.binaryName)
   const binaryContent = '#!/bin/sh\necho codeinsights native packaged layout\n'
@@ -352,6 +386,14 @@ function createPackagedAppLayoutFixture(): {
   })
 
   mkdirSync(dirname(binaryPath), { recursive: true })
+  if (layout === 'asar-unpacked') {
+    writeFileSync(join(rootDir, 'app.asar'), 'asar placeholder\n', 'utf-8')
+  } else {
+    writeFileSync(join(appRoot, 'package.json'), `${JSON.stringify({
+      name: '@codeinsights/electron',
+      version: '0.0.143',
+    }, null, 2)}\n`, 'utf-8')
+  }
   writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({
     name: plan.packageName,
     version: '0.0.2',

@@ -462,7 +462,8 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
 
   const result = resolvePackagedAppLayout(appNodeModulesRoot, plan)
   const usesTemporaryFixture = isPathInside(appNodeModulesRoot, tmpdir())
-  const packagedAppEvidenceVerified = hasPackagedAppEvidence(appNodeModulesRoot)
+  const packagedAppEvidence = classifyPackagedAppEvidence(appNodeModulesRoot)
+  const packagedAppEvidenceVerified = packagedAppEvidence !== 'none'
   if (!result.ok) {
     return {
       case: {
@@ -491,6 +492,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
         `package=${result.packageName}`,
         'source=bundled',
         'packagedAppLayoutVerified=true',
+        `packagedAppEvidence=${packagedAppEvidence}`,
         `packagedAppEvidenceVerified=${String(packagedAppEvidenceVerified)}`,
         `usesTemporaryFixture=${String(usesTemporaryFixture)}`,
         `realPackagedBinaryVerified=${String(realPackagedBinaryVerified)}`,
@@ -538,11 +540,22 @@ function resolvePackagedAppLayout(
   }
 }
 
-function hasPackagedAppEvidence(appNodeModulesRoot: string): boolean {
-  if (basename(appNodeModulesRoot) !== 'node_modules') return false
+function classifyPackagedAppEvidence(appNodeModulesRoot: string): 'asar-unpacked' | 'unpacked-app' | 'none' {
+  if (basename(appNodeModulesRoot) !== 'node_modules') return 'none'
   const unpackedRoot = dirname(appNodeModulesRoot)
-  if (basename(unpackedRoot) !== 'app.asar.unpacked') return false
-  return existsSync(join(dirname(unpackedRoot), 'app.asar'))
+  if (basename(unpackedRoot) === 'app.asar.unpacked' && existsSync(join(dirname(unpackedRoot), 'app.asar'))) {
+    return 'asar-unpacked'
+  }
+
+  if (
+    basename(unpackedRoot) === 'app'
+    && basename(dirname(unpackedRoot)).toLowerCase() === 'resources'
+    && existsSync(join(unpackedRoot, 'package.json'))
+  ) {
+    return 'unpacked-app'
+  }
+
+  return 'none'
 }
 
 function isPathInside(path: string, root: string): boolean {
