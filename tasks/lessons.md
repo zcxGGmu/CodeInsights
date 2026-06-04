@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 optionalDependencies preflight gate 边界
+
+- 在真实 native optional package 尚未发布 / 安装、且不能修改 `electron-builder.yml` 时，不要直接把 `@codeinsights/native-search-*` 写入 `apps/electron/package.json` 的 `optionalDependencies`；应先做 package manifest 声明预检，输出 `optionalDependenciesDeclared=false` 与缺失包名列表，并保持 `realPackagedBinaryVerified=false`。
+- `packaged-manifest` 新增的 optionalDependencies preflight 只证明当前 package.json 声明矩阵是否准备好，不读取真实 `node_modules`、不证明 binary 存在、不替代 resolver / packaged app layout / status smoke。缺失声明在当前阶段可以是 skipped preflight；版本声明必须是 registry-like 字符串，空值、非字符串、`file:`、`workspace:`、git / http URL 和 path-like spec 都应视为 invalid。
+- `native-runtime-smoke` CLI 遇到任意 failed case 必须返回非零退出码；skipped preflight 只表示当前阶段尚未具备真实输入，不能掩盖 schema invalid 或真实 gate failed。
+- `realPackagedBinaryVerified=true` 必须同时满足 resolver 成功、非临时 fixture、packaged app evidence、`packagedAppIdentityVerified=true`、`optionalDependenciesDeclared=true` 和真实 optional package / binary 存在。只要 optionalDependencies 声明 gate 未通过，即使手工传入 packaged app root 且 resolver 通过，也不得标记真实 bundled binary 已验证。
+
 ## 2026-06-04 Rust / Go Phase 5 packaged app evidence smoke 边界
 
 - 本项目当前 `apps/electron/electron-builder.yml` 为 `asar: false`，真实 packaged app 的 `node_modules` evidence 不能只认 `app.asar` / `app.asar.unpacked/node_modules`；`packaged-app-layout` 这类 smoke 需要同时支持 `Resources/app/node_modules` + `Resources/app/package.json` 的 `unpacked-app` 证据形态。

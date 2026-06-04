@@ -1,5 +1,50 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 optionalDependencies preflight gate 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只推进真实 optional package / packaged smoke 前置门禁：新增 `apps/electron/package.json` 的 native search optionalDependencies 声明预检，并把真实 packaged binary verified 再收紧为必须通过 optionalDependencies 声明 gate。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不直接添加尚未发布的 `@codeinsights/native-search-*` optionalDependencies，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -5 --oneline`，确认最近历史包含 `16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`。
+- [x] 运行 `git log -8 --oneline`，确认 `e95cd284`、`ce104a59`、`8226c992` 仍在历史中。
+- [x] 只读检查 `native-runtime-smoke.ts`、`native-runtime-package-manifest.ts`、`native-runtime-package-resolver.ts`、`native-runtime-service.ts` 和 `apps/electron/package.json`，确认当前没有真实 native search optionalDependencies。
+- [x] 通过子代理只读复核可扩展点，结论为先做 optionalDependencies preflight/schema gate，不直接修改 `apps/electron/package.json` 的 optionalDependencies。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-package-manifest.test.ts`，新增 optionalDependencies 声明 gate：完整声明通过，缺失 native search package 返回 missing list，版本非字符串 / 空字符串 / path-like 或 URL-like spec 返回 invalid list，额外 optional deps 不影响。
+- [x] 扩展 `native-runtime-smoke.test.ts`，锁住 `packaged-manifest` summary 增加 `optionalDependenciesDeclared=false` 与 `invalidOptionalDependencies=[]`，且当前仓库未声明 native search optional deps 时不把 `bundledBinaryVerified` / `realPackagedBinaryVerified` 置为 true；detail 不泄露 package.json 路径、home、binaryPath。
+- [x] 在 `native-runtime-package-manifest.ts` 新增只读 optionalDependencies 声明校验 helper，只检查 package.json 结构和计划矩阵，不读取真实 `node_modules`，不要求真实 binary。
+- [x] 在 `native-runtime-smoke.ts` 的 `packaged-manifest` 加入 optionalDependencies preflight case，并在 `packaged-app-layout` 真实 binary gate 中增加 optionalDependencies 声明前置条件。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不修改 `optionalDependencies` 具体内容。
+- [x] 更新 Phase 5 sidecar protocol / smoke plan、development checklist、next-session-prompt.md 和必要 lessons，明确本轮只完成 optionalDependencies declaration preflight，真实 optional package / packaged binary smoke 仍未完成。
+
+验证计划：
+
+- [x] 先运行相关测试确认新增测试失败，再实现。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，并确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary，未新增 native search optionalDependencies。
+- [x] 阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 已新增 `validateNativeSearchOptionalDependencies()` 和 `getNativeSearchOptionalDependencyNames()`，只校验传入 package manifest 的 `optionalDependencies` 声明是否覆盖 4 个 native search 平台包，且版本声明必须是 registry-like 字符串；空值、非字符串、`file:`、`workspace:`、git / http URL 和 path-like spec 都进入 invalid list。该 helper 不读取真实 `node_modules`，不解析 binary，也不证明 optional package 已安装。
+- `smoke:native-runtime -- --mode packaged-manifest` 现在新增 `packaged-optional-dependencies-preflight` case。当前 `apps/electron/package.json` 尚未声明 `@codeinsights/native-search-*`，因此 summary 明确输出 `optionalDependenciesDeclared=false`、4 个 `missingOptionalDependencies`、`invalidOptionalDependencies=[]`、`bundledBinaryVerified=false`、`realPackagedBinaryVerified=false`，但保持 smoke 通过，因为这是下一阶段前置 gate 而不是真实 packaged binary smoke。
+- `packaged-app-layout` 的真实验证 gate 已收紧：即使 resolver、packaged evidence、identity 都通过，`realPackagedBinaryVerified=true` 仍必须额外满足 `optionalDependenciesDeclared=true` 且非临时 fixture。当前仓库缺少 native search optionalDependencies，所以仍不能证明真实 packaged binary。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.145` 并同步 `bun.lock`；没有添加 `@codeinsights/native-search-*` optionalDependencies。
+- 红灯验证已执行：新增测试先失败于缺少 `validateNativeSearchOptionalDependencies` 导出、summary 字段、preflight case 和 failed case 非零退出 helper；实现后目标测试转绿。
+- 代码审查子代理发现一个阻断问题：初版 smoke CLI 即使 case failed 也可能保持 0 退出码。已补 `getNativeRuntimeSmokeExitCode()`，CLI 遇到任意 failed case 返回非零退出码；复审无阻断。
+- 已通过验证：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`（32 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`；禁改文件检查无命中。
+- 实现提交：`563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`。
+- 状态同步提交：由本提交生成，最终以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准。
+- 边界保持：native search 继续显式 opt-in / default off；未创建 packaged native binary；未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；未添加真实 native search optionalDependencies；未 push，未创建 PR。真实 optional package 发布 / 安装链路、真实 packaged app bundled binary smoke、default enable 和 Phase 6-9 仍未完成。
+
 ## 2026-06-04 Rust/Go Phase 5 packaged app evidence smoke 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只推进真实 packaged app bundled binary smoke 的证据模型，修正 `packaged-app-layout` 只识别 `app.asar.unpacked`、但本项目 `electron-builder.yml` 当前为 `asar: false` 的布局缺口。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。临时 fixture 仍不能证明真实 packaged binary，真实 optional package / `optionalDependencies` 仍不标记完成。
@@ -668,8 +713,8 @@ sidecar protocol / fallback 计划必须覆盖：
 
 packaged smoke 计划必须覆盖：
 
-- [x] native missing：隐藏或移除 bundled binary 后，Diagnostics 显示 `missing_binary`，Search / Tail 走 TS fallback。
-- [x] native available：只允许使用 packaged app 内 bundled binary，不从系统 `PATH` 查找同名工具。
+- [x] native missing：显式 binary 缺失时 Diagnostics 显示 `missing_binary`，Search 走 TS fallback；`tail_jsonl` 当前仍是 typed out-of-scope。
+- [~] native available：当前已覆盖显式本地 sidecar binary，不从系统 `PATH` 查找同名工具；真实 packaged app 内 bundled binary smoke 仍未完成。
 - [x] protocol mismatch：伪造不兼容 version 后自动禁用 native。
 - [x] crash / timeout：sidecar 退出或超时后，主流程不中断，后续搜索走 TS fallback。
 - [x] cache corruption：损坏 native-cache 后隔离 / 清理 / 重建，不影响 JSON / JSONL 事实源。
