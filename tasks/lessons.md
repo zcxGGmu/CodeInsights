@@ -1,10 +1,17 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 packaging config allowlist gate 边界
+
+- Packaging config allowlist 预检只接受显式 per-package include，例如 `node_modules/@codeinsights/native-search-darwin-arm64/**/*`；`node_modules/**`、`node_modules/@codeinsights/**` 或 `node_modules/@codeinsights/native-search-*` 这类宽泛 include 不能证明 planned native packages 会被安全打包。
+- `!node_modules/@codeinsights/**`、`!node_modules/**`、`!node_modules/@codeinsights/native-search-*/bin/**` 这类会阻断 required package 或 binary path 的 exclude 必须保持 blocker；当前仓库因此应继续输出 `packagingConfigVerified=false` 和 `packaging_config_not_verified`，native 继续 default off。
+- 当前 helper 只保守解析顶层 `files:` 列表；inline array、FileSet object 或未来更复杂 YAML 形态在未补解析器和测试前不能被误判为 verified。
+- 一旦任一计划 `@codeinsights/native-search-*` 已出现在 optionalDependencies，packaging config 未通过必须让 preflight failed，不能继续 skipped；`realPackagedBinaryVerified` / `bundledBinaryVerified` 也必须同时绑定 optional install-chain、packaging config、packaged evidence、packaged identity 和真实 binary verification。
+
 ## 2026-06-04 Rust / Go Phase 5 default-enable readiness 聚合边界
 
 - `nativeSearchDefaultEnableReadiness` 只能作为 default-enable 风险聚合器；它不读取 binary、不验证安装、不改变 feature flag，也不能替代真实 optional package 发布、真实 optionalDependencies 安装链路或真实 packaged app bundled binary smoke。
 - `native-runtime:benchmark` 与 `smoke:native-runtime` 都只是 readiness 的局部输入视角：benchmark 只能提供性能 / Agent parity 信号，smoke 只能提供 optional / packaged 预检信号；任一 summary 缺少输入时必须继续输出 `defaultEnableCandidate=false` 与 `explicitOptInRequired=true`。
-- 顶层 `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须同时绑定 optional install-chain、packaged app evidence、packaged app identity 和真实 binary verification，不能只透传单个 resolver 或烟测输入字段。
+- 顶层 `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须同时绑定 optional install-chain、packaging config、packaged app evidence、packaged app identity 和真实 binary verification，不能只透传单个 resolver 或烟测输入字段。
 
 ## 2026-06-04 Rust / Go Phase 5 Agent nested native parity 边界
 

@@ -2,12 +2,12 @@
 
 ## 2026-06-04 Rust/Go Phase 5 packaging config allowlist 预检计划
 
-范围确认：继续 Phase 5 “Rust search sidecar 试点”。当前最新恢复入口为 `e4d38aff docs(rust-go): 同步 Phase 5 default-enable readiness 后续状态`，`2bf88a5a feat(rust-go): 补齐 Phase 5 default-enable readiness 预检` 是最新实现基线。本轮在 default off / 显式 opt-in 不变的前提下，补齐真实 optional package 发布 / optionalDependencies 安装执行之前的只读 packaging config allowlist gate：扫描当前 `apps/electron/electron-builder.yml` 的 `files` 规则是否允许计划中的 `@codeinsights/native-search-*` optional packages 被打进 app，并把当前 `!node_modules/@codeinsights/**` 阻断写入 `smoke:native-runtime` / readiness 的机器可读 blocker。由于用户明确限制，本轮不发布真实 optional package，不执行真实安装链路，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动时最新恢复入口为 `e4d38aff docs(rust-go): 同步 Phase 5 default-enable readiness 后续状态`，`2bf88a5a feat(rust-go): 补齐 Phase 5 default-enable readiness 预检` 是进入本轮前的最新实现基线；本轮实现基线已推进到 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。本轮在 default off / 显式 opt-in 不变的前提下，补齐真实 optional package 发布 / optionalDependencies 安装执行之前的只读 packaging config allowlist gate：扫描当前 `apps/electron/electron-builder.yml` 的 `files` 规则是否允许计划中的 `@codeinsights/native-search-*` optional packages 被打进 app，并把当前 `!node_modules/@codeinsights/**` 阻断写入 `smoke:native-runtime` / readiness 的机器可读 blocker。由于用户明确限制，本轮不发布真实 optional package，不执行真实安装链路，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
 
 启动基线：
 
 - [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md` 和 `native/search/`。
-- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净、最新恢复入口为 `e4d38aff`，且 `2bf88a5a` 在最近历史中。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，启动时确认当前分支为 `rust-go-refactor`、工作树起始干净、最新恢复入口为 `e4d38aff`，且 `2bf88a5a` 在最近历史中。
 - [x] 只读检查 `native-runtime-smoke.ts`、`native-runtime-package-manifest.ts`、`native-runtime-package-resolver.ts`、`native-runtime-default-enable-readiness.ts`、`native-runtime-benchmark.ts` 和 `apps/electron/electron-builder.yml`，确认当前已有 optionalDependencies / install-chain / packaged evidence / identity / readiness gate，但尚未把 builder files allowlist 阻断项作为独立机器可读输入。
 
 实现计划：
@@ -26,11 +26,12 @@
 - [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
 - [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
 - [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
-- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
 
 ### Review
 
 - 已新增 `validateNativeSearchPackagingConfig()`，只读解析 `electron-builder.yml` 顶层 `files:` 列表规则，要求 4 个计划 native search optional packages 都有显式 per-package include；当前仓库由于缺少 include 且存在 `!node_modules/@codeinsights/**`，输出 `packagingConfigVerified=false`。
+- 实现提交：`348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。
 - 已把 packaging config gate 接入 `smoke:native-runtime` 的 `packaged-manifest` 与 `packaged-app-layout` summary，并纳入 `nativeSearchDefaultEnableReadiness` blocker：`packaging_config_not_verified`。当前 smoke 均保持 `realPackagedBinaryVerified=false`、`defaultEnableCandidate=false`、`explicitOptInRequired=true`。
 - 已收紧真实 packaged binary gate：`realPackagedBinaryVerified` / `bundledBinaryVerified` 现在同时受 optional install-chain、packaging config、packaged app evidence、packaged app identity 和真实 binary verification 约束，临时 resolver fixture 或单项输入不能绕过。
 - 子代理代码审查未发现 Critical / High blocker；指出 partial optional package opt-in 时 packaging config preflight 可能仍 skipped。已新增 `presentPackages` 作为任一计划 native optional package 出现的信号，确保半声明状态下 packaging config 不通过会 failed，而不是 skipped。
@@ -38,6 +39,7 @@
 - 版本同步：`@codeinsights/electron` 已递增到 `0.0.151` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
 - 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`（44 pass）；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
 - 边界保持：未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。当前 native 继续 default off / 显式 opt-in；真实 optional package 发布 / optionalDependencies 实际声明与安装执行、真实 packaged app bundled binary smoke、最终 default-enable 风险决策仍未完成。
+- 状态文档同步：已更新 development checklist、sidecar protocol / smoke plan、next-session prompt 和 lessons；可复制提示词已推进到 `348e003d`，并明确当前 no-go 为 `packagingConfigVerified=false`、4 个 missing packages、`blockingPackagingConfigExcludes=["!node_modules/@codeinsights/**"]` 和 `packaging_config_not_verified` blocker。状态同步提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出实际 HEAD。
 
 ## 2026-06-04 Rust/Go Phase 5 default-enable readiness 状态同步计划
 
@@ -47,16 +49,16 @@
 - [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、development checklist、sidecar protocol / smoke plan 和 next-session prompt，定位仍停留在 `665c5db7` 或未包含 default-enable readiness 的位置。
 - [x] 更新 development checklist：Phase 5 状态行、关键能力清单、阶段状态、Review 和下一轮启动入口都要包含 `nativeSearchDefaultEnableReadiness`，并明确最终 default-enable 风险决策仍未完成。
 - [x] 更新 sidecar protocol / smoke plan：加入 `2bf88a5a` 关联提交、benchmark / smoke summary 的 readiness 字段，以及 `realPackagedBinaryVerified` 顶层 gate 绑定 evidence / identity / install-chain 的边界。
-- [x] 更新 next-session-prompt.md：最新开发基线推进到 `2bf88a5a`，可复制提示词下一步转向真实 optional package / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计或最终风险决策。
+- [x] 更新 next-session-prompt.md：readiness 当轮开发基线推进到 `2bf88a5a`，可复制提示词下一步转向真实 optional package / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计或最终风险决策。
 - [x] 更新 lessons 与 Review，记录 readiness 聚合边界和本轮验证结果。
 - [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描。
 - [x] 单独提交状态同步。
 
 ### Review
 
-- 已同步 development checklist 顶部状态、Phase 5 阶段状态、关键能力清单、Default-enable readiness 预检 Review 和底部可复制启动入口，最新开发基线推进到 `2bf88a5a`。
+- 已同步 development checklist 顶部状态、Phase 5 阶段状态、关键能力清单、Default-enable readiness 预检 Review 和底部可复制启动入口，readiness 当轮开发基线推进到 `2bf88a5a`。
 - 已同步 sidecar protocol / smoke plan：加入 `2bf88a5a` 关联提交、`nativeSearchDefaultEnableReadiness` summary 字段、`defaultEnableCandidate=false` / `explicitOptInRequired=true` 当前结论，以及顶层 `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须绑定 optional install-chain、packaged evidence、packaged identity 和真实 binary verification 的边界。
-- 已同步 `next-session-prompt.md`：顶部状态和可复制提示词均推进到 `2bf88a5a`，下一步不再要求重复做 default-enable readiness 前置清单，而是转向真实 optional package 发布 / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计，或在真实 optional / packaged gate 可执行通过后做最终 default-enable 风险决策。
+- 已同步 `next-session-prompt.md`：顶部状态和可复制提示词在 readiness 当轮均推进到 `2bf88a5a`，下一步不再要求重复做 default-enable readiness 前置清单，而是转向真实 optional package 发布 / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计，或在真实 optional / packaged gate 可执行通过后做最终 default-enable 风险决策。
 - 已补充 `tasks/lessons.md`：readiness helper 只是聚合器，benchmark / smoke 都是局部输入视角，真实 bundled binary gate 不能被临时 fixture 或单项 resolver 结果绕过。
 - 验证通过：旧 `665c5db7` 最新基线扫描无命中；“default-enable 风险评估前置清单”扫描无命中；`nativeSearchDefaultEnableReadiness` 已在 checklist、sidecar plan、next-session prompt、lessons 和 todo 中出现；后续完整验证见本轮命令输出。
 - 状态同步提交：本轮提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出实际 HEAD。
