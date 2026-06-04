@@ -127,6 +127,198 @@ describe('native-runtime-benchmark helpers', () => {
     })
   })
 
+  test('buildBenchmarkSummary 输出 Chat / Agent native search gate 对比', () => {
+    const summary = buildBenchmarkSummary({
+      startedAt: '2026-06-01T12:00:00.000Z',
+      artifactDir: '/tmp/codeinsights-native-runtime-benchmark-demo',
+      keepArtifacts: false,
+      options: {
+        records: 100,
+        payloadBytes: 64,
+        workspaceFiles: 20,
+        logBytes: 1024,
+        iterations: 2,
+        keepArtifacts: false,
+        nativeSearchBinary: '/tmp/native-search',
+      },
+      cases: [
+        {
+          name: 'chat-search-large-history',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [120, 100],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [4, 3],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'native-chat-search-large-history',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [10, 12],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [2, 2],
+          memoryDeltaBytes: 2048,
+        },
+        {
+          name: 'agent-runtime-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [220, 200],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [2, 2],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'native-agent-runtime-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [4, 5],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [3, 3],
+          memoryDeltaBytes: 2048,
+        },
+      ],
+    })
+
+    expect(summary.nativeSearchGate).toMatchObject({
+      evaluated: true,
+      benchmarkGatePassed: false,
+      defaultEnableCandidate: false,
+      benchmarkBlockers: [
+        'agent_event_loop_delay_p95_regressed',
+        'agent_event_loop_work_delay_p95_regressed',
+      ],
+      defaultEnableBlockers: [
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+      blockers: [
+        'agent_event_loop_delay_p95_regressed',
+        'agent_event_loop_work_delay_p95_regressed',
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+    })
+    expect(summary.nativeSearchGate.comparisons).toHaveLength(2)
+    expect(summary.nativeSearchGate.comparisons[0]).toMatchObject({
+      source: 'chat',
+      p95DeltaMs: -108,
+      p95Ratio: 0.1,
+      eventLoopDelayP95DeltaMs: -2,
+      eventLoopWorkDelayP95DeltaMs: -2,
+      p95Improved: true,
+      eventLoopDelayP95NotRegressed: true,
+      eventLoopWorkDelayP95NotRegressed: true,
+    })
+    expect(summary.nativeSearchGate.comparisons[1]).toMatchObject({
+      source: 'agent',
+      p95DeltaMs: -215,
+      p95Ratio: 0.023,
+      eventLoopDelayP95DeltaMs: 1,
+      eventLoopWorkDelayP95DeltaMs: 1,
+      p95Improved: true,
+      eventLoopDelayP95NotRegressed: false,
+      eventLoopWorkDelayP95NotRegressed: false,
+    })
+  })
+
+  test('buildBenchmarkSummary 未提供 native binary 时仍保留默认启用阻塞项', () => {
+    const summary = buildBenchmarkSummary({
+      startedAt: '2026-06-01T12:00:00.000Z',
+      artifactDir: '/tmp/codeinsights-native-runtime-benchmark-demo',
+      keepArtifacts: false,
+      options: {
+        records: 100,
+        payloadBytes: 64,
+        workspaceFiles: 20,
+        logBytes: 1024,
+        iterations: 1,
+        keepArtifacts: false,
+      },
+      cases: [],
+    })
+
+    expect(summary.nativeSearchGate).toMatchObject({
+      evaluated: false,
+      benchmarkGatePassed: false,
+      defaultEnableCandidate: false,
+      benchmarkBlockers: ['native_binary_not_provided'],
+      defaultEnableBlockers: [
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+      blockers: [
+        'native_binary_not_provided',
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+      comparisons: [],
+    })
+  })
+
+  test('buildBenchmarkSummary benchmark 通过时仍不把 packaged / optional 阻塞误判为可默认启用', () => {
+    const summary = buildBenchmarkSummary({
+      startedAt: '2026-06-01T12:00:00.000Z',
+      artifactDir: '/tmp/codeinsights-native-runtime-benchmark-demo',
+      keepArtifacts: false,
+      options: {
+        records: 100,
+        payloadBytes: 64,
+        workspaceFiles: 20,
+        logBytes: 1024,
+        iterations: 2,
+        keepArtifacts: false,
+        nativeSearchBinary: '/tmp/native-search',
+      },
+      cases: [
+        {
+          name: 'chat-search-large-history',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [100, 100],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [5, 5],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'native-chat-search-large-history',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [5, 5],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [2, 2],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'agent-runtime-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [200, 200],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [4, 4],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'native-agent-runtime-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [4, 4],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [2, 2],
+          memoryDeltaBytes: 1024,
+        },
+      ],
+    })
+
+    expect(summary.nativeSearchGate).toMatchObject({
+      evaluated: true,
+      benchmarkGatePassed: true,
+      defaultEnableCandidate: false,
+      benchmarkBlockers: [],
+      defaultEnableBlockers: [
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+      blockers: [
+        'optional_package_install_chain_not_evaluated',
+        'packaged_app_bundled_binary_not_evaluated',
+      ],
+    })
+  })
+
   test('runBenchmark 输出 workspace cold build 与 warm search 指标', async () => {
     const summary = await runBenchmark({
       records: 10,

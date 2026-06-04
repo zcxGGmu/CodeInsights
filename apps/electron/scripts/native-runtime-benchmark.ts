@@ -80,7 +80,45 @@ interface BenchmarkSummary {
   }
   options: BenchmarkSummaryOptions
   artifactDir?: string
+  nativeSearchGate: BenchmarkNativeSearchGate
   cases: BenchmarkCaseSummary[]
+}
+
+type BenchmarkNativeSearchSource = 'chat' | 'agent'
+
+type BenchmarkNativeSearchGateBlocker =
+  | 'native_binary_not_provided'
+  | 'native_search_comparison_incomplete'
+  | 'chat_p95_not_improved'
+  | 'agent_p95_not_improved'
+  | 'chat_event_loop_delay_p95_regressed'
+  | 'agent_event_loop_delay_p95_regressed'
+  | 'chat_event_loop_work_delay_p95_regressed'
+  | 'agent_event_loop_work_delay_p95_regressed'
+  | 'optional_package_install_chain_not_evaluated'
+  | 'packaged_app_bundled_binary_not_evaluated'
+
+interface BenchmarkNativeSearchComparison {
+  source: BenchmarkNativeSearchSource
+  typescriptCaseName: string
+  nativeCaseName: string
+  p95DeltaMs: number
+  p95Ratio: number
+  eventLoopDelayP95DeltaMs: number
+  eventLoopWorkDelayP95DeltaMs: number
+  p95Improved: boolean
+  eventLoopDelayP95NotRegressed: boolean
+  eventLoopWorkDelayP95NotRegressed: boolean
+}
+
+interface BenchmarkNativeSearchGate {
+  evaluated: boolean
+  benchmarkGatePassed: boolean
+  defaultEnableCandidate: boolean
+  benchmarkBlockers: BenchmarkNativeSearchGateBlocker[]
+  defaultEnableBlockers: BenchmarkNativeSearchGateBlocker[]
+  blockers: BenchmarkNativeSearchGateBlocker[]
+  comparisons: BenchmarkNativeSearchComparison[]
 }
 
 const DEFAULT_OPTIONS: BenchmarkOptions = {
@@ -146,6 +184,8 @@ export function percentile(samples: number[], percentileValue: number): number {
 }
 
 export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummary {
+  const cases = input.cases.map(buildBenchmarkCaseSummary)
+  const nativeSearchBinaryProvided = Boolean(input.options.nativeSearchBinary)
   return {
     schemaVersion: 1,
     generatedAt: input.startedAt,
@@ -162,36 +202,149 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
       logBytes: input.options.logBytes,
       iterations: input.options.iterations,
       keepArtifacts: input.options.keepArtifacts,
-      nativeSearchBinaryProvided: Boolean(input.options.nativeSearchBinary),
+      nativeSearchBinaryProvided,
     },
     ...(input.keepArtifacts ? { artifactDir: input.artifactDir } : {}),
-    cases: input.cases.map((benchmarkCase) => {
-      const eventLoopDelayMaxMs = maxSample(benchmarkCase.eventLoopDelaySamplesMs)
-      const eventLoopBaselineMaxMs = maxSample(benchmarkCase.eventLoopBaselineSamplesMs)
-      const eventLoopDelayP95Ms = percentile(benchmarkCase.eventLoopDelaySamplesMs, 0.95)
-      const eventLoopBaselineP95Ms = percentile(benchmarkCase.eventLoopBaselineSamplesMs, 0.95)
-      const eventLoopWorkDelaySamplesMs = benchmarkCase.eventLoopDelaySamplesMs.map((delay, index) => (
-        Math.max(0, delay - (benchmarkCase.eventLoopBaselineSamplesMs[index] ?? 0))
-      ))
-      return {
-        name: benchmarkCase.name,
-        ...benchmarkCase.dataScale,
-        samplesMs: benchmarkCase.samplesMs.map(roundMillis),
-        p50Ms: percentile(benchmarkCase.samplesMs, 0.5),
-        p95Ms: percentile(benchmarkCase.samplesMs, 0.95),
-        p99Ms: percentile(benchmarkCase.samplesMs, 0.99),
-        eventLoopDelayMs: roundMillis(eventLoopDelayMaxMs),
-        eventLoopDelayMaxMs: roundMillis(eventLoopDelayMaxMs),
-        eventLoopDelayP95Ms,
-        eventLoopDelaySamplesMs: benchmarkCase.eventLoopDelaySamplesMs.map(roundMillis),
-        eventLoopBaselineMs: roundMillis(eventLoopBaselineMaxMs),
-        eventLoopBaselineP95Ms,
-        eventLoopWorkDelayMs: maxSample(eventLoopWorkDelaySamplesMs),
-        eventLoopWorkDelayP95Ms: percentile(eventLoopWorkDelaySamplesMs, 0.95),
-        eventLoopWorkDelaySamplesMs: eventLoopWorkDelaySamplesMs.map(roundMillis),
-        memoryDeltaBytes: benchmarkCase.memoryDeltaBytes,
-      }
-    }),
+    nativeSearchGate: buildNativeSearchGate(cases, nativeSearchBinaryProvided),
+    cases,
+  }
+}
+
+function buildBenchmarkCaseSummary(benchmarkCase: BenchmarkCaseInput): BenchmarkCaseSummary {
+  const eventLoopDelayMaxMs = maxSample(benchmarkCase.eventLoopDelaySamplesMs)
+  const eventLoopBaselineMaxMs = maxSample(benchmarkCase.eventLoopBaselineSamplesMs)
+  const eventLoopDelayP95Ms = percentile(benchmarkCase.eventLoopDelaySamplesMs, 0.95)
+  const eventLoopBaselineP95Ms = percentile(benchmarkCase.eventLoopBaselineSamplesMs, 0.95)
+  const eventLoopWorkDelaySamplesMs = benchmarkCase.eventLoopDelaySamplesMs.map((delay, index) => (
+    Math.max(0, delay - (benchmarkCase.eventLoopBaselineSamplesMs[index] ?? 0))
+  ))
+  return {
+    name: benchmarkCase.name,
+    ...benchmarkCase.dataScale,
+    samplesMs: benchmarkCase.samplesMs.map(roundMillis),
+    p50Ms: percentile(benchmarkCase.samplesMs, 0.5),
+    p95Ms: percentile(benchmarkCase.samplesMs, 0.95),
+    p99Ms: percentile(benchmarkCase.samplesMs, 0.99),
+    eventLoopDelayMs: roundMillis(eventLoopDelayMaxMs),
+    eventLoopDelayMaxMs: roundMillis(eventLoopDelayMaxMs),
+    eventLoopDelayP95Ms,
+    eventLoopDelaySamplesMs: benchmarkCase.eventLoopDelaySamplesMs.map(roundMillis),
+    eventLoopBaselineMs: roundMillis(eventLoopBaselineMaxMs),
+    eventLoopBaselineP95Ms,
+    eventLoopWorkDelayMs: maxSample(eventLoopWorkDelaySamplesMs),
+    eventLoopWorkDelayP95Ms: percentile(eventLoopWorkDelaySamplesMs, 0.95),
+    eventLoopWorkDelaySamplesMs: eventLoopWorkDelaySamplesMs.map(roundMillis),
+    memoryDeltaBytes: benchmarkCase.memoryDeltaBytes,
+  }
+}
+
+function buildNativeSearchGate(
+  cases: BenchmarkCaseSummary[],
+  nativeSearchBinaryProvided: boolean,
+): BenchmarkNativeSearchGate {
+  const benchmarkBlockers: BenchmarkNativeSearchGateBlocker[] = []
+  const defaultEnableBlockers: BenchmarkNativeSearchGateBlocker[] = [
+    'optional_package_install_chain_not_evaluated',
+    'packaged_app_bundled_binary_not_evaluated',
+  ]
+
+  if (!nativeSearchBinaryProvided) {
+    benchmarkBlockers.push('native_binary_not_provided')
+    return {
+      evaluated: false,
+      benchmarkGatePassed: false,
+      defaultEnableCandidate: false,
+      benchmarkBlockers,
+      defaultEnableBlockers,
+      blockers: [...benchmarkBlockers, ...defaultEnableBlockers],
+      comparisons: [],
+    }
+  }
+
+  const comparisons = [
+    buildNativeSearchComparison('chat', 'chat-search-large-history', 'native-chat-search-large-history', cases),
+    buildNativeSearchComparison('agent', 'agent-runtime-search', 'native-agent-runtime-search', cases),
+  ].filter((comparison): comparison is BenchmarkNativeSearchComparison => comparison != null)
+  const evaluated = comparisons.length === 2
+
+  if (!evaluated) {
+    benchmarkBlockers.push('native_search_comparison_incomplete')
+  }
+
+  for (const comparison of comparisons) {
+    appendNativeSearchComparisonBlockers(comparison, benchmarkBlockers)
+  }
+
+  const benchmarkGatePassed = evaluated
+    && comparisons.every((comparison) => (
+      comparison.p95Improved
+      && comparison.eventLoopDelayP95NotRegressed
+      && comparison.eventLoopWorkDelayP95NotRegressed
+    ))
+
+  return {
+    evaluated,
+    benchmarkGatePassed,
+    defaultEnableCandidate: false,
+    benchmarkBlockers,
+    defaultEnableBlockers,
+    blockers: [...benchmarkBlockers, ...defaultEnableBlockers],
+    comparisons,
+  }
+}
+
+function buildNativeSearchComparison(
+  source: BenchmarkNativeSearchSource,
+  typescriptCaseName: string,
+  nativeCaseName: string,
+  cases: BenchmarkCaseSummary[],
+): BenchmarkNativeSearchComparison | undefined {
+  const typescriptCase = cases.find((benchmarkCase) => benchmarkCase.name === typescriptCaseName)
+  const nativeCase = cases.find((benchmarkCase) => benchmarkCase.name === nativeCaseName)
+  if (!typescriptCase || !nativeCase) return undefined
+
+  const p95DeltaMs = roundMillis(nativeCase.p95Ms - typescriptCase.p95Ms)
+  const eventLoopDelayP95DeltaMs = roundMillis(nativeCase.eventLoopDelayP95Ms - typescriptCase.eventLoopDelayP95Ms)
+  const eventLoopWorkDelayP95DeltaMs = roundMillis(
+    nativeCase.eventLoopWorkDelayP95Ms - typescriptCase.eventLoopWorkDelayP95Ms,
+  )
+
+  return {
+    source,
+    typescriptCaseName,
+    nativeCaseName,
+    p95DeltaMs,
+    p95Ratio: typescriptCase.p95Ms > 0
+      ? roundMillis(nativeCase.p95Ms / typescriptCase.p95Ms)
+      : 0,
+    eventLoopDelayP95DeltaMs,
+    eventLoopWorkDelayP95DeltaMs,
+    p95Improved: p95DeltaMs < 0,
+    eventLoopDelayP95NotRegressed: eventLoopDelayP95DeltaMs <= 0,
+    eventLoopWorkDelayP95NotRegressed: eventLoopWorkDelayP95DeltaMs <= 0,
+  }
+}
+
+function appendNativeSearchComparisonBlockers(
+  comparison: BenchmarkNativeSearchComparison,
+  blockers: BenchmarkNativeSearchGateBlocker[],
+): void {
+  if (!comparison.p95Improved) {
+    blockers.push(comparison.source === 'chat' ? 'chat_p95_not_improved' : 'agent_p95_not_improved')
+  }
+  if (!comparison.eventLoopDelayP95NotRegressed) {
+    blockers.push(
+      comparison.source === 'chat'
+        ? 'chat_event_loop_delay_p95_regressed'
+        : 'agent_event_loop_delay_p95_regressed',
+    )
+  }
+  if (!comparison.eventLoopWorkDelayP95NotRegressed) {
+    blockers.push(
+      comparison.source === 'chat'
+        ? 'chat_event_loop_work_delay_p95_regressed'
+        : 'agent_event_loop_work_delay_p95_regressed',
+    )
   }
 }
 
