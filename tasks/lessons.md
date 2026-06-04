@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-04 Rust / Go 阶段状态同步恢复入口闭环
+
+- 每个阶段性任务完成、验证通过并提交后，默认立即执行状态同步：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要的 lessons，并单独提交文档同步；不要等用户再次提醒。
+- 状态同步提交落地后，下一次“更新最新开发状态 / 下次启动提示词”必须用 `git log` 回填真实 docs 提交为最新已确认恢复入口；最新开发基线继续指向最近的实现提交，不能把 docs 恢复入口和实现基线混在一起。
+- 最终回复给用户的可复制下次启动提示词必须使用本轮提交后的实际 HEAD，并继续写明禁改边界：native default off / 显式 opt-in，不创建 packaged native binary，不改 root README / AGENTS / `apps/electron/electron-builder.yml`，不新增真实 native optionalDependencies，不 push，不创建 PR。
+
 ## 2026-06-04 Rust / Go Phase 5 packaging config allowlist gate 边界
 
 - Packaging config allowlist 预检只接受显式 per-package include，例如 `node_modules/@codeinsights/native-search-darwin-arm64/**/*`；`node_modules/**`、`node_modules/@codeinsights/**` 或 `node_modules/@codeinsights/native-search-*` 这类宽泛 include 不能证明 planned native packages 会被安全打包。

@@ -1,5 +1,26 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 packaging config allowlist 恢复入口回填计划
+
+范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步，把当前 `git log` 可确认的最新 Rust / Go 状态同步提交 `f359dadc docs(rust-go): 同步 Phase 5 packaging config allowlist 后续状态` 回填为最新已确认恢复入口；最新开发基线保持为 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -10 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净，最新恢复入口候选为 `f359dadc`，最新开发基线为 `348e003d`。
+- [x] 更新 development checklist 顶部状态、完成 / 未完成清单和下次启动入口，把最新已确认恢复入口从 `348e003d` 推进到 `f359dadc`，同时保留 `348e003d` 为开发基线。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态与可复制提示词，确保下次启动能从 `f359dadc` 或本轮后续 docs 提交继续。
+- [x] 更新 `tasks/lessons.md`，固化“状态同步提交落地后，下一次文档同步必须回填真实 docs 恢复入口”的习惯。
+- [x] 更新本 `tasks/todo.md` Review，记录完成 / 未完成状态、验证和禁止事项。
+- [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描，确认未触碰根文档、builder 配置、native binary 或真实 optionalDependencies。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 已把 development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `348e003d` 回填到 `f359dadc docs(rust-go): 同步 Phase 5 packaging config allowlist 后续状态`；最新开发基线继续保持 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。
+- 已补充 `tasks/lessons.md`：阶段性任务完成后默认立即执行状态同步闭环；状态同步提交落地后，下一次文档更新必须回填真实 docs 提交为恢复入口，并在最终回复给出本轮实际 HEAD。
+- 当前完成状态不变：Phase 0-4 已完成；Phase 5 已完成到 packaging config allowlist 预检，当前 no-go 仍为 `packagingConfigVerified=false`、4 个 `missingPackagingConfigPackages`、`blockingPackagingConfigExcludes=["!node_modules/@codeinsights/**"]` 和 `packaging_config_not_verified` blocker。
+- 当前未完成状态不变：真实 optional package 发布、optionalDependencies 实际声明与安装执行、真实 packaged app bundled binary smoke、builder allowlist 实际修改、最终 default-enable 风险决策以及 Phase 6-9 仍未完成。native 继续 default off / 显式 opt-in。
+- 验证通过：`git diff --check`；禁改文件扫描 `git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 为空；native optionalDependencies 扫描输出 `no native search optionalDependencies`；恢复入口 / 开发基线扫描确认 docs 中恢复入口为 `f359dadc`，开发基线未误写为 `f359dadc`。
+- 边界保持：未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。本轮提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出实际 HEAD。
+
 ## 2026-06-04 Rust/Go Phase 5 packaging config allowlist 预检计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动时最新恢复入口为 `e4d38aff docs(rust-go): 同步 Phase 5 default-enable readiness 后续状态`，`2bf88a5a feat(rust-go): 补齐 Phase 5 default-enable readiness 预检` 是进入本轮前的最新实现基线；本轮实现基线已推进到 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`。本轮在 default off / 显式 opt-in 不变的前提下，补齐真实 optional package 发布 / optionalDependencies 安装执行之前的只读 packaging config allowlist gate：扫描当前 `apps/electron/electron-builder.yml` 的 `files` 规则是否允许计划中的 `@codeinsights/native-search-*` optional packages 被打进 app，并把当前 `!node_modules/@codeinsights/**` 阻断写入 `smoke:native-runtime` / readiness 的机器可读 blocker。由于用户明确限制，本轮不发布真实 optional package，不执行真实安装链路，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
