@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-04 阶段完成后的状态同步习惯
+
+- 每个阶段性任务完成并通过验证后，必须自动做状态同步闭环：更新 development checklist 的完成 / 未完成清单、更新 `next-session-prompt.md` 的可复制提示词、更新 `tasks/todo.md` Review、按需补 lessons，并单独提交状态文档；不要等用户再次提醒。
+- 若状态同步提交已经生成，仓库内“最新已确认恢复入口”必须回填为实际 docs 提交 hash，而不是停在实现提交；如果无法提前知道本提交 hash，文档中先写“以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准”，提交后最终回复给出实际 HEAD。
+
 ## 2026-06-04 Rust / Go Phase 5 optionalDependencies preflight gate 边界
 
 - 在真实 native optional package 尚未发布 / 安装、且不能修改 `electron-builder.yml` 时，不要直接把 `@codeinsights/native-search-*` 写入 `apps/electron/package.json` 的 `optionalDependencies`；应先做 package manifest 声明预检，输出 `optionalDependenciesDeclared=false` 与缺失包名列表，并保持 `realPackagedBinaryVerified=false`。

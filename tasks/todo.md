@@ -1,5 +1,26 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 optionalDependencies 恢复入口回填计划
+
+范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词。当前实现基线为 `563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`，最新状态同步提交为 `05df1687 docs(rust-go): 同步 Phase 5 optionalDependencies 预检后续状态`。本轮只回填恢复入口和习惯固化，不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -12 --oneline`，确认当前分支为 `rust-go-refactor`，最新提交为 `05df1687 docs(rust-go): 同步 Phase 5 optionalDependencies 预检后续状态`。
+- [x] 更新 development checklist，把最新开发基线保持为 `563b804c`，最新已确认恢复入口回填为 `05df1687`，并确认完成 / 未完成清单仍准确。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把仓库内可复制提示词推进到 `05df1687`，下一步继续指向真实 optional package / 真实 packaged app bundled binary smoke 或 Agent work-delay 分析。
+- [x] 更新 `tasks/lessons.md`，强化阶段完成后自动同步文档、Review 和下次启动提示词的习惯。
+- [x] 更新本 `tasks/todo.md` Review，记录验证、禁止事项和最终下次入口。
+- [x] 运行 `git diff --check` 和禁改文件检查，确认未触碰根 `README.md` / 根 `AGENTS.md` / `electron-builder.yml` / native binary。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 本轮只做状态文档同步，没有修改业务代码、Rust / Go 源码、打包配置或根文档。
+- 最新开发基线保持为 `563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`；最新已确认恢复入口回填为 `05df1687 docs(rust-go): 同步 Phase 5 optionalDependencies 预检后续状态`。若本轮状态同步再次提交，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 已完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 已完成 search sidecar、sidecar manager、fallback gate、contract parity、benchmark、fake sidecar / cache corruption smoke、native-cache schema、optional package manifest schema、packaged-manifest preflight、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate 和 optionalDependencies declaration preflight gate；真实 optional package 发布 / optionalDependencies 实际声明与安装链路、真实 packaged app bundled binary smoke、default-enable 风险评估、Phase 6-9 仍未完成。
+- 已在 `tasks/lessons.md` 固化习惯：阶段性任务完成并通过验证后，自动更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交状态文档。
+- 边界保持：native 继续显式 opt-in / default off；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+- 验证通过：旧恢复入口 / 旧测试计数 / 旧 optionalDependencies 措辞扫描无阻断；`git diff --check`；`git diff --name-only | rg '(^README\.md$|^AGENTS\.md$|^apps/electron/electron-builder\.yml$|native/search/target|\.exe$|codeinsights-native-search$)' || true` 无命中。
+
 ## 2026-06-04 Rust/Go Phase 5 optionalDependencies preflight gate 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只推进真实 optional package / packaged smoke 前置门禁：新增 `apps/electron/package.json` 的 native search optionalDependencies 声明预检，并把真实 packaged binary verified 再收紧为必须通过 optionalDependencies 声明 gate。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不直接添加尚未发布的 `@codeinsights/native-search-*` optionalDependencies，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
