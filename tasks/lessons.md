@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional package publication gate 边界
+
+- optional package publication preflight 只能读取 registry packument metadata；默认 smoke 不联网，只有显式 `--check-registry` 才做只读查询。404 进入 `missingPublishedOptionalPackages`，非 OK / fetch error 进入 `unavailablePublishedOptionalPackages`，metadata 不匹配进入 `invalidPublishedOptionalPackages`，不能安装 package、写 lockfile、写 package.json 或读取 binary。
+- publication gate 不能只看 `dist-tags.latest`。一旦当前 `apps/electron/package.json` 存在 exact optionalDependency 版本，registry preflight 必须校验该 exact version 对应的 `versions[expectedVersion]`，避免 publication 和 install-chain 各自证明不同版本。
+- `packaged-manifest --check-registry` 与 `packaged-app-layout --check-registry` 都必须在 publication no-go 时产生 failed case 并返回非零退出码；skipped 只适用于未显式 registry check 的默认离线预检。
+- `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须同时要求非临时 fixture、optional package 已发布、optionalDependencies install-chain、packaging config、packaged app evidence、packaged app identity 和真实 resolver verification。临时 fixture、publication-only、packaging-only 或 install-chain-only 都不能证明真实 packaged binary。
+
 ## 2026-06-04 Rust / Go 阶段状态同步恢复入口闭环
 
 - 每个阶段性任务完成、验证通过并提交后，默认立即执行状态同步：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要的 lessons，并单独提交文档同步；不要等用户再次提醒。

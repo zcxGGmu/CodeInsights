@@ -1,5 +1,26 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-05 Rust/Go Phase 5 optional package 发布预检状态同步计划
+
+范围确认：`6ae1c896 feat(rust-go): 补齐 Phase 5 optional package 发布状态预检` 已完成并通过验证。本轮只做状态文档同步：把 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、tasks/lessons.md 和本 Review 推进到 publication preflight 后的真实状态。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -8 --oneline`，确认实现提交 `6ae1c896` 已在 HEAD，工作树从干净状态进入文档同步。
+- [x] 更新 development checklist：最新开发基线推进到 `6ae1c896`，Phase 5 完成项加入 optional package 发布状态预检，未完成项保留真实发布 / 实际声明安装 / builder allowlist 修改 / packaged smoke / default-enable 风险决策。
+- [x] 更新 sidecar protocol / smoke plan：记录 `--check-registry` 只读 publication gate、expected exact version 校验、`packaged-app-layout --check-registry` failed case、temporary fixture 不能证明真实 binary。
+- [x] 更新 `next-session-prompt.md`：顶部状态与可复制提示词推进到 `6ae1c896`，并要求下次启动先确认本轮后续 docs 提交为最新恢复入口。
+- [x] 更新 `tasks/lessons.md`：固化 publication gate、registry check、expected version 和 real packaged binary 聚合边界。
+- [x] 更新本 `tasks/todo.md` Review，记录验证结果和禁止事项。
+- [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描。
+- [x] 单独提交状态同步。
+
+### Review
+
+- 已同步 development checklist 顶部状态、Phase 5 完成 / 未完成清单和下次启动入口：最新开发基线为 `6ae1c896 feat(rust-go): 补齐 Phase 5 optional package 发布状态预检`；最新已确认恢复入口先保留 `60bdd3a3 docs(rust-go): 回填 Phase 5 packaging config 最新恢复入口`，本轮状态同步提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 已同步 sidecar protocol / smoke plan：`packaged-manifest` 和 `packaged-app-layout` 都记录 `--check-registry` 显式只读 publication preflight，默认离线 skipped，当前显式 registry no-go 为 4 个 `missingPublishedOptionalPackages`；`realPackagedBinaryVerified` 必须绑定非临时 fixture、publication、install-chain、packaging config、packaged evidence、identity 和真实 resolver verification。
+- 已同步 `next-session-prompt.md`：可复制提示词不再把 `348e003d` 当最新开发基线，下一步明确转向真实 optional package 发布、实际 optionalDependencies 声明与安装执行、builder allowlist 实际修改前置工作、真实 packaged app bundled binary smoke 或最终 default-enable 风险决策前置工作。
+- 已补充 `tasks/lessons.md`：publication helper 必须绑定 expected exact version；显式 registry check 失败必须导致 smoke 非零；temporary fixture、publication-only、packaging-only、install-chain-only 不能证明真实 packaged binary。
+- 边界保持：未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+
 ## 2026-06-05 Rust/Go Phase 5 optional package 发布状态预检计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，最新开发基线为 `348e003d feat(rust-go): 补齐 Phase 5 packaging config allowlist 预检`，最新已确认恢复入口为 `60bdd3a3 docs(rust-go): 回填 Phase 5 packaging config 最新恢复入口`。本轮在 native default off / 显式 opt-in 不变的前提下，补齐真实 optional package 发布 / install-chain 前的只读 registry publication preflight：默认不联网、不安装、不声明依赖，只在显式传参时只读查询计划中的 `@codeinsights/native-search-*` npm registry 元数据，并把当前 package 未发布 / metadata 无法验证沉淀为 smoke/readiness 的机器可读 blocker。严格不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
