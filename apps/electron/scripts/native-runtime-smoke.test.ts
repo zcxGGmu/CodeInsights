@@ -78,6 +78,7 @@ describe('native-runtime-smoke', () => {
     expect(summary.requiresPrebuiltPackagedApp).toBe(true)
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
+    expect(summary.packagedAppIdentityVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(serialized).not.toContain('/Users/demo/native-search')
     expect(serialized).not.toContain('CodeInsights.app')
@@ -179,6 +180,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.bundledBinaryVerified).toBe(false)
       expect(summary.packagedAppLayoutVerified).toBe(true)
       expect(summary.packagedAppEvidenceVerified).toBe(true)
+      expect(summary.packagedAppIdentityVerified).toBe(false)
       expect(summary.realPackagedBinaryVerified).toBe(false)
       expect(summary.fixtureBundledPackageVerified).toBe(false)
       expect(summary.usesTemporaryFixture).toBe(true)
@@ -211,6 +213,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.bundledBinaryVerified).toBe(false)
       expect(summary.packagedAppLayoutVerified).toBe(true)
       expect(summary.packagedAppEvidenceVerified).toBe(true)
+      expect(summary.packagedAppIdentityVerified).toBe(true)
       expect(summary.realPackagedBinaryVerified).toBe(false)
       expect(summary.usesTemporaryFixture).toBe(true)
       expect(summary.cases).toContainEqual(expect.objectContaining({
@@ -218,9 +221,33 @@ describe('native-runtime-smoke', () => {
         status: 'passed',
       }))
       expect(JSON.stringify(summary)).toContain('packagedAppEvidence=unpacked-app')
+      expect(JSON.stringify(summary)).toContain('packagedAppIdentityVerified=true')
       expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
       expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app layout smoke 不把缺失 CodeInsights identity 的 app/node_modules 标成真实 packaged binary', async () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app', {
+      appPackagePatch: { name: '@demo/not-codeinsights' },
+    })
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+
+      expect(summary.packagedAppLayoutVerified).toBe(true)
+      expect(summary.packagedAppEvidenceVerified).toBe(true)
+      expect(summary.packagedAppIdentityVerified).toBe(false)
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.bundledBinaryVerified).toBe(false)
+      expect(JSON.stringify(summary)).toContain('packagedAppIdentityVerified=false')
+      expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
     } finally {
       rmSync(fixture.rootDir, { recursive: true, force: true })
     }
@@ -363,7 +390,12 @@ describe('native-runtime-smoke', () => {
   })
 })
 
-function createPackagedAppLayoutFixture(layout: 'asar-unpacked' | 'unpacked-app'): {
+function createPackagedAppLayoutFixture(
+  layout: 'asar-unpacked' | 'unpacked-app',
+  options: {
+    appPackagePatch?: Record<string, unknown>
+  } = {},
+): {
   rootDir: string
   nodeModulesRoot: string
 } {
@@ -391,7 +423,9 @@ function createPackagedAppLayoutFixture(layout: 'asar-unpacked' | 'unpacked-app'
   } else {
     writeFileSync(join(appRoot, 'package.json'), `${JSON.stringify({
       name: '@codeinsights/electron',
-      version: '0.0.143',
+      version: '0.0.144',
+      main: 'dist/main.cjs',
+      ...(options.appPackagePatch ?? {}),
     }, null, 2)}\n`, 'utf-8')
   }
   writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({

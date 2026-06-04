@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
@@ -56,6 +56,7 @@ export interface NativeRuntimeSmokeSummary {
   usesTemporaryFixture: boolean
   packagedAppLayoutVerified: boolean
   packagedAppEvidenceVerified: boolean
+  packagedAppIdentityVerified: boolean
   realPackagedBinaryVerified: boolean
   requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
@@ -67,6 +68,7 @@ interface NativeRuntimeSmokeVerification {
   usesTemporaryFixture?: boolean
   packagedAppLayoutVerified?: boolean
   packagedAppEvidenceVerified?: boolean
+  packagedAppIdentityVerified?: boolean
   realPackagedBinaryVerified?: boolean
   requiresPrebuiltPackagedApp?: boolean
 }
@@ -126,6 +128,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     usesTemporaryFixture: Boolean(verification.usesTemporaryFixture),
     packagedAppLayoutVerified: Boolean(verification.packagedAppLayoutVerified),
     packagedAppEvidenceVerified: Boolean(verification.packagedAppEvidenceVerified),
+    packagedAppIdentityVerified: Boolean(verification.packagedAppIdentityVerified),
     realPackagedBinaryVerified: Boolean(verification.realPackagedBinaryVerified),
     requiresPrebuiltPackagedApp: Boolean(verification.requiresPrebuiltPackagedApp),
     cases: input.cases.map((smokeCase) => ({
@@ -202,6 +205,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         usesTemporaryFixture: packagedAppResult.usesTemporaryFixture,
         packagedAppLayoutVerified: packagedAppResult.layoutVerified,
         packagedAppEvidenceVerified: packagedAppResult.packagedAppEvidenceVerified,
+        packagedAppIdentityVerified: packagedAppResult.packagedAppIdentityVerified,
         realPackagedBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
         requiresPrebuiltPackagedApp: true,
       }
@@ -412,6 +416,7 @@ interface PackagedAppLayoutCaseResult {
   case: NativeRuntimeSmokeCase
   layoutVerified: boolean
   packagedAppEvidenceVerified: boolean
+  packagedAppIdentityVerified: boolean
   realPackagedBinaryVerified: boolean
   usesTemporaryFixture: boolean
 }
@@ -426,6 +431,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       },
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
+      packagedAppIdentityVerified: false,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -440,6 +446,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       },
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
+      packagedAppIdentityVerified: false,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -455,6 +462,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       },
       layoutVerified: false,
       packagedAppEvidenceVerified: false,
+      packagedAppIdentityVerified: false,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture: false,
     }
@@ -464,6 +472,7 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
   const usesTemporaryFixture = isPathInside(appNodeModulesRoot, tmpdir())
   const packagedAppEvidence = classifyPackagedAppEvidence(appNodeModulesRoot)
   const packagedAppEvidenceVerified = packagedAppEvidence !== 'none'
+  const packagedAppIdentityVerified = verifyPackagedAppIdentity(appNodeModulesRoot, packagedAppEvidence)
   if (!result.ok) {
     return {
       case: {
@@ -478,12 +487,15 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
       },
       layoutVerified: false,
       packagedAppEvidenceVerified,
+      packagedAppIdentityVerified,
       realPackagedBinaryVerified: false,
       usesTemporaryFixture,
     }
   }
 
-  const realPackagedBinaryVerified = packagedAppEvidenceVerified && !usesTemporaryFixture
+  const realPackagedBinaryVerified = packagedAppEvidenceVerified
+    && packagedAppIdentityVerified
+    && !usesTemporaryFixture
   return {
     case: {
       name: 'packaged-app-layout',
@@ -494,12 +506,14 @@ function runPackagedAppLayoutCase(appNodeModulesRoot: string | undefined): Packa
         'packagedAppLayoutVerified=true',
         `packagedAppEvidence=${packagedAppEvidence}`,
         `packagedAppEvidenceVerified=${String(packagedAppEvidenceVerified)}`,
+        `packagedAppIdentityVerified=${String(packagedAppIdentityVerified)}`,
         `usesTemporaryFixture=${String(usesTemporaryFixture)}`,
         `realPackagedBinaryVerified=${String(realPackagedBinaryVerified)}`,
       ].join('; '),
     },
     layoutVerified: true,
     packagedAppEvidenceVerified,
+    packagedAppIdentityVerified,
     realPackagedBinaryVerified,
     usesTemporaryFixture,
   }
@@ -556,6 +570,26 @@ function classifyPackagedAppEvidence(appNodeModulesRoot: string): 'asar-unpacked
   }
 
   return 'none'
+}
+
+function verifyPackagedAppIdentity(
+  appNodeModulesRoot: string,
+  evidence: 'asar-unpacked' | 'unpacked-app' | 'none',
+): boolean {
+  if (evidence !== 'unpacked-app') return false
+
+  try {
+    const packageJson = JSON.parse(readFileSync(join(dirname(appNodeModulesRoot), 'package.json'), 'utf-8')) as unknown
+    return isRecord(packageJson)
+      && packageJson.name === '@codeinsights/electron'
+      && packageJson.main === 'dist/main.cjs'
+  } catch {
+    return false
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function isPathInside(path: string, root: string): boolean {
