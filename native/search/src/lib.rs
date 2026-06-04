@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 const PROTOCOL_VERSION: u32 = 1;
 const CACHE_SCHEMA_VERSION: u32 = 1;
-const BINARY_VERSION: &str = "0.0.2-dev";
+const BINARY_VERSION: &str = "0.0.3-dev";
 const MAX_LIMIT: usize = 100;
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_SNIPPET_CHARS: usize = 160;
@@ -73,7 +73,15 @@ struct SearchSource {
     #[serde(default)]
     text_fields: Option<Vec<String>>,
     #[serde(default)]
+    text_extractor: Option<TextExtractor>,
+    #[serde(default)]
     id_field: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum TextExtractor {
+    AgentMessageSearchText,
 }
 
 #[derive(Debug, Serialize)]
@@ -397,6 +405,15 @@ fn scan_source(
 }
 
 fn extract_text(record: &Value, source: &SearchSource) -> String {
+    if matches!(
+        source.text_extractor,
+        Some(TextExtractor::AgentMessageSearchText)
+    ) {
+        return extract_agent_message_search_text(record)
+            .map(|text| redact_sensitive_text(&text))
+            .unwrap_or_default();
+    }
+
     let fields: Vec<&str> = source
         .text_fields
         .as_ref()
@@ -414,6 +431,36 @@ fn extract_text(record: &Value, source: &SearchSource) -> String {
         .collect();
 
     redact_sensitive_text(&parts.join("\n"))
+}
+
+fn extract_agent_message_search_text(record: &Value) -> Option<String> {
+    if let Some(content) = record.get("content").and_then(Value::as_str) {
+        return Some(content.to_string());
+    }
+
+    let content = record
+        .get("message")
+        .and_then(Value::as_object)
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_array)?;
+
+    let parts: Vec<String> = content
+        .iter()
+        .filter_map(|block| {
+            let block = block.as_object()?;
+            let block_type = block.get("type").and_then(Value::as_str)?;
+            if block_type != "text" {
+                return None;
+            }
+            block.get("text").and_then(Value::as_str).map(ToString::to_string)
+        })
+        .collect();
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
 }
 
 fn extract_record_id(record: &Value, source: &SearchSource) -> Option<String> {
@@ -901,6 +948,47 @@ mod tests {
         assert!(!snippet.contains("selected-secret"));
         assert!(!snippet.contains("raw-secret"));
         assert!(!snippet.contains("user:pass"));
+    }
+
+    #[test]
+    fn agent_message_search_text_extractor_matches_legacy_content_and_nested_text_only() {
+        let path = temp_jsonl(
+            "agent-extractor",
+            concat!(
+                "{\"id\":\"legacy\",\"content\":\"legacy sdk_keyword\"}\n",
+                "{\"type\":\"assistant\",\"message\":{\"id\":\"tool-only\",\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-1\",\"name\":\"Read\",\"input\":{\"query\":\"sdk_keyword\"}}]}}\n",
+                "{\"type\":\"assistant\",\"message\":{\"id\":\"nested\",\"content\":[{\"type\":\"text\",\"text\":\"前缀🙂 sdk_keyword Bearer nested-secret\"},{\"type\":\"tool_use\",\"id\":\"tool-2\",\"name\":\"Read\",\"input\":{}}]}}\n",
+            ),
+        );
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "search-agent-extractor",
+            "method": "search",
+            "params": {
+                "requestId": "req-agent-extractor",
+                "query": "sdk_keyword",
+                "limit": 10,
+                "sources": [{
+                    "sourceKind": "agent_message",
+                    "sessionId": "agent-1",
+                    "filePath": path,
+                    "textExtractor": "agent_message_search_text"
+                }]
+            }
+        });
+
+        let response = parse_response(&handle_protocol_line(&request.to_string()));
+        let _ = remove_file(path);
+
+        assert_eq!(response["ok"], true);
+        let matches = response["result"]["matches"].as_array().unwrap();
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0]["id"], "legacy");
+        assert_eq!(matches[1]["cursor"], "3");
+        let snippets = serde_json::to_string(matches).unwrap();
+        assert!(snippets.contains("Bearer [redacted]"));
+        assert!(!snippets.contains("nested-secret"));
+        assert!(!snippets.contains("tool-only"));
     }
 
     #[test]

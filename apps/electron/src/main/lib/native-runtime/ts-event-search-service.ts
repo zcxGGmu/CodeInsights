@@ -39,8 +39,11 @@ export interface EventSearchSource<TRecord, TResult> {
   filterRecord?: (record: TRecord, event: JsonlEventRecord<TRecord>) => boolean
   toLegacyResult: (input: EventSearchLegacyResultInput<TRecord>) => TResult
   nativeTextFields?: string[]
+  nativeTextExtractor?: NativeRuntimeTextExtractor
   nativeIdField?: string
 }
+
+export type NativeRuntimeTextExtractor = 'agent_message_search_text'
 
 export interface EventSearchLegacyResultInput<TRecord> {
   source: EventSearchSource<TRecord, unknown>
@@ -165,7 +168,8 @@ function buildNativeMatch<TRecord, TResult>(
 }
 
 function sourceAllowsNative<TRecord, TResult>(source: EventSearchSource<TRecord, TResult>): boolean {
-  return Array.isArray(source.nativeTextFields) && source.nativeTextFields.length > 0
+  return (Array.isArray(source.nativeTextFields) && source.nativeTextFields.length > 0)
+    || source.nativeTextExtractor === 'agent_message_search_text'
 }
 
 function canUseNativeForQuery(query: string): boolean {
@@ -188,6 +192,7 @@ function toNativeSource<TRecord, TResult>(
     title: source.title,
     filePath: source.filePath,
     textFields: source.nativeTextFields,
+    textExtractor: source.nativeTextExtractor,
     idField: source.nativeIdField,
   }
 }

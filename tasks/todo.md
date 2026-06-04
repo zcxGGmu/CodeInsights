@@ -1,5 +1,34 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 Agent nested content native parity 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮选择 Agent facade nested content native parity 作为最小可执行切片：在 default off / 显式 opt-in 不变的前提下，为受限的 SDK nested text block 搜索补契约和 benchmark 标记，让 native sidecar 能和生产 Agent `message.content[]` text 提取语义对齐。仍不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -20 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净，最新恢复入口包含 `c7726a56 docs(rust-go): 回填 Phase 5 Agent facade 最新恢复入口`，且用户指定的 Phase 5 历史提交仍在最近 20 条中。
+- [x] 只读检查 `agent-session-manager.ts`、`ts-event-search-service.ts`、`native-runtime-benchmark.ts`、native sidecar Rust extractor 和相关测试，确认当前生产 Agent nested text 搜索仍未声明 native 字段。
+
+实现计划：
+
+- [x] 测试先行扩展 `ts-event-search-service.test.ts` 和 `native-runtime-contract-parity.test.ts`，锁住受限 nested text block extractor 的 native 调用、legacy result 重建、UTF-16 range、snippet 脱敏和 TypeScript fallback parity。
+- [x] 扩展 main-process native source 契约：新增受限 nested text block selector，只允许从 `message.content[]` 中抽取 `type="text"` 且 `text` 为字符串的 block；不引入通用 JSONPath，不允许任意 renderer 路径。
+- [x] 扩展 Rust sidecar search extractor，在保持 top-level `textFields` 兼容的同时支持同一受限 nested text block selector；坏结构只跳过，不 panic。
+- [x] 更新 `native-runtime:benchmark` 的 Agent facade summary，区分“nested native parity capable”和“production default still not enabled”，避免把 parity 能力误判成 default enable。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；如 Rust crate source 行为变化则仅更新源码 / 测试，不创建 release binary。
+
+验证计划：
+
+- [x] 先运行新增 / 相关测试确认红灯，再实现。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/ts-event-search-service.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`。
+- [x] 运行 `cargo test --manifest-path native/search/Cargo.toml`。
+- [x] 运行小规模 `bun run --filter='@codeinsights/electron' native-runtime:benchmark -- --records 200 --payload-bytes 128 --workspace-files 200 --log-bytes 65536 --iterations 1`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 和 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
 ## 2026-06-04 Rust/Go Phase 5 Agent facade 最新恢复入口回填计划
 
 范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步：把当前 `git log` 可确认的最新 Rust / Go 状态同步提交 `a6f79e14 docs(rust-go): 同步 Phase 5 Agent facade benchmark 后续状态` 回填为最新已确认恢复入口；保留最新开发基线 `9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`。不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。

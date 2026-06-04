@@ -12,6 +12,25 @@ interface ParityRecord {
   createdAt: number
 }
 
+interface AgentSdkParityContentBlock {
+  type?: unknown
+  text?: unknown
+  id?: unknown
+  name?: unknown
+  input?: unknown
+}
+
+interface AgentSdkParityRecord extends Record<string, unknown> {
+  id?: string
+  uuid?: string
+  content?: unknown
+  message?: {
+    id?: unknown
+    role?: unknown
+    content?: unknown
+  }
+}
+
 const tempDirs: string[] = []
 
 afterEach(() => {
@@ -42,6 +61,26 @@ function resolveCargoPath(): string | null {
   } catch {
     return null
   }
+}
+
+function getAgentParityRecordId(record: AgentSdkParityRecord): string {
+  if (typeof record.id === 'string' && record.id) return record.id
+  if (typeof record.uuid === 'string' && record.uuid) return record.uuid
+  const message = record.message
+  if (message && typeof message.id === 'string') return message.id
+  return ''
+}
+
+function getAgentParitySearchText(record: AgentSdkParityRecord): string | null {
+  if (typeof record.content === 'string') return record.content
+
+  const message = record.message
+  if (!message || !Array.isArray(message.content)) return null
+  const text = (message.content as AgentSdkParityContentBlock[])
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text as string)
+    .join('\n')
+  return text || null
 }
 
 describe('Rust search sidecar contract parity', () => {
@@ -113,6 +152,103 @@ describe('Rust search sidecar contract parity', () => {
       expect(rustResult.matches[0]?.snippet).toContain('Bearer [redacted]')
       expect(rustResult.matches[0]?.snippet).not.toContain('secret-token')
       expect(rustResult.implementation).toBe('rust-sidecar')
+    } finally {
+      await manager.shutdown().catch(() => false)
+    }
+  }, 120_000)
+
+  test('真实 Rust sidecar 与 TypeScript fallback 在 Agent SDK nested text extractor 上保持命中一致', async () => {
+    const cargoPath = resolveCargoPath()
+    expect(cargoPath).toBeTruthy()
+
+    const filePath = createTempJsonl([
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'tool-only',
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'tool-1', name: 'Read', input: { query: 'sdk_keyword' } },
+          ],
+        },
+        session_id: 'agent-parity',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'sdk-hit',
+          role: 'assistant',
+          content: [
+            { type: 'text', text: '前缀🙂 sdk_keyword Bearer nested-secret' },
+            { type: 'tool_use', id: 'tool-2', name: 'Read', input: {} },
+          ],
+        },
+        session_id: 'agent-parity',
+      }),
+    ])
+    const source = {
+      sourceKind: 'agent_message' as const,
+      sourceId: 'agent-parity',
+      title: 'Agent SDK parity',
+      filePath,
+      nativeTextExtractor: 'agent_message_search_text' as const,
+      getRecordId: getAgentParityRecordId,
+      getRecordText: getAgentParitySearchText,
+      toLegacyResult: ({ record }: { record: AgentSdkParityRecord }) => getAgentParityRecordId(record),
+    }
+    const tsService = new TypeScriptEventSearchService()
+    const tsResult = await tsService.searchMatchesInSource<AgentSdkParityRecord, string>({
+      requestId: 'agent-parity-ts',
+      query: 'sdk_keyword',
+      limit: 10,
+      ...source,
+    })
+    const cargoTargetDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-agent-parity-cargo-target-'))
+    tempDirs.push(cargoTargetDir)
+    const manager = new NativeRuntimeSidecarManager({
+      binaryPath: cargoPath!,
+      args: ['run', '--manifest-path', join(process.cwd(), 'native/search/Cargo.toml'), '--quiet', '--'],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        CARGO_TARGET_DIR: cargoTargetDir,
+      },
+      statusTimeoutMs: 120_000,
+      requestTimeoutMs: 5_000,
+      shutdownTimeoutMs: 2_000,
+    })
+
+    try {
+      const directRustResult = await manager.search({
+        requestId: 'agent-parity-direct-rust',
+        query: 'sdk_keyword',
+        limit: 10,
+        sources: [{
+          sourceKind: source.sourceKind,
+          sourceId: source.sourceId,
+          sessionId: source.sourceId,
+          title: source.title,
+          filePath,
+          textExtractor: source.nativeTextExtractor,
+        }],
+      })
+      const nativeService = new TypeScriptEventSearchService({ nativeSearch: manager })
+      const rustResult = await nativeService.searchMatchesInSource<AgentSdkParityRecord, string>({
+        requestId: 'agent-parity-rust',
+        query: 'sdk_keyword',
+        limit: 10,
+        ...source,
+      })
+
+      expect(tsResult.matches).toEqual(['sdk-hit'])
+      expect(rustResult.matches).toEqual(tsResult.matches)
+      expect(rustResult.searchResult.implementation).toBe('rust-sidecar')
+      expect(rustResult.searchResult.matches[0]?.matchedRanges).toEqual(
+        tsResult.searchResult.matches[0]?.matchedRanges,
+      )
+      expect(directRustResult.matches).toHaveLength(1)
+      expect(directRustResult.matches[0]?.snippet).toContain('Bearer [redacted]')
+      expect(directRustResult.matches[0]?.snippet).not.toContain('nested-secret')
     } finally {
       await manager.shutdown().catch(() => false)
     }

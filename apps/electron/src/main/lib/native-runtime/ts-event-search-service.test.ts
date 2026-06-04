@@ -318,6 +318,82 @@ describe('TypeScriptEventSearchService', () => {
     expect(result.results[0]?.snippet).toContain('sdk_keyword')
   })
 
+  test('Agent SDK nested text 声明受限 native extractor 后可调用 sidecar 并保持 legacy snippet 语义', async () => {
+    const agentPath = createTempJsonl('agent-sdk-native.jsonl', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'sdk-hit',
+          role: 'assistant',
+          content: [
+            { type: 'text', text: `${'a'.repeat(60)}sdk_keyword${'b'.repeat(60)}` },
+            { type: 'tool_use', id: 'tool-1', name: 'sdk_keyword_should_not_drive_legacy', input: {} },
+          ],
+        },
+        session_id: 'agent-session-demo',
+      } satisfies AgentSdkMessageFixture),
+    ])
+    let sidecarRequestTextExtractor: string | undefined
+    const sidecar: NativeEventSearchSidecar = {
+      search: async (input) => {
+        sidecarRequestTextExtractor = input.sources[0]?.textExtractor
+        return {
+          requestId: input.requestId,
+          query: input.query,
+          matches: [{
+            id: 'native-id-is-only-cursor-anchor',
+            sourceKind: 'agent_message',
+            title: 'Agent 会话',
+            snippet: 'native-short',
+            matchedRanges: [{ start: 0, length: 11 }],
+            score: 1,
+            sessionId: 'agent-1',
+            recordId: 'native-id-is-only-cursor-anchor',
+            cursor: '1',
+          }],
+          hasMore: false,
+          indexState: 'ready',
+          implementation: 'rust-sidecar',
+          searchedAt: 1764590404000,
+        }
+      },
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    const result = await service.searchFirstMatchPerSource<AgentSdkMessageFixture, LegacyMessageResult>({
+      requestId: 'req-agent-sdk-native-extractor',
+      query: 'sdk_keyword',
+      limit: 10,
+      sources: [{
+        sourceKind: 'agent_message',
+        sourceId: 'agent-1',
+        title: 'Agent 会话',
+        filePath: agentPath,
+        nativeTextExtractor: 'agent_message_search_text',
+        getRecordId: (record) => record.message.id,
+        getRecordText: (record) => record.message.content
+          .filter((block) => block.type === 'text' && typeof block.text === 'string')
+          .map((block) => block.text as string)
+          .join('\n'),
+        toLegacyResult: ({ source, record, snippet }) => ({
+          ownerId: source.sourceId,
+          ownerTitle: source.title,
+          messageId: record.message.id,
+          ...snippet,
+        }),
+      }],
+    })
+
+    expect(sidecarRequestTextExtractor).toBe('agent_message_search_text')
+    expect(result.searchResult.implementation).toBe('rust-sidecar')
+    expect(result.results.map((item) => item.messageId)).toEqual(['sdk-hit'])
+    expect(result.results[0]?.snippet).not.toBe('native-short')
+    expect(result.results[0]?.snippet.startsWith('...')).toBe(true)
+    expect(result.results[0]?.matchStart).toBe(43)
+    expect(result.searchResult.matches[0]?.id).toBe('sdk-hit')
+    expect(result.searchResult.matches[0]?.matchedRanges).toEqual([{ start: 43, length: 11 }])
+  })
+
   test('native search contract violation 时回退 TypeScript 搜索并保留旧结果', async () => {
     const chatPath = createTempJsonl('chat.jsonl', [
       JSON.stringify({ id: 'chat-hit', role: 'assistant', content: '这里包含关键字和上下文', createdAt: 2 }),

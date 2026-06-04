@@ -124,15 +124,19 @@ interface BenchmarkNativeSearchGate {
 
 type BenchmarkAgentFacadeDefaultEnableBlocker =
   | 'agent_facade_case_missing'
-  | 'agent_facade_native_text_fields_not_declared'
+  | 'agent_facade_native_extractor_not_declared'
+  | 'agent_facade_native_parity_not_evaluated'
 
 interface BenchmarkAgentFacadeSearch {
   evaluated: boolean
   caseName: string
-  implementation: 'typescript' | 'not_evaluated'
-  productionAgentNativeTextFieldsDeclared: boolean
+  implementation: 'typescript' | 'rust-sidecar' | 'not_evaluated'
+  productionAgentNativeExtractor: 'agent_message_search_text' | null
+  productionAgentNativeExtractorDeclared: boolean
   nativeEligible: boolean
   directNativeBenchmarkCaseName: string
+  nativeParityCaseName: string
+  nativeParityEvaluated: boolean
   defaultEnableBlockers: BenchmarkAgentFacadeDefaultEnableBlocker[]
 }
 
@@ -312,28 +316,46 @@ function buildNativeSearchGate(
 function buildAgentFacadeSearch(cases: BenchmarkCaseSummary[]): BenchmarkAgentFacadeSearch {
   const caseName = 'agent-runtime-production-facade-search'
   const directNativeBenchmarkCaseName = 'native-agent-runtime-search'
+  const nativeParityCaseName = 'native-agent-runtime-production-facade-search'
   const facadeCase = cases.find((benchmarkCase) => benchmarkCase.name === caseName)
+  const nativeParityCase = cases.find((benchmarkCase) => benchmarkCase.name === nativeParityCaseName)
 
   if (!facadeCase) {
     return {
       evaluated: false,
       caseName,
       implementation: 'not_evaluated',
-      productionAgentNativeTextFieldsDeclared: false,
+      productionAgentNativeExtractor: null,
+      productionAgentNativeExtractorDeclared: false,
       nativeEligible: false,
       directNativeBenchmarkCaseName,
+      nativeParityCaseName,
+      nativeParityEvaluated: false,
       defaultEnableBlockers: ['agent_facade_case_missing'],
     }
+  }
+
+  const productionAgentNativeExtractorDeclared = true
+  const nativeParityEvaluated = Boolean(nativeParityCase)
+  const defaultEnableBlockers: BenchmarkAgentFacadeDefaultEnableBlocker[] = []
+  if (!productionAgentNativeExtractorDeclared) {
+    defaultEnableBlockers.push('agent_facade_native_extractor_not_declared')
+  }
+  if (!nativeParityEvaluated) {
+    defaultEnableBlockers.push('agent_facade_native_parity_not_evaluated')
   }
 
   return {
     evaluated: true,
     caseName,
-    implementation: 'typescript',
-    productionAgentNativeTextFieldsDeclared: false,
-    nativeEligible: false,
+    implementation: nativeParityEvaluated ? 'rust-sidecar' : 'typescript',
+    productionAgentNativeExtractor: 'agent_message_search_text',
+    productionAgentNativeExtractorDeclared,
+    nativeEligible: productionAgentNativeExtractorDeclared,
     directNativeBenchmarkCaseName,
-    defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
+    nativeParityCaseName,
+    nativeParityEvaluated,
+    defaultEnableBlockers,
   }
 }
 
@@ -471,15 +493,7 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
           requestId: 'benchmark-agent-facade-search',
           query: 'sdk_keyword',
           limit: 100,
-          sources: [{
-            sourceKind: 'agent_message',
-            sourceId: 'agent-session-demo',
-            title: 'Agent SDK facade benchmark',
-            filePath: fixtures.agentSdkJsonlPath,
-            getRecordId: getBenchmarkSearchableAgentMessageId,
-            getRecordText: getBenchmarkSearchableAgentText,
-            toLegacyResult: () => 1,
-          }],
+          sources: [createBenchmarkAgentSdkSearchSource(fixtures.agentSdkJsonlPath)],
         })
         return result.results.length
       },
@@ -541,6 +555,22 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
             }],
           })
           return result.matches.length
+        },
+      ))
+
+      const nativeEventSearchService = new TypeScriptEventSearchService({ nativeSearch: nativeSearchManager })
+      cases.push(await measureCase(
+        'native-agent-runtime-production-facade-search',
+        { records: options.records, bytes: fixtures.agentSdkBytes },
+        options.iterations,
+        async () => {
+          const result = await nativeEventSearchService.searchFirstMatchPerSource<BenchmarkAgentSdkRecord, number>({
+            requestId: 'benchmark-native-agent-facade-search',
+            query: 'sdk_keyword',
+            limit: 100,
+            sources: [createBenchmarkAgentSdkSearchSource(fixtures.agentSdkJsonlPath)],
+          })
+          return result.results.length
         },
       ))
     }
@@ -778,6 +808,19 @@ function getBenchmarkSearchableAgentText(record: BenchmarkAgentSdkRecord): strin
     .join('\n')
 
   return text || null
+}
+
+function createBenchmarkAgentSdkSearchSource(filePath: string) {
+  return {
+    sourceKind: 'agent_message' as const,
+    sourceId: 'agent-session-demo',
+    title: 'Agent SDK facade benchmark',
+    filePath,
+    nativeTextExtractor: 'agent_message_search_text' as const,
+    getRecordId: getBenchmarkSearchableAgentMessageId,
+    getRecordText: getBenchmarkSearchableAgentText,
+    toLegacyResult: () => 1,
+  }
 }
 
 function buildPipelineJsonl(records: number, payload: string): string {

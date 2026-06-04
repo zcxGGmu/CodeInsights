@@ -1230,6 +1230,7 @@ export async function searchAgentSessionMessages(query: string): Promise<AgentMe
       title: session.title,
       filePath: getAgentSessionMessagesPath(session.id),
       updatedAt: session.updatedAt,
+      nativeTextExtractor: 'agent_message_search_text',
       getRecordId: getSearchableAgentMessageId,
       getRecordText: getSearchableAgentText,
       toLegacyResult: ({ source, record, snippet }) => ({

@@ -229,10 +229,13 @@ describe('native-runtime-benchmark helpers', () => {
       evaluated: true,
       caseName: 'agent-runtime-production-facade-search',
       implementation: 'typescript',
-      productionAgentNativeTextFieldsDeclared: false,
-      nativeEligible: false,
+      productionAgentNativeExtractor: 'agent_message_search_text',
+      productionAgentNativeExtractorDeclared: true,
+      nativeEligible: true,
       directNativeBenchmarkCaseName: 'native-agent-runtime-search',
-      defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
+      nativeParityCaseName: 'native-agent-runtime-production-facade-search',
+      nativeParityEvaluated: false,
+      defaultEnableBlockers: ['agent_facade_native_parity_not_evaluated'],
     })
     expect(summary.nativeSearchGate.comparisons.map((comparison) => comparison.nativeCaseName)).toEqual([
       'native-chat-search-large-history',
@@ -341,6 +344,53 @@ describe('native-runtime-benchmark helpers', () => {
     expect(summary.agentFacadeSearch.defaultEnableBlockers).toContain('agent_facade_case_missing')
   })
 
+  test('buildBenchmarkSummary 识别 Agent facade nested native parity case', () => {
+    const summary = buildBenchmarkSummary({
+      startedAt: '2026-06-01T12:00:00.000Z',
+      artifactDir: '/tmp/codeinsights-native-runtime-benchmark-demo',
+      keepArtifacts: false,
+      options: {
+        records: 100,
+        payloadBytes: 64,
+        workspaceFiles: 20,
+        logBytes: 1024,
+        iterations: 1,
+        keepArtifacts: false,
+        nativeSearchBinary: '/tmp/native-search',
+      },
+      cases: [
+        {
+          name: 'agent-runtime-production-facade-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [20],
+          eventLoopBaselineSamplesMs: [1],
+          eventLoopDelaySamplesMs: [2],
+          memoryDeltaBytes: 1024,
+        },
+        {
+          name: 'native-agent-runtime-production-facade-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [4],
+          eventLoopBaselineSamplesMs: [1],
+          eventLoopDelaySamplesMs: [2],
+          memoryDeltaBytes: 1024,
+        },
+      ],
+    })
+
+    expect(summary.agentFacadeSearch).toMatchObject({
+      evaluated: true,
+      implementation: 'rust-sidecar',
+      productionAgentNativeExtractor: 'agent_message_search_text',
+      productionAgentNativeExtractorDeclared: true,
+      nativeEligible: true,
+      nativeParityCaseName: 'native-agent-runtime-production-facade-search',
+      nativeParityEvaluated: true,
+      defaultEnableBlockers: [],
+    })
+    expect(summary.nativeSearchGate.defaultEnableCandidate).toBe(false)
+  })
+
   test('runBenchmark 输出 workspace cold build、warm search 与 Agent facade 指标', async () => {
     const summary = await runBenchmark({
       records: 10,
@@ -359,9 +409,11 @@ describe('native-runtime-benchmark helpers', () => {
     expect(summary.agentFacadeSearch).toMatchObject({
       evaluated: true,
       implementation: 'typescript',
-      productionAgentNativeTextFieldsDeclared: false,
-      nativeEligible: false,
-      defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
+      productionAgentNativeExtractor: 'agent_message_search_text',
+      productionAgentNativeExtractorDeclared: true,
+      nativeEligible: true,
+      nativeParityEvaluated: false,
+      defaultEnableBlockers: ['agent_facade_native_parity_not_evaluated'],
     })
     expect(coldBuild).toMatchObject({
       files: 20,

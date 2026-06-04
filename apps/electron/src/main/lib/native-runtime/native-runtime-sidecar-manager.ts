@@ -35,8 +35,11 @@ export interface NativeRuntimeSidecarSource {
   title?: string
   filePath: string
   textFields?: string[]
+  textExtractor?: NativeRuntimeSidecarTextExtractor
   idField?: string
 }
+
+export type NativeRuntimeSidecarTextExtractor = 'agent_message_search_text'
 
 export interface NativeRuntimeSidecarSearchInput {
   requestId: string
