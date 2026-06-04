@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 Agent nested native parity 边界
+
+- Agent nested native parity 应使用闭合白名单 extractor（当前为 `agent_message_search_text`），只允许搜索顶层 legacy `content` 或 `message.content[]` 中 `type="text"` 的字符串 block；不要引入通用 JSONPath、任意 nested path 或 renderer 可控路径选择。
+- 生产 Agent native 命中仍只能作为 cursor anchor；legacy snippet、messageId 和 role 必须由 TypeScript 回读 JSONL 后按生产 `getSearchableAgentText()` / `getSearchableAgentMessageId()` / `getSearchableAgentRole()` 重建，避免 Rust direct snippet / id 漂移影响 UI 语义。
+- Agent facade parity 完成后只消除 Agent nested content 口径差异，不等于 native 可默认启用。真实 optional package 发布 / optionalDependencies install-chain、真实 packaged app bundled binary smoke、packaged app identity 和 default-enable 风险评估仍必须全部通过，native 才能从显式 opt-in 走向默认启用。
+- `agentFacadeSearch.defaultEnableBlockers` 只描述 Agent facade 自身 blocker；default-enable 结论必须看全局 `nativeSearchGate.defaultEnableCandidate` 和 packaged / optional gate，不要只看 Agent facade 子字段。
+
 ## 2026-06-04 阶段完成后的文档同步默认闭环
 
 - 每个阶段性任务完成、验证通过并提交后，必须立即自动执行文档同步闭环：更新 Rust / Go development checklist 的完成 / 未完成清单、更新 `docs/improve/rust-go/next-session-prompt.md` 的顶部状态和可复制提示词、更新 `tasks/todo.md` Review、按需补充 `tasks/lessons.md`，并单独提交 docs 状态同步。
@@ -9,8 +16,8 @@
 ## 2026-06-04 Rust / Go Phase 5 Agent production facade benchmark 边界
 
 - `native-runtime:benchmark` 中的 `native-agent-runtime-search` 是 synthetic direct native case：fixture 使用 top-level `{ seq, type, content }` 并显式传 `textFields: ["type", "content"]`；它不能代表生产 Agent JSONL 搜索路径。
-- 生产 `agent-session-manager.ts` 支持 nested SDK message content，例如 `message.content[]` 里的 text block；Rust search sidecar 当前只抽 top-level string fields，未支持 nested path / block extractor。未做契约 parity 前，不要给生产 Agent 搜索直接加 `nativeTextFields`。
-- `agentFacadeSearch` / `agent-runtime-production-facade-search` 必须和 `nativeSearchGate` 分开：它证明当前生产 Agent facade 仍是 TypeScript / fallback、`nativeEligible=false`，而不是证明 native 可默认启用。
+- 生产 `agent-session-manager.ts` 支持 nested SDK message content，例如 `message.content[]` 里的 text block；在 `665c5db7` 之前 Rust search sidecar 只抽 top-level string fields，未支持 nested block extractor。后续已用白名单 `agent_message_search_text` 补齐 parity，但仍不要给生产 Agent 搜索直接加 top-level `nativeTextFields` 或任意 nested path。
+- `agentFacadeSearch` / `agent-runtime-production-facade-search` 必须和 `nativeSearchGate` 分开：`9a06908a` 当时证明生产 Agent facade 仍是 TypeScript / fallback；`665c5db7` 补齐 nested extractor parity 后，也只能证明 Agent facade 自身可 opt-in native，不证明 native 可默认启用。
 - 即使 direct native Chat / Agent benchmark 通过，只要 Agent production facade 没有 nested native parity、真实 optional package install-chain 和真实 packaged app bundled binary smoke 仍未完成，native 仍必须 default off / 显式 opt-in。
 
 ## 2026-06-04 Rust / Go Phase 5 native benchmark gate 与 optional package blocker
@@ -18,7 +25,7 @@
 - `native-runtime:benchmark` 的 `nativeSearchGate` 必须区分 benchmark blockers 和 default-enable blockers：P95 / event-loop 指标只决定 benchmark gate，真实 optional package install-chain 与真实 packaged app bundled binary smoke 未评估时，`defaultEnableCandidate` 仍必须保持 `false`。
 - 无 native binary 或只跑 TypeScript fallback 时，benchmark summary 也要继续输出 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`；不能因为 benchmark 输入不完整就把默认启用阻断项丢掉。
 - 当前 4 个计划 `@codeinsights/native-search-*` 包在 npm registry 为 `E404`，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`；在真实包发布和 builder allowlist 调整未获准前，不要把这些包写入 `apps/electron/package.json` 的 optionalDependencies，也不要执行安装链路。
-- Agent native work-delay 小幅回退先按 benchmark 口径、sidecar hop 固定成本和短调用噪声解释；生产 Agent 搜索不要直接新增 `nativeTextFields`，因为 Rust sidecar 当前只抽 top-level string fields，嵌套 SDK message content 需要先用 facade benchmark 或契约测试证明。
+- Agent native work-delay 小幅回退先按 benchmark 口径、sidecar hop 固定成本和短调用噪声解释；生产 Agent 搜索不要直接新增 top-level `nativeTextFields`。`665c5db7` 已用受限 extractor 证明嵌套 SDK message content parity，但 packaged / optional gate 未完成前仍不能默认启用。
 
 ## 2026-06-04 Rust / Go Phase 5 恢复入口回填默认动作
 

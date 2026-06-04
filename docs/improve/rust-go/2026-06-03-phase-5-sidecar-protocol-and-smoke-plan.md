@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、native benchmark gate 机器可读汇总、Agent production facade benchmark 分析、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate、optionalDependencies declaration preflight gate，以及 optional package install-chain preflight gate；尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`、`52613780 feat(rust-go): 补齐 Phase 5 packaged app layout 预检 smoke`、`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`、`31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证`、`563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`、`1114233b feat(rust-go): 补齐 Phase 5 optional package 安装链路预检`、`f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`、`9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、native benchmark gate 机器可读汇总、Agent production facade benchmark 分析、Agent nested content native parity、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate、optionalDependencies declaration preflight gate，以及 optional package install-chain preflight gate；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`、`52613780 feat(rust-go): 补齐 Phase 5 packaged app layout 预检 smoke`、`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`、`31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证`、`563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`、`1114233b feat(rust-go): 补齐 Phase 5 optional package 安装链路预检`、`f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`、`9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`、`665c5db7 feat(rust-go): 补齐 Phase 5 Agent nested native parity`
 
 ## 目标
 
@@ -35,11 +35,11 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `limit + 1` 早停性能优化
 - `native-runtime:benchmark` 的 `nativeSearchGate` 机器可读汇总
 - `native-runtime:benchmark` 的 `agentFacadeSearch` 生产 Agent facade 分析
+- 受限白名单 `agent_message_search_text` extractor，用于 Agent SDK nested `message.content[]` text block parity
 
 当前仍未实现：
 
 - `tail_jsonl`（当前返回 typed `invalid_input`，等待 main process cursor / anchor contract parity）
-- Agent facade nested content native parity（当前生产 Agent facade 未声明 `nativeTextFields`，仍走 TypeScript / fallback）
 - 真实 packaged app bundled binary smoke
 - 真实 optional package 发布 / optionalDependencies 实际声明与安装执行
 - default enable
@@ -60,6 +60,7 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `packaged-app-layout` 已作为只读 preflight mode 接入 `smoke:native-runtime`：默认无 `--app-node-modules-root` 时 skipped；显式传入 packaged app `node_modules` root 时复用 bundled resolver 校验当前平台 optional package manifest、`bin/{binaryName}`、可执行权限、SHA-256 和 app `node_modules` allowlist。summary 拆分 `packagedAppLayoutVerified`、`packagedAppEvidenceVerified`、`usesTemporaryFixture` 和 `realPackagedBinaryVerified`；临时 fixture 只能证明 layout，不能把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
 - `packaged-app-layout` evidence classifier 已覆盖两种 packaged app 证据形态：`app.asar` + `app.asar.unpacked/node_modules`，以及当前 `asar: false` 配置对应的 `Resources/app/node_modules` + `Resources/app/package.json`。`31e37cbb` 已进一步加入 `packagedAppIdentityVerified`：当前仅 `unpacked-app` 可通过 app `package.json` 的 `name="@codeinsights/electron"` 与 `main="dist/main.cjs"` 校验，`asar-unpacked` 仍只能作为 evidence / preflight。detail 只输出 `packagedAppEvidence=asar-unpacked` / `unpacked-app` / `none`、package name 和 resolver reason code，不输出 packaged root 或 binary path；临时目录、缺少 identity、`optionalDependenciesInstallChainVerified=false` 或缺少真实 optional package / binary 时，即使具备 evidence，也不能让 `realPackagedBinaryVerified=true`。
 - `native-runtime:benchmark` summary 已新增 `nativeSearchGate`，输出 Chat / Agent TS vs native 的 P95、event-loop delay P95、work-delay P95 delta、benchmark blockers 和 default-enable blockers。benchmark blockers 只评价性能与 event-loop gate；default-enable blockers 固定包含 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`，避免 benchmark 通过或无 native binary 时误报可默认启用。
+- `native-runtime:benchmark` summary 已更新 `agentFacadeSearch`：生产 Agent source 使用受限 `agent_message_search_text` extractor 表示 native eligible；无 native binary 时 `nativeParityEvaluated=false`，有 `native-agent-runtime-production-facade-search` case 时仅证明 Agent facade nested parity，不代表 default enable。全局 `nativeSearchGate.defaultEnableCandidate` 仍固定为 `false`。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -373,7 +374,7 @@ Rust sidecar 默认启用候选必须同时满足：
 - native 冷启动不让应用可交互时间增加超过 500ms。
 - packaged smoke 证明只使用 bundled binary。
 
-`f86553ee` 已将上述性能判断沉淀为 benchmark summary 的 `nativeSearchGate`，其中 `benchmarkGatePassed` 只代表 Chat / Agent direct native P95 与 event-loop gate 是否满足；`defaultEnableCandidate` 还必须同时没有 default-enable blockers。当前 summary 仍固定记录 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`，因此 native 继续 default off。`9a06908a` 已新增 `agentFacadeSearch` 与 `agent-runtime-production-facade-search`：该 case 使用 nested SDK message content fixture 和生产 Agent 搜索等价文本提取逻辑，但不声明 `nativeTextFields`，因此即使 sidecar 可用，当前生产 Agent facade 仍保持 TypeScript / fallback，`nativeEligible=false`。这说明 direct native Agent benchmark 仍是 synthetic case，不能作为生产 Agent 默认启用依据；后续如要推进 Agent native，需要先设计 nested content native parity，而不是直接给 Agent 嵌套 SDK content 加 native 字段。
+`f86553ee` 已将上述性能判断沉淀为 benchmark summary 的 `nativeSearchGate`，其中 `benchmarkGatePassed` 只代表 Chat / Agent direct native P95 与 event-loop gate 是否满足；`defaultEnableCandidate` 还必须同时没有 default-enable blockers。当前 summary 仍固定记录 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`，因此 native 继续 default off。`9a06908a` 已新增 `agentFacadeSearch` 与 `agent-runtime-production-facade-search`；`665c5db7` 进一步新增受限白名单 extractor `agent_message_search_text` 和 `native-agent-runtime-production-facade-search` parity case，证明生产 Agent nested SDK message content 可在显式 native opt-in 时由 sidecar 定位候选行。direct native Agent benchmark 仍是 synthetic top-level case，Agent facade parity 也不能替代真实 optional package / packaged bundled binary gate；未完成真实 packaged smoke 与 default-enable 风险评估前，native 继续 default off。
 
 未达到门槛时：
 

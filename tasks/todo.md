@@ -27,7 +27,20 @@
 - [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 和 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
 - [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
 - [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
-- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`665c5db7 feat(rust-go): 补齐 Phase 5 Agent nested native parity`。
+- 已新增受限白名单 extractor `agent_message_search_text`：TypeScript source / sidecar request 只允许该字面量，Rust sidecar 使用 enum 解析，不开放 JSONPath 或任意 nested path。
+- Rust sidecar 已升级到 `0.0.3` / `0.0.3-dev`，支持搜索顶层 legacy `content` 和 SDKMessage `message.content[]` 中 `type="text"` 的字符串 block；不会搜索 raw JSON、`tool_use.input` 或 `tool_use.name`。
+- 生产 Agent search source 已声明 `nativeTextExtractor: "agent_message_search_text"`，但 native 仍需要 `CODEINSIGHTS_NATIVE_RUNTIME=1`、`CODEINSIGHTS_NATIVE_SEARCH=1` 和可用 sidecar binary；默认无 native binary 时仍走 TypeScript fallback。
+- `native-runtime:benchmark` 的 `agentFacadeSearch` 已改为 extractor/native parity 口径；无 native binary 时 `nativeParityEvaluated=false`，有 native parity case 时也只表示 Agent facade 自身 parity 通过，不能替代全局 `nativeSearchGate`、真实 optional package install-chain 或真实 packaged app bundled binary smoke。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.149` 并同步 `bun.lock`；`native/search` crate 已递增到 `0.0.3` 并同步 `Cargo.lock`。未创建 release / packaged native binary。
+- 验证通过：新增测试先红灯；实现后 `bun test apps/electron/src/main/lib/native-runtime/ts-event-search-service.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-contract-parity.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`（20 pass）；`cargo test --manifest-path native/search/Cargo.toml`（13 pass）；小规模 `native-runtime:benchmark`；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun test apps/electron/src/main/lib/agent-session-manager.test.ts`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 代码审查子代理未发现 Critical / High / Medium 阻断问题；残余风险是报告消费者不能只看 `agentFacadeSearch.defaultEnableBlockers`，必须结合全局 `nativeSearchGate.defaultEnableCandidate=false` 和 packaged / optional gate。
+- 边界保持：native 继续显式 opt-in / default off；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 `@codeinsights/native-search-*` optionalDependencies；未 push，未创建 PR。真实 optional package 发布 / optionalDependencies 实际声明与安装执行、真实 packaged app bundled binary smoke、default-enable 风险评估和 Phase 6-9 仍未完成。
+- 状态同步提交：由本轮文档提交生成；下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
 
 ## 2026-06-04 Rust/Go Phase 5 Agent facade 最新恢复入口回填计划
 
