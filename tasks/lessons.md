@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 Agent production facade benchmark 边界
+
+- `native-runtime:benchmark` 中的 `native-agent-runtime-search` 是 synthetic direct native case：fixture 使用 top-level `{ seq, type, content }` 并显式传 `textFields: ["type", "content"]`；它不能代表生产 Agent JSONL 搜索路径。
+- 生产 `agent-session-manager.ts` 支持 nested SDK message content，例如 `message.content[]` 里的 text block；Rust search sidecar 当前只抽 top-level string fields，未支持 nested path / block extractor。未做契约 parity 前，不要给生产 Agent 搜索直接加 `nativeTextFields`。
+- `agentFacadeSearch` / `agent-runtime-production-facade-search` 必须和 `nativeSearchGate` 分开：它证明当前生产 Agent facade 仍是 TypeScript / fallback、`nativeEligible=false`，而不是证明 native 可默认启用。
+- 即使 direct native Chat / Agent benchmark 通过，只要 Agent production facade 没有 nested native parity、真实 optional package install-chain 和真实 packaged app bundled binary smoke 仍未完成，native 仍必须 default off / 显式 opt-in。
+
 ## 2026-06-04 Rust / Go Phase 5 native benchmark gate 与 optional package blocker
 
 - `native-runtime:benchmark` 的 `nativeSearchGate` 必须区分 benchmark blockers 和 default-enable blockers：P95 / event-loop 指标只决定 benchmark gate，真实 optional package install-chain 与真实 packaged app bundled binary smoke 未评估时，`defaultEnableCandidate` 仍必须保持 `false`。

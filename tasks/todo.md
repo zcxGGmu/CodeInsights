@@ -1,5 +1,46 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 Agent facade benchmark 分析计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`，工作树干净，最新恢复入口为 `468e5395 docs(rust-go): 同步 Phase 5 native benchmark gate 后续状态`，且用户要求核对的 `f86553ee`、`7891cfc6`、`f32d409f`、`1114233b`、`eb715c46`、`05df1687`、`563b804c`、`16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992` 均仍在 `git log -20 --oneline` 中。本轮只推进 Agent native work-delay facade benchmark 分析：区分 synthetic native Agent benchmark 与当前生产 Agent search facade，证明生产 Agent 搜索未声明 `nativeTextFields` 时仍保持 TypeScript fallback，不把 benchmark 中的 `textFields: ['type', 'content']` 误判为产品默认路径。native 继续 default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -20 --oneline`，确认当前恢复入口与指定历史提交。
+- [x] 只读查询 registry，确认 `@codeinsights/native-search-darwin-arm64` 仍为 `E404`；子代理复核显示 4 个计划 native search package 均不可用，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`。
+- [x] 读取 `native-runtime-benchmark.ts`、`ts-event-search-service.ts`、`agent-session-manager.ts` 和相关测试，确认当前生产 Agent 搜索没有显式 `nativeTextFields`，而 synthetic native Agent benchmark 直接调用 sidecar 并传 `textFields: ['type', 'content']`。
+
+实现计划：
+
+- [x] 测试先行扩展 `apps/electron/scripts/native-runtime-benchmark.test.ts`，锁住新增 Agent facade benchmark case 出现在 summary 中，并在 native binary 存在时不参与 `nativeSearchGate` 的 Chat / Agent direct native 对比。
+- [x] 在 `native-runtime-benchmark.ts` 新增生产口径的 Agent facade benchmark case：使用 `TypeScriptEventSearchService({ nativeSearch })` 和与 `agent-session-manager.ts` 等价的 nested SDK message text extraction，但不声明 `nativeTextFields`，因此即使 native sidecar 可用也必须走 TypeScript facade / fallback。
+- [x] 让 benchmark summary 以机器可读字段标记该 facade case 的实现口径与 default-enable 风险说明，避免将 synthetic native Agent benchmark 误用于生产默认启用判断。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增 optionalDependencies。
+- [x] 更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md 和必要 lessons，明确本轮完成的是 Agent facade benchmark 分析，不等于 default enable、真实 optional package 或真实 packaged app bundled binary smoke。
+
+验证计划：
+
+- [x] 先运行目标测试确认新增测试红灯，再实现。
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-benchmark.test.ts apps/electron/src/main/lib/native-runtime/ts-event-search-service.test.ts`。
+- [x] 运行小规模 `bun run --filter='@codeinsights/electron' native-runtime:benchmark -- --records 200 --payload-bytes 128 --workspace-files 200 --log-bytes 65536 --iterations 1`，确认无 native binary 时 summary 保留 default-enable blockers。
+- [x] 如本地 ignored release sidecar 存在且 `status` 为 `0.0.2-dev`，可额外运行小规模 native benchmark；若不存在，不创建 / 不重建 packaged native binary。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `git diff --check`，并确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary，未新增 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`。
+- 已在 `native-runtime:benchmark` summary 中新增 `agentFacadeSearch`，并新增 `agent-runtime-production-facade-search` case。该 case 使用 SDK-like nested `message.content[]` fixture 和生产 Agent 搜索等价的文本提取逻辑，但不声明 `nativeTextFields`，因此即使 native sidecar 可用也保持 `implementation="typescript"`。
+- 已明确 direct native Agent benchmark 与生产 Agent facade 的边界：`native-agent-runtime-search` 仍是 synthetic direct native case，传入 top-level `textFields: ["type", "content"]`；生产 Agent JSONL 包含嵌套 SDK content，而 Rust sidecar 当前只抽 top-level string fields，不能把 synthetic benchmark 当成默认启用证据。
+- `nativeSearchGate` 仍只比较 direct native Chat / Agent benchmark；`agentFacadeSearch` 不参与 gate 对比，只作为 default-enable 风险说明。无 native binary 时 summary 输出 `agent_facade_native_text_fields_not_declared`；有本地 native binary 时 direct benchmark 可通过，但 Agent facade 仍保持 TypeScript / `nativeEligible=false`。
+- 已补 `ts-event-search-service` 回归测试：Agent SDK nested text 未声明 `nativeTextFields` 时不调用 sidecar，仍可通过 TypeScript facade 命中 nested text。
+- 版本同步：`@codeinsights/electron` 已从 `0.0.147` 递增到 `0.0.148`，`bun.lock` workspace importer 已同步；未新增 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：新增 benchmark 测试先红灯；实现后 `bun test apps/electron/scripts/native-runtime-benchmark.test.ts apps/electron/src/main/lib/native-runtime/ts-event-search-service.test.ts`（16 pass）；小规模 TS benchmark；本地 ignored `0.0.2-dev` sidecar 小规模 native benchmark；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun test apps/electron/src/main/lib/agent-session-manager.test.ts`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界保持：4 个计划 `@codeinsights/native-search-*` 包仍为 npm registry `E404`，`apps/electron/electron-builder.yml` 仍排除 `node_modules/@codeinsights/**`；未执行真实 optionalDependencies 声明 / 安装链路，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未 push，未创建 PR。
+- 状态同步提交：由本轮文档提交生成；下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-04 Rust/Go Phase 5 packaged smoke readiness / Agent work-delay 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查起始恢复入口为 `7891cfc6 docs(rust-go): 回填 Phase 5 optional package 安装链路恢复入口`，指定历史提交仍在 `git log -20 --oneline` 中；本轮已形成实现基线 `f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`，并继续同步 development checklist / next-session prompt / sidecar smoke plan / lessons。当前 npm registry 只读查询显示 `@codeinsights/native-search-darwin-arm64`、`@codeinsights/native-search-darwin-x64`、`@codeinsights/native-search-win32-x64`、`@codeinsights/native-search-linux-x64` 均为 `E404`，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`，因此本轮不直接修改 `apps/electron/package.json` 的 native search optionalDependencies，不运行安装执行，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。优先推进 native benchmark gate 机器可读汇总与真实 packaged app bundled binary smoke / optional package 发布就绪设计；Agent native work-delay 只在 default off 前提下分析。
