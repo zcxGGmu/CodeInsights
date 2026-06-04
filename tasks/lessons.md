@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-04 阶段完成后的文档同步默认闭环
+
+- 每个阶段性任务完成、验证通过并提交后，必须立即自动执行文档同步闭环：更新 Rust / Go development checklist 的完成 / 未完成清单、更新 `docs/improve/rust-go/next-session-prompt.md` 的顶部状态和可复制提示词、更新 `tasks/todo.md` Review、按需补充 `tasks/lessons.md`，并单独提交 docs 状态同步。
+- 如果当前 HEAD 已经是新的 Rust / Go docs 状态同步提交，而 checklist 或 next-session prompt 仍把上一轮 docs 提交写成“最新已确认恢复入口”，必须先按一个小阶段回填真实 docs 提交 hash，再继续后续开发；不能让恢复入口停在实现提交或旧文档提交。
+- 最终回复给用户的下一次启动提示词必须使用本轮提交后的实际 `git log` 状态；如果文档无法预写自身提交 hash，文档内先写“以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准”，提交完成后在最终回复明确实际 HEAD。
+
 ## 2026-06-04 Rust / Go Phase 5 Agent production facade benchmark 边界
 
 - `native-runtime:benchmark` 中的 `native-agent-runtime-search` 是 synthetic direct native case：fixture 使用 top-level `{ seq, type, content }` 并显式传 `textFields: ["type", "content"]`；它不能代表生产 Agent JSONL 搜索路径。

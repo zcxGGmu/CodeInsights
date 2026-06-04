@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 Agent facade 最新恢复入口回填计划
+
+范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步：把当前 `git log` 可确认的最新 Rust / Go 状态同步提交 `a6f79e14 docs(rust-go): 同步 Phase 5 Agent facade benchmark 后续状态` 回填为最新已确认恢复入口；保留最新开发基线 `9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`。不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -20 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净、最新恢复入口候选为 `a6f79e14`，且 `468e5395`、`f86553ee`、`7891cfc6`、`f32d409f`、`1114233b`、`eb715c46`、`05df1687`、`563b804c`、`16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992` 仍在历史中。
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 更新 development checklist，把最新已确认恢复入口从 `468e5395` 推进到 `a6f79e14`，并确认完成 / 未完成清单明确包含 Agent production facade benchmark 已完成、Agent facade native parity 未完成。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 的顶部状态与可复制提示词，确保下次启动能从 `a6f79e14` 或本轮后续 docs 提交继续。
+- [x] 更新 `tasks/lessons.md`，固化“每个阶段性任务完成后自动同步状态文档、Review 和下一次启动提示词”的默认习惯。
+- [x] 更新本 `tasks/todo.md` Review，记录本轮只做文档状态同步、验证结果和禁止事项。
+- [x] 运行 `git diff --check`、禁改文件检查和 optional native package 声明扫描，确认未触碰根文档、builder 配置、native binary 或真实 optionalDependencies。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 本轮只做状态文档同步，没有修改业务代码、Rust / Go 源码、package manifest、lockfile、打包配置或根文档。
+- 最新开发基线保持为 `9a06908a feat(rust-go): 补齐 Phase 5 Agent facade benchmark 分析`；仓库内最新已确认恢复入口已从 `468e5395 docs(rust-go): 同步 Phase 5 native benchmark gate 后续状态` 推进到 `a6f79e14 docs(rust-go): 同步 Phase 5 Agent facade benchmark 后续状态`。若本轮状态同步再次提交，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出本轮实际 HEAD。
+- 完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 已完成 nativeSearchGate、search sidecar、sidecar manager、fallback gate、contract parity、benchmark、fake sidecar / cache corruption smoke、native-cache schema helper、optional package manifest schema helper、packaged-manifest preflight、bundled package resolver fixture、packaged-app-layout preflight、packaged app evidence classifier、`packagedAppIdentityVerified` gate、optionalDependencies declaration preflight gate、optional package install-chain preflight gate 和 Agent production facade benchmark 分析；真实 optional package 发布 / optionalDependencies 实际声明与安装执行、真实 packaged app bundled binary smoke、Agent facade nested content native parity、default-enable 风险评估、Phase 6-9 仍未完成。
+- 已在 `tasks/lessons.md` 固化习惯：每个阶段性任务完成、验证通过并提交后，自动更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交 docs 状态同步。
+- 边界保持：native 继续显式 opt-in / default off；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 native search optionalDependencies，不 push，不创建 PR。
+- 验证通过：`git diff --check`；旧“最新恢复入口=468e5395”扫描无命中；禁改文件扫描无命中；`apps/electron/package.json` / `bun.lock` / `apps/electron/electron-builder.yml` 中无 `@codeinsights/native-search-*`。
+
 ## 2026-06-04 Rust/Go Phase 5 Agent facade benchmark 分析计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`，工作树干净，最新恢复入口为 `468e5395 docs(rust-go): 同步 Phase 5 native benchmark gate 后续状态`，且用户要求核对的 `f86553ee`、`7891cfc6`、`f32d409f`、`1114233b`、`eb715c46`、`05df1687`、`563b804c`、`16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992` 均仍在 `git log -20 --oneline` 中。本轮只推进 Agent native work-delay facade benchmark 分析：区分 synthetic native Agent benchmark 与当前生产 Agent search facade，证明生产 Agent 搜索未声明 `nativeTextFields` 时仍保持 TypeScript fallback，不把 benchmark 中的 `textFields: ['type', 'content']` 误判为产品默认路径。native 继续 default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。
