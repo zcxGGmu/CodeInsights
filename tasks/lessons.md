@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 native benchmark gate 与 optional package blocker
+
+- `native-runtime:benchmark` 的 `nativeSearchGate` 必须区分 benchmark blockers 和 default-enable blockers：P95 / event-loop 指标只决定 benchmark gate，真实 optional package install-chain 与真实 packaged app bundled binary smoke 未评估时，`defaultEnableCandidate` 仍必须保持 `false`。
+- 无 native binary 或只跑 TypeScript fallback 时，benchmark summary 也要继续输出 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`；不能因为 benchmark 输入不完整就把默认启用阻断项丢掉。
+- 当前 4 个计划 `@codeinsights/native-search-*` 包在 npm registry 为 `E404`，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`；在真实包发布和 builder allowlist 调整未获准前，不要把这些包写入 `apps/electron/package.json` 的 optionalDependencies，也不要执行安装链路。
+- Agent native work-delay 小幅回退先按 benchmark 口径、sidecar hop 固定成本和短调用噪声解释；生产 Agent 搜索不要直接新增 `nativeTextFields`，因为 Rust sidecar 当前只抽 top-level string fields，嵌套 SDK message content 需要先用 facade benchmark 或契约测试证明。
+
 ## 2026-06-04 Rust / Go Phase 5 恢复入口回填默认动作
 
 - 当当前 HEAD 已经是 Rust / Go docs 状态同步提交，而 checklist / next-session prompt 仍把上一轮 docs 提交写成最新恢复入口时，用户再次要求“更新最新开发状态 / 标注完成未完成 / 下次启动提示词”必须按小阶段处理：写 `tasks/todo.md` 计划、回填当前 `git log` 可确认的最新 docs 提交、更新 lessons、验证禁改边界、单独提交。

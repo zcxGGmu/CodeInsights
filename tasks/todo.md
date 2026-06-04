@@ -1,5 +1,41 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 packaged smoke readiness / Agent work-delay 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查起始恢复入口为 `7891cfc6 docs(rust-go): 回填 Phase 5 optional package 安装链路恢复入口`，指定历史提交仍在 `git log -20 --oneline` 中；本轮已形成实现基线 `f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`，并继续同步 development checklist / next-session prompt / sidecar smoke plan / lessons。当前 npm registry 只读查询显示 `@codeinsights/native-search-darwin-arm64`、`@codeinsights/native-search-darwin-x64`、`@codeinsights/native-search-win32-x64`、`@codeinsights/native-search-linux-x64` 均为 `E404`，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`，因此本轮不直接修改 `apps/electron/package.json` 的 native search optionalDependencies，不运行安装执行，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。优先推进 native benchmark gate 机器可读汇总与真实 packaged app bundled binary smoke / optional package 发布就绪设计；Agent native work-delay 只在 default off 前提下分析。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -20 --oneline`，启动时确认当前分支为 `rust-go-refactor`，起始最新提交为 `7891cfc6 docs(rust-go): 回填 Phase 5 optional package 安装链路恢复入口`，且 `f32d409f`、`1114233b`、`eb715c46`、`05df1687`、`563b804c`、`16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992` 仍在历史中；实现后当前开发基线推进到 `f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`。
+- [x] 只读查询 npm registry，确认 4 个计划 native search optional package 当前不可用，不能安全进入真实 optionalDependencies 声明 / 安装执行。
+- [x] 通过子代理只读复核 optional package 链路和 Agent work-delay 两个方向，避免主线误判下一步。
+
+实现 / 设计计划：
+
+- [x] 选定本轮最小切片：先补 `native-runtime:benchmark` 的 `nativeSearchGate` 机器可读汇总，并同步真实 optional package / packaged smoke readiness blocker；不直接进入真实 optionalDependencies 声明或安装执行。
+- [x] 如走 packaged smoke readiness：更新 Phase 5 sidecar protocol / smoke plan，写清真实 package 发布、optionalDependencies 实际声明、lockfile / installed package、真实 packaged app root、`realPackagedBinaryVerified=true` 的执行顺序、证据要求和当前阻塞原因。
+- [x] 如走 Agent work-delay 分析：先补 benchmark / helper 测试，锁住新的分析口径，再做最小实现，保持 native default off。
+- [x] 更新 development checklist、next-session-prompt.md 和必要 lessons，把最新恢复入口回填到 `7891cfc6` 或本轮状态同步提交后的实际 HEAD。
+
+验证计划：
+
+- [x] 根据最终切片运行目标测试 / smoke；至少运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 和 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新本 `tasks/todo.md` Review，并单独提交阶段成果 / 状态文档。
+
+### Review
+
+- 实现基线：`f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`。本轮后续只同步状态文档、任务 Review 和 lessons；没有继续修改业务代码、Rust 源码、package manifest、lockfile 或打包配置。
+- 已补齐 `native-runtime:benchmark` 的 `nativeSearchGate` 状态文档：benchmark blockers 与 default-enable blockers 分离；无 native binary 或 benchmark 全部通过时仍保留 `optional_package_install_chain_not_evaluated`、`packaged_app_bundled_binary_not_evaluated`，`defaultEnableCandidate=false`，native 继续显式 opt-in / default off。
+- 已同步 packaged smoke readiness blocker：4 个计划 `@codeinsights/native-search-*` 包经 npm registry 查询仍为 `E404`，且 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`；因此本轮不能安全声明 / 安装真实 native search optionalDependencies，也不能证明真实 packaged app bundled binary。
+- 已同步 Agent work-delay 结论：Agent native work-delay 小幅回退先按 benchmark 口径、sidecar hop 固定成本和短调用噪声解释；生产 Agent 搜索暂不直接加 `nativeTextFields`，后续更合适的小切片是 facade benchmark，先证明嵌套 SDK message content 的生产路径收益与成本。
+- 文档同步范围：`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`、`docs/improve/rust-go/next-session-prompt.md`、`tasks/lessons.md`、`tasks/todo.md`。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-benchmark.test.ts apps/electron/src/main/lib/native-runtime/ts-event-search-service.test.ts`（15 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`git diff --check`。
+- Registry / 边界验证：`npm view` 确认 4 个计划 native search optional package 均为 `E404`；禁改扫描无命中；`apps/electron/package.json` / `bun.lock` 中无 `@codeinsights/native-search-*`；未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未 push，未创建 PR。
+- 状态同步提交：由本轮文档提交生成；最终以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出实际提交号。
+
 ## 2026-06-04 Rust/Go Phase 5 optional package install-chain 恢复入口回填计划
 
 范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档同步，把当前已确认状态同步提交 `f32d409f docs(rust-go): 同步 Phase 5 optional package 安装链路后续状态` 回填为最新恢复入口；不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

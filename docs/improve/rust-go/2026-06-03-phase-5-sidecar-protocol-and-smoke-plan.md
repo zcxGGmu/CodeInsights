@@ -2,8 +2,8 @@
 
 > 日期：2026-06-03
 > 阶段：Phase 5 Rust search sidecar 试点前置计划
-> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate、optionalDependencies declaration preflight gate，以及 optional package install-chain preflight gate；尚未创建 packaged native binary
-> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`、`52613780 feat(rust-go): 补齐 Phase 5 packaged app layout 预检 smoke`、`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`、`31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证`、`563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`、`1114233b feat(rust-go): 补齐 Phase 5 optional package 安装链路预检`
+> 状态：协议与 smoke 计划完成；后续已新增 `native/search/` search-only Rust 源码切片、Electron main process sidecar manager、Chat native opt-in fallback gate、search 早停性能优化、native benchmark gate 机器可读汇总、基础 `smoke:native-runtime` 脚本、native-cache manifest schema helper、fake sidecar / isolated cache failure smoke、optional package manifest schema helper、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate、optionalDependencies declaration preflight gate，以及 optional package install-chain preflight gate；尚未创建 packaged native binary
+> 关联开发提交：`e39682f1 feat(rust-go): 完成 Phase 5 最小 Rust search sidecar 源码切片`、`319f30e8 feat(rust-go): 接入 Phase 5 Rust search sidecar manager 与 fallback gate`、`0eb350ff feat(rust-go): 优化 Phase 5 Rust search sidecar 早停性能`、`28e8a504 feat(rust-go): 增强 Phase 5 benchmark event-loop 口径`、`2cc95b1b feat(rust-go): 补齐 Phase 5 fake sidecar smoke 失败路径`、`e5b92fa7 feat(rust-go): 补齐 Phase 5 optional package manifest 预检`、`ce104a59 feat(rust-go): 补齐 Phase 5 bundled package resolver fixture`、`52613780 feat(rust-go): 补齐 Phase 5 packaged app layout 预检 smoke`、`800dc885 feat(rust-go): 补齐 Phase 5 packaged app evidence smoke`、`31e37cbb fix(rust-go): 收紧 Phase 5 packaged app evidence 真实验证`、`563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`、`1114233b feat(rust-go): 补齐 Phase 5 optional package 安装链路预检`、`f86553ee feat(rust-go): 补齐 Phase 5 native benchmark gate 汇总`
 
 ## 目标
 
@@ -33,6 +33,7 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - Electron main process sidecar manager 显式 binary path opt-in
 - Chat search fallback gate
 - `limit + 1` 早停性能优化
+- `native-runtime:benchmark` 的 `nativeSearchGate` 机器可读汇总
 
 当前仍未实现：
 
@@ -56,6 +57,7 @@ Phase 5 的 Rust sidecar 只做可替换的本地搜索 / tail helper。所有�
 - `packaged-manifest` 已作为非 packaged 预检 mode 接入 `smoke:native-runtime`，包含 manifest preflight、optionalDependencies declaration preflight、optional package install-chain preflight 和临时 optional package resolver fixture 四层：manifest preflight 验证 optional package manifest 形状和 TS fallback 可用；optionalDependencies preflight 读取当前 Electron package manifest 的声明矩阵；install-chain preflight 验证声明、lockfile resolved entry 和 installed package manifest 的只读一致性；resolver fixture 用临时 package + fake executable + PATH decoy 验证 bundled source / SHA-256 / no PATH lookup 逻辑。当前 summary 明确输出 `bundledBinaryVerified=false`、`fixtureBundledPackageVerified=true`、`usesTemporaryFixture=true`、`optionalDependenciesDeclared=false`、`missingOptionalDependencies=[4 packages]`、`invalidOptionalDependencies=[]`、`optionalDependenciesInstallChainVerified=false`、`optionalDependenciesLockfileVerified=false`、`optionalDependenciesInstalledPackagesVerified=false`、`realPackagedBinaryVerified=false`。
 - `packaged-app-layout` 已作为只读 preflight mode 接入 `smoke:native-runtime`：默认无 `--app-node-modules-root` 时 skipped；显式传入 packaged app `node_modules` root 时复用 bundled resolver 校验当前平台 optional package manifest、`bin/{binaryName}`、可执行权限、SHA-256 和 app `node_modules` allowlist。summary 拆分 `packagedAppLayoutVerified`、`packagedAppEvidenceVerified`、`usesTemporaryFixture` 和 `realPackagedBinaryVerified`；临时 fixture 只能证明 layout，不能把 `bundledBinaryVerified` 或 `realPackagedBinaryVerified` 置为 true。
 - `packaged-app-layout` evidence classifier 已覆盖两种 packaged app 证据形态：`app.asar` + `app.asar.unpacked/node_modules`，以及当前 `asar: false` 配置对应的 `Resources/app/node_modules` + `Resources/app/package.json`。`31e37cbb` 已进一步加入 `packagedAppIdentityVerified`：当前仅 `unpacked-app` 可通过 app `package.json` 的 `name="@codeinsights/electron"` 与 `main="dist/main.cjs"` 校验，`asar-unpacked` 仍只能作为 evidence / preflight。detail 只输出 `packagedAppEvidence=asar-unpacked` / `unpacked-app` / `none`、package name 和 resolver reason code，不输出 packaged root 或 binary path；临时目录、缺少 identity、`optionalDependenciesInstallChainVerified=false` 或缺少真实 optional package / binary 时，即使具备 evidence，也不能让 `realPackagedBinaryVerified=true`。
+- `native-runtime:benchmark` summary 已新增 `nativeSearchGate`，输出 Chat / Agent TS vs native 的 P95、event-loop delay P95、work-delay P95 delta、benchmark blockers 和 default-enable blockers。benchmark blockers 只评价性能与 event-loop gate；default-enable blockers 固定包含 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`，避免 benchmark 通过或无 native binary 时误报可默认启用。
 - 这些能力仍不等于 packaged smoke：没有生成、复制、签名或打包 native binary，也没有修改 `electron-builder.yml`。
 
 ## Transport 决策
@@ -311,7 +313,7 @@ Smoke output rules:
 
 ## Optional Package Plan
 
-当前已实现 optionalDependencies declaration preflight 和 optional package install-chain preflight，但仍不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改 `electron-builder.yml`；真实 optional package 发布 / package.json 实际声明 / lockfile 与 installed package 实物链路仍未完成。
+当前已实现 optionalDependencies declaration preflight 和 optional package install-chain preflight，但仍不修改 `apps/electron/package.json` 的 `optionalDependencies`，不修改 `electron-builder.yml`；真实 optional package 发布 / package.json 实际声明 / lockfile 与 installed package 实物链路仍未完成。只读 registry 检查显示 `@codeinsights/native-search-darwin-arm64`、`@codeinsights/native-search-darwin-x64`、`@codeinsights/native-search-win32-x64`、`@codeinsights/native-search-linux-x64` 当前均为 `E404`，同时 `apps/electron/electron-builder.yml` 当前排除 `node_modules/@codeinsights/**`；因此在真实包发布且 builder allowlist 获准调整前，不能安全进入实际 optionalDependencies 声明 / 安装执行，也不能证明 packaged app bundled binary。
 
 后续若进入 packaged native binary 阶段，候选包名按平台拆分：
 
@@ -368,6 +370,8 @@ Rust sidecar 默认启用候选必须同时满足：
 - native missing / crash / timeout fallback 后功能可用。
 - native 冷启动不让应用可交互时间增加超过 500ms。
 - packaged smoke 证明只使用 bundled binary。
+
+`f86553ee` 已将上述性能判断沉淀为 benchmark summary 的 `nativeSearchGate`，其中 `benchmarkGatePassed` 只代表 Chat / Agent P95 与 event-loop gate 是否满足；`defaultEnableCandidate` 还必须同时没有 default-enable blockers。当前 summary 仍固定记录 `optional_package_install_chain_not_evaluated` 与 `packaged_app_bundled_binary_not_evaluated`，因此 native 继续 default off。Agent native work-delay 两轮仍小幅高于 TS fallback，后续应优先补 facade benchmark 以区分 sidecar hop 固定成本、短调用噪声和生产 facade 行为，而不是直接给 Agent 嵌套 SDK content 加 native 字段。
 
 未达到门槛时：
 
