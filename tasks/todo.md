@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 default-enable readiness 状态同步计划
+
+范围确认：`2bf88a5a feat(rust-go): 补齐 Phase 5 default-enable readiness 预检` 已完成并通过验证。本轮只做状态文档同步：把 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、tasks/lessons.md 和本 Review 推进到 readiness 预检后的真实状态。继续保持 native default off / 显式 opt-in；不修改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch`、`git log -25 --oneline` 和 `git diff --stat`，确认实现提交 `2bf88a5a` 已在 HEAD，用户指定历史提交仍在最近 25 条中，当前仅文档 / tasks 待同步。
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、development checklist、sidecar protocol / smoke plan 和 next-session prompt，定位仍停留在 `665c5db7` 或未包含 default-enable readiness 的位置。
+- [x] 更新 development checklist：Phase 5 状态行、关键能力清单、阶段状态、Review 和下一轮启动入口都要包含 `nativeSearchDefaultEnableReadiness`，并明确最终 default-enable 风险决策仍未完成。
+- [x] 更新 sidecar protocol / smoke plan：加入 `2bf88a5a` 关联提交、benchmark / smoke summary 的 readiness 字段，以及 `realPackagedBinaryVerified` 顶层 gate 绑定 evidence / identity / install-chain 的边界。
+- [x] 更新 next-session-prompt.md：最新开发基线推进到 `2bf88a5a`，可复制提示词下一步转向真实 optional package / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计或最终风险决策。
+- [x] 更新 lessons 与 Review，记录 readiness 聚合边界和本轮验证结果。
+- [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描。
+- [x] 单独提交状态同步。
+
+### Review
+
+- 已同步 development checklist 顶部状态、Phase 5 阶段状态、关键能力清单、Default-enable readiness 预检 Review 和底部可复制启动入口，最新开发基线推进到 `2bf88a5a`。
+- 已同步 sidecar protocol / smoke plan：加入 `2bf88a5a` 关联提交、`nativeSearchDefaultEnableReadiness` summary 字段、`defaultEnableCandidate=false` / `explicitOptInRequired=true` 当前结论，以及顶层 `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须绑定 optional install-chain、packaged evidence、packaged identity 和真实 binary verification 的边界。
+- 已同步 `next-session-prompt.md`：顶部状态和可复制提示词均推进到 `2bf88a5a`，下一步不再要求重复做 default-enable readiness 前置清单，而是转向真实 optional package 发布 / 实际 optionalDependencies 安装执行、真实 packaged app bundled binary smoke 设计，或在真实 optional / packaged gate 可执行通过后做最终 default-enable 风险决策。
+- 已补充 `tasks/lessons.md`：readiness helper 只是聚合器，benchmark / smoke 都是局部输入视角，真实 bundled binary gate 不能被临时 fixture 或单项 resolver 结果绕过。
+- 验证通过：旧 `665c5db7` 最新基线扫描无命中；“default-enable 风险评估前置清单”扫描无命中；`nativeSearchDefaultEnableReadiness` 已在 checklist、sidecar plan、next-session prompt、lessons 和 todo 中出现；后续完整验证见本轮命令输出。
+- 状态同步提交：本轮提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出实际 HEAD。
+
 ## 2026-06-04 Rust/Go Phase 5 default-enable 风险评估前置清单计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮选择 default-enable 风险评估前置清单作为最小可执行切片：把 benchmark gate、Agent facade nested parity、optionalDependencies / install-chain、packaged app evidence / identity / real packaged binary 和人工风险复核收敛成机器可读 readiness 结果，让 smoke / benchmark summary 都能明确说明当前为什么仍不能默认启用 native。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。
@@ -31,7 +53,7 @@
 
 ### Review
 
-- 实现提交：由本轮实现提交生成；状态同步提交会回填实际提交号。
+- 实现提交：`2bf88a5a feat(rust-go): 补齐 Phase 5 default-enable readiness 预检`。
 - 已新增 `native-runtime-default-enable-readiness.ts` 纯 helper，把 benchmark gate、Agent facade native extractor / parity、optionalDependencies declaration、optional package install-chain、packaged app evidence / identity、real packaged binary 和人工风险复核收敛为 `nativeSearchDefaultEnableReadiness`。
 - `nativeSearchDefaultEnableReadiness.defaultEnableCandidate` 只有所有 gate 均为 true 时才会为 true；当前 benchmark / smoke summary 均输出 `defaultEnableCandidate=false`、`explicitOptInRequired=true`，native 继续显式 opt-in / default off。
 - `native-runtime:benchmark` summary 已接入 readiness：可从 `nativeSearchGate` 与 `agentFacadeSearch` 推导 benchmark / Agent parity 信号，但 optional / packaged / risk review 在 benchmark 输入中仍为 false。

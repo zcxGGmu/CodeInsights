@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 default-enable readiness 聚合边界
+
+- `nativeSearchDefaultEnableReadiness` 只能作为 default-enable 风险聚合器；它不读取 binary、不验证安装、不改变 feature flag，也不能替代真实 optional package 发布、真实 optionalDependencies 安装链路或真实 packaged app bundled binary smoke。
+- `native-runtime:benchmark` 与 `smoke:native-runtime` 都只是 readiness 的局部输入视角：benchmark 只能提供性能 / Agent parity 信号，smoke 只能提供 optional / packaged 预检信号；任一 summary 缺少输入时必须继续输出 `defaultEnableCandidate=false` 与 `explicitOptInRequired=true`。
+- 顶层 `realPackagedBinaryVerified` / `bundledBinaryVerified` 必须同时绑定 optional install-chain、packaged app evidence、packaged app identity 和真实 binary verification，不能只透传单个 resolver 或烟测输入字段。
+
 ## 2026-06-04 Rust / Go Phase 5 Agent nested native parity 边界
 
 - Agent nested native parity 应使用闭合白名单 extractor（当前为 `agent_message_search_text`），只允许搜索顶层 legacy `content` 或 `message.content[]` 中 `type="text"` 的字符串 block；不要引入通用 JSONPath、任意 nested path 或 renderer 可控路径选择。
