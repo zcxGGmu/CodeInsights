@@ -81,6 +81,7 @@ interface BenchmarkSummary {
   options: BenchmarkSummaryOptions
   artifactDir?: string
   nativeSearchGate: BenchmarkNativeSearchGate
+  agentFacadeSearch: BenchmarkAgentFacadeSearch
   cases: BenchmarkCaseSummary[]
 }
 
@@ -119,6 +120,20 @@ interface BenchmarkNativeSearchGate {
   defaultEnableBlockers: BenchmarkNativeSearchGateBlocker[]
   blockers: BenchmarkNativeSearchGateBlocker[]
   comparisons: BenchmarkNativeSearchComparison[]
+}
+
+type BenchmarkAgentFacadeDefaultEnableBlocker =
+  | 'agent_facade_case_missing'
+  | 'agent_facade_native_text_fields_not_declared'
+
+interface BenchmarkAgentFacadeSearch {
+  evaluated: boolean
+  caseName: string
+  implementation: 'typescript' | 'not_evaluated'
+  productionAgentNativeTextFieldsDeclared: boolean
+  nativeEligible: boolean
+  directNativeBenchmarkCaseName: string
+  defaultEnableBlockers: BenchmarkAgentFacadeDefaultEnableBlocker[]
 }
 
 const DEFAULT_OPTIONS: BenchmarkOptions = {
@@ -206,6 +221,7 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
     },
     ...(input.keepArtifacts ? { artifactDir: input.artifactDir } : {}),
     nativeSearchGate: buildNativeSearchGate(cases, nativeSearchBinaryProvided),
+    agentFacadeSearch: buildAgentFacadeSearch(cases),
     cases,
   }
 }
@@ -290,6 +306,34 @@ function buildNativeSearchGate(
     defaultEnableBlockers,
     blockers: [...benchmarkBlockers, ...defaultEnableBlockers],
     comparisons,
+  }
+}
+
+function buildAgentFacadeSearch(cases: BenchmarkCaseSummary[]): BenchmarkAgentFacadeSearch {
+  const caseName = 'agent-runtime-production-facade-search'
+  const directNativeBenchmarkCaseName = 'native-agent-runtime-search'
+  const facadeCase = cases.find((benchmarkCase) => benchmarkCase.name === caseName)
+
+  if (!facadeCase) {
+    return {
+      evaluated: false,
+      caseName,
+      implementation: 'not_evaluated',
+      productionAgentNativeTextFieldsDeclared: false,
+      nativeEligible: false,
+      directNativeBenchmarkCaseName,
+      defaultEnableBlockers: ['agent_facade_case_missing'],
+    }
+  }
+
+  return {
+    evaluated: true,
+    caseName,
+    implementation: 'typescript',
+    productionAgentNativeTextFieldsDeclared: false,
+    nativeEligible: false,
+    directNativeBenchmarkCaseName,
+    defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
   }
 }
 
@@ -415,6 +459,29 @@ export async function runBenchmark(options: BenchmarkOptions): Promise<Benchmark
           toLegacyResult: () => 1,
         })
         return result.total
+      },
+    ))
+
+    cases.push(await measureCase(
+      'agent-runtime-production-facade-search',
+      { records: options.records, bytes: fixtures.agentSdkBytes },
+      options.iterations,
+      async () => {
+        const result = await eventSearchService.searchFirstMatchPerSource<BenchmarkAgentSdkRecord, number>({
+          requestId: 'benchmark-agent-facade-search',
+          query: 'sdk_keyword',
+          limit: 100,
+          sources: [{
+            sourceKind: 'agent_message',
+            sourceId: 'agent-session-demo',
+            title: 'Agent SDK facade benchmark',
+            filePath: fixtures.agentSdkJsonlPath,
+            getRecordId: getBenchmarkSearchableAgentMessageId,
+            getRecordText: getBenchmarkSearchableAgentText,
+            toLegacyResult: () => 1,
+          }],
+        })
+        return result.results.length
       },
     ))
 
@@ -561,6 +628,8 @@ interface GeneratedFixtures {
   chatBytes: number
   agentJsonlPath: string
   agentBytes: number
+  agentSdkJsonlPath: string
+  agentSdkBytes: number
   pipelineJsonlPath: string
   pipelineBytes: number
   workspaceRootPath: string
@@ -579,11 +648,29 @@ interface BenchmarkAgentRecord {
   content: string
 }
 
+interface BenchmarkAgentSdkContentBlock {
+  type?: unknown
+  text?: unknown
+}
+
+interface BenchmarkAgentSdkMessage {
+  id?: unknown
+  content?: unknown
+}
+
+interface BenchmarkAgentSdkRecord extends Record<string, unknown> {
+  id?: string
+  uuid?: string
+  message?: BenchmarkAgentSdkMessage
+  content?: unknown
+}
+
 function generateFixtures(rootDir: string, options: BenchmarkOptions): GeneratedFixtures {
   mkdirSync(rootDir, { recursive: true })
 
   const chatJsonlPath = join(rootDir, 'chat-search-large-history.jsonl')
   const agentJsonlPath = join(rootDir, 'agent-runtime-search.jsonl')
+  const agentSdkJsonlPath = join(rootDir, 'agent-runtime-production-facade-search.jsonl')
   const pipelineJsonlPath = join(rootDir, 'pipeline-tail-large-records.jsonl')
   const workspaceRootPath = join(rootDir, 'workspace-file-name-search')
   const largeLogPath = join(rootDir, 'large-log-preview.log')
@@ -591,6 +678,7 @@ function generateFixtures(rootDir: string, options: BenchmarkOptions): Generated
   const payload = buildPayload(options.payloadBytes)
   writeFileSync(chatJsonlPath, buildChatJsonl(options.records, payload), 'utf-8')
   writeFileSync(agentJsonlPath, buildAgentJsonl(options.records, payload), 'utf-8')
+  writeFileSync(agentSdkJsonlPath, buildAgentSdkJsonl(options.records, payload), 'utf-8')
   writeFileSync(pipelineJsonlPath, buildPipelineJsonl(options.records, payload), 'utf-8')
   const workspaceBytes = buildWorkspaceTree(workspaceRootPath, options.workspaceFiles)
   writeFileSync(largeLogPath, buildLargeLog(options.logBytes), 'utf-8')
@@ -600,6 +688,8 @@ function generateFixtures(rootDir: string, options: BenchmarkOptions): Generated
     chatBytes: readFileSync(chatJsonlPath).byteLength,
     agentJsonlPath,
     agentBytes: readFileSync(agentJsonlPath).byteLength,
+    agentSdkJsonlPath,
+    agentSdkBytes: readFileSync(agentSdkJsonlPath).byteLength,
     pipelineJsonlPath,
     pipelineBytes: readFileSync(pipelineJsonlPath).byteLength,
     workspaceRootPath,
@@ -637,6 +727,57 @@ function buildAgentJsonl(records: number, payload: string): string {
     }))
   }
   return `${lines.join('\n')}\n`
+}
+
+function buildAgentSdkJsonl(records: number, payload: string): string {
+  const lines: string[] = []
+  for (let index = 0; index < records; index += 1) {
+    lines.push(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: `sdk-${index}`,
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: `${index % 10 === 0 ? 'sdk_keyword ' : ''}agent sdk message ${index} ${payload}`,
+          },
+          {
+            type: 'tool_use',
+            id: `tool-${index}`,
+            name: 'Read',
+            input: {},
+          },
+        ],
+      },
+      session_id: 'agent-session-demo',
+    }))
+  }
+  return `${lines.join('\n')}\n`
+}
+
+function getBenchmarkSearchableAgentMessageId(record: BenchmarkAgentSdkRecord): string {
+  if (typeof record.id === 'string' && record.id) return record.id
+  if (typeof record.uuid === 'string' && record.uuid) return record.uuid
+
+  const message = record.message
+  if (message && typeof message.id === 'string') return message.id
+
+  return ''
+}
+
+function getBenchmarkSearchableAgentText(record: BenchmarkAgentSdkRecord): string | null {
+  if (typeof record.content === 'string') return record.content
+
+  const message = record.message
+  if (!message || !Array.isArray(message.content)) return null
+
+  const text = (message.content as BenchmarkAgentSdkContentBlock[])
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text as string)
+    .join('\n')
+
+  return text || null
 }
 
 function buildPipelineJsonl(records: number, payload: string): string {

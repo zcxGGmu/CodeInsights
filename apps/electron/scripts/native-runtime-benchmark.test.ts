@@ -174,6 +174,14 @@ describe('native-runtime-benchmark helpers', () => {
           eventLoopDelaySamplesMs: [3, 3],
           memoryDeltaBytes: 2048,
         },
+        {
+          name: 'agent-runtime-production-facade-search',
+          dataScale: { records: 100, bytes: 4096 },
+          samplesMs: [210, 205],
+          eventLoopBaselineSamplesMs: [1, 1],
+          eventLoopDelaySamplesMs: [4, 4],
+          memoryDeltaBytes: 1024,
+        },
       ],
     })
 
@@ -217,6 +225,19 @@ describe('native-runtime-benchmark helpers', () => {
       eventLoopDelayP95NotRegressed: false,
       eventLoopWorkDelayP95NotRegressed: false,
     })
+    expect(summary.agentFacadeSearch).toMatchObject({
+      evaluated: true,
+      caseName: 'agent-runtime-production-facade-search',
+      implementation: 'typescript',
+      productionAgentNativeTextFieldsDeclared: false,
+      nativeEligible: false,
+      directNativeBenchmarkCaseName: 'native-agent-runtime-search',
+      defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
+    })
+    expect(summary.nativeSearchGate.comparisons.map((comparison) => comparison.nativeCaseName)).toEqual([
+      'native-chat-search-large-history',
+      'native-agent-runtime-search',
+    ])
   })
 
   test('buildBenchmarkSummary 未提供 native binary 时仍保留默认启用阻塞项', () => {
@@ -317,9 +338,10 @@ describe('native-runtime-benchmark helpers', () => {
         'packaged_app_bundled_binary_not_evaluated',
       ],
     })
+    expect(summary.agentFacadeSearch.defaultEnableBlockers).toContain('agent_facade_case_missing')
   })
 
-  test('runBenchmark 输出 workspace cold build 与 warm search 指标', async () => {
+  test('runBenchmark 输出 workspace cold build、warm search 与 Agent facade 指标', async () => {
     const summary = await runBenchmark({
       records: 10,
       payloadBytes: 64,
@@ -331,14 +353,27 @@ describe('native-runtime-benchmark helpers', () => {
 
     const coldBuild = summary.cases.find((item) => item.name === 'workspace-file-name-index-cold-build')
     const warmSearch = summary.cases.find((item) => item.name === 'workspace-file-name-search')
+    const agentFacade = summary.cases.find((item) => item.name === 'agent-runtime-production-facade-search')
 
     expect(summary.implementation).toBe('typescript')
+    expect(summary.agentFacadeSearch).toMatchObject({
+      evaluated: true,
+      implementation: 'typescript',
+      productionAgentNativeTextFieldsDeclared: false,
+      nativeEligible: false,
+      defaultEnableBlockers: ['agent_facade_native_text_fields_not_declared'],
+    })
     expect(coldBuild).toMatchObject({
       files: 20,
     })
     expect(warmSearch).toMatchObject({
       files: 20,
     })
+    expect(agentFacade).toMatchObject({
+      records: 10,
+    })
+    expect(agentFacade?.p50Ms).toBeGreaterThanOrEqual(0)
+    expect(agentFacade?.eventLoopWorkDelayMs).toBeGreaterThanOrEqual(0)
     expect(coldBuild?.p50Ms).toBeGreaterThanOrEqual(0)
     expect(warmSearch?.eventLoopDelayMs).toBeGreaterThanOrEqual(0)
     expect(warmSearch?.eventLoopBaselineMs).toBeGreaterThanOrEqual(0)

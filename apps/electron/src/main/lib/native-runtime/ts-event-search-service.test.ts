@@ -41,6 +41,24 @@ interface PipelineResultFixture {
   createdAt: number
 }
 
+interface AgentSdkContentBlockFixture {
+  type: 'text' | 'tool_use'
+  text?: string
+  id?: string
+  name?: string
+  input?: Record<string, unknown>
+}
+
+interface AgentSdkMessageFixture {
+  type: 'assistant'
+  message: {
+    id: string
+    role: 'assistant'
+    content: AgentSdkContentBlockFixture[]
+  }
+  session_id: string
+}
+
 const tempDirs: string[] = []
 
 afterEach(() => {
@@ -245,6 +263,59 @@ describe('TypeScriptEventSearchService', () => {
     expect(result.searchResult.implementation).toBe('rust-sidecar')
     expect(result.results.map((item) => item.messageId)).toEqual(['chat-hit'])
     expect(result.results[0]?.snippet).toContain('关键字')
+  })
+
+  test('Agent SDK nested text 未声明 nativeTextFields 时保持 TypeScript facade 搜索', async () => {
+    const agentPath = createTempJsonl('agent-sdk.jsonl', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          id: 'sdk-hit',
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'SDK nested text 包含 sdk_keyword' },
+            { type: 'tool_use', id: 'tool-1', name: 'Read', input: {} },
+          ],
+        },
+        session_id: 'agent-session-demo',
+      } satisfies AgentSdkMessageFixture),
+    ])
+    let sidecarCalls = 0
+    const sidecar: NativeEventSearchSidecar = {
+      search: async () => {
+        sidecarCalls += 1
+        throw new NativeRuntimeSidecarError('contract_violation', 'Agent facade 不应调用 native')
+      },
+    }
+    const service = new TypeScriptEventSearchService({ nativeSearch: sidecar })
+
+    const result = await service.searchFirstMatchPerSource<AgentSdkMessageFixture, LegacyMessageResult>({
+      requestId: 'req-agent-sdk-facade',
+      query: 'sdk_keyword',
+      limit: 10,
+      sources: [{
+        sourceKind: 'agent_message',
+        sourceId: 'agent-1',
+        title: 'Agent 会话',
+        filePath: agentPath,
+        getRecordId: (record) => record.message.id,
+        getRecordText: (record) => record.message.content
+          .filter((block) => block.type === 'text' && typeof block.text === 'string')
+          .map((block) => block.text as string)
+          .join('\n'),
+        toLegacyResult: ({ source, record, snippet }) => ({
+          ownerId: source.sourceId,
+          ownerTitle: source.title,
+          messageId: record.message.id,
+          ...snippet,
+        }),
+      }],
+    })
+
+    expect(sidecarCalls).toBe(0)
+    expect(result.searchResult.implementation).toBe('typescript')
+    expect(result.results.map((item) => item.messageId)).toEqual(['sdk-hit'])
+    expect(result.results[0]?.snippet).toContain('sdk_keyword')
   })
 
   test('native search contract violation 时回退 TypeScript 搜索并保留旧结果', async () => {
