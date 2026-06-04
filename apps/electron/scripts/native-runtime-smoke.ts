@@ -9,6 +9,10 @@ import {
   readNativeRuntimeCacheManifest,
 } from '../src/main/lib/native-runtime/native-runtime-cache-schema'
 import {
+  evaluateNativeSearchDefaultEnableReadiness,
+  type NativeSearchDefaultEnableReadiness,
+} from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
+import {
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
@@ -70,6 +74,7 @@ export interface NativeRuntimeSmokeSummary {
   missingInstalledOptionalDependencies: string[]
   invalidInstalledOptionalDependencies: string[]
   realPackagedBinaryVerified: boolean
+  nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
 }
@@ -141,7 +146,11 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const optionalDependenciesDeclared = Boolean(verification.optionalDependenciesDeclared)
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
+  const packagedAppEvidenceVerified = Boolean(verification.packagedAppEvidenceVerified)
+  const packagedAppIdentityVerified = Boolean(verification.packagedAppIdentityVerified)
   const realPackagedBinaryVerified = optionalDependenciesInstallChainVerified
+    && packagedAppEvidenceVerified
+    && packagedAppIdentityVerified
     && Boolean(verification.realPackagedBinaryVerified)
   const bundledBinaryVerified = realPackagedBinaryVerified
     && Boolean(verification.bundledBinaryVerified)
@@ -155,8 +164,8 @@ export function buildNativeRuntimeSmokeSummary(input: {
     fixtureBundledPackageVerified: Boolean(verification.fixtureBundledPackageVerified),
     usesTemporaryFixture: Boolean(verification.usesTemporaryFixture),
     packagedAppLayoutVerified: Boolean(verification.packagedAppLayoutVerified),
-    packagedAppEvidenceVerified: Boolean(verification.packagedAppEvidenceVerified),
-    packagedAppIdentityVerified: Boolean(verification.packagedAppIdentityVerified),
+    packagedAppEvidenceVerified,
+    packagedAppIdentityVerified,
     optionalDependenciesDeclared,
     optionalDependenciesInstallChainVerified,
     optionalDependenciesLockfileVerified: optionalDependenciesDeclared
@@ -169,6 +178,18 @@ export function buildNativeRuntimeSmokeSummary(input: {
     missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
     invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
     realPackagedBinaryVerified,
+    nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
+      benchmarkEvaluated: false,
+      benchmarkGatePassed: false,
+      agentFacadeNativeExtractorDeclared: false,
+      agentFacadeNativeParityEvaluated: false,
+      optionalDependenciesDeclared,
+      optionalDependenciesInstallChainVerified,
+      packagedAppEvidenceVerified,
+      packagedAppIdentityVerified,
+      realPackagedBinaryVerified,
+      riskReviewCompleted: false,
+    }),
     requiresPrebuiltPackagedApp: Boolean(verification.requiresPrebuiltPackagedApp),
     cases: input.cases.map((smokeCase) => ({
       ...smokeCase,

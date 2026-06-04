@@ -87,6 +87,23 @@ describe('native-runtime-smoke', () => {
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.packagedAppIdentityVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness).toMatchObject({
+      evaluated: true,
+      defaultEnableCandidate: false,
+      explicitOptInRequired: true,
+      blockers: [
+        'native_benchmark_not_evaluated',
+        'native_benchmark_gate_not_passed',
+        'agent_facade_native_extractor_not_declared',
+        'agent_facade_native_parity_not_evaluated',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaged_app_evidence_not_verified',
+        'packaged_app_identity_not_verified',
+        'packaged_app_bundled_binary_not_verified',
+        'default_enable_risk_review_not_completed',
+      ],
+    })
     expect(serialized).not.toContain('/Users/demo/native-search')
     expect(serialized).not.toContain('CodeInsights.app')
     expect(serialized).toContain('[home]/native-search')
@@ -116,6 +133,41 @@ describe('native-runtime-smoke', () => {
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_dependencies_not_declared')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
+  })
+
+  test('summary builder 不允许绕过 packaged app evidence 和 identity gate', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        bundledBinaryVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: false,
+        packagedAppIdentityVerified: false,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'packagedAppEvidenceVerified=false; packagedAppIdentityVerified=false',
+      }],
+    })
+
+    expect(summary.optionalDependenciesDeclared).toBe(true)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(true)
+    expect(summary.packagedAppEvidenceVerified).toBe(false)
+    expect(summary.packagedAppIdentityVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_evidence_not_verified')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_identity_not_verified')
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
   })
 
   test('smoke exit code 在任意 case failed 时返回 1', () => {
@@ -496,6 +548,23 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).not.toContain('/Users/')
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
     expect(JSON.stringify(summary)).not.toContain('/codeinsights-native-runtime-smoke-')
+    expect(summary.nativeSearchDefaultEnableReadiness).toMatchObject({
+      evaluated: true,
+      defaultEnableCandidate: false,
+      explicitOptInRequired: true,
+      gates: {
+        benchmarkEvaluated: false,
+        benchmarkGatePassed: false,
+        agentFacadeNativeExtractorDeclared: false,
+        agentFacadeNativeParityEvaluated: false,
+        optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: false,
+        packagedAppEvidenceVerified: false,
+        packagedAppIdentityVerified: false,
+        realPackagedBinaryVerified: false,
+        riskReviewCompleted: false,
+      },
+    })
   })
 })
 

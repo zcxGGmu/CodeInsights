@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
+import {
+  evaluateNativeSearchDefaultEnableReadiness,
+  type NativeSearchDefaultEnableReadiness,
+} from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import { NativeRuntimeSidecarManager } from '../src/main/lib/native-runtime/native-runtime-sidecar-manager'
 import { TypeScriptEventSearchService } from '../src/main/lib/native-runtime/ts-event-search-service'
 import { TypeScriptPipelineTailService } from '../src/main/lib/native-runtime/ts-pipeline-tail-service'
@@ -82,6 +86,7 @@ interface BenchmarkSummary {
   artifactDir?: string
   nativeSearchGate: BenchmarkNativeSearchGate
   agentFacadeSearch: BenchmarkAgentFacadeSearch
+  nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   cases: BenchmarkCaseSummary[]
 }
 
@@ -205,6 +210,8 @@ export function percentile(samples: number[], percentileValue: number): number {
 export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummary {
   const cases = input.cases.map(buildBenchmarkCaseSummary)
   const nativeSearchBinaryProvided = Boolean(input.options.nativeSearchBinary)
+  const nativeSearchGate = buildNativeSearchGate(cases, nativeSearchBinaryProvided)
+  const agentFacadeSearch = buildAgentFacadeSearch(cases)
   return {
     schemaVersion: 1,
     generatedAt: input.startedAt,
@@ -224,8 +231,20 @@ export function buildBenchmarkSummary(input: BenchmarkRunInput): BenchmarkSummar
       nativeSearchBinaryProvided,
     },
     ...(input.keepArtifacts ? { artifactDir: input.artifactDir } : {}),
-    nativeSearchGate: buildNativeSearchGate(cases, nativeSearchBinaryProvided),
-    agentFacadeSearch: buildAgentFacadeSearch(cases),
+    nativeSearchGate,
+    agentFacadeSearch,
+    nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
+      benchmarkEvaluated: nativeSearchGate.evaluated,
+      benchmarkGatePassed: nativeSearchGate.benchmarkGatePassed,
+      agentFacadeNativeExtractorDeclared: agentFacadeSearch.productionAgentNativeExtractorDeclared,
+      agentFacadeNativeParityEvaluated: agentFacadeSearch.nativeParityEvaluated,
+      optionalDependenciesDeclared: false,
+      optionalDependenciesInstallChainVerified: false,
+      packagedAppEvidenceVerified: false,
+      packagedAppIdentityVerified: false,
+      realPackagedBinaryVerified: false,
+      riskReviewCompleted: false,
+    }),
     cases,
   }
 }

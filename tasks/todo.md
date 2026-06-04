@@ -1,5 +1,46 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 default-enable 风险评估前置清单计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮选择 default-enable 风险评估前置清单作为最小可执行切片：把 benchmark gate、Agent facade nested parity、optionalDependencies / install-chain、packaged app evidence / identity / real packaged binary 和人工风险复核收敛成机器可读 readiness 结果，让 smoke / benchmark summary 都能明确说明当前为什么仍不能默认启用 native。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -25 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净，最新恢复入口包含 `97db0052 docs(rust-go): 同步 Phase 5 Agent nested parity 后续状态`，且用户指定的 Phase 5 历史提交仍在最近 25 条中。
+- [x] 只读检查 `native-runtime-smoke.ts`、`native-runtime-benchmark.ts`、`native-runtime-package-manifest.ts`、`native-runtime-package-resolver.ts` 和相关测试，确认当前 gate 分散在 benchmark summary 与 smoke summary 中，尚无统一 default-enable readiness checklist。
+
+实现计划：
+
+- [x] 测试先行新增 / 扩展 native runtime readiness 测试，锁住当前仓库输出 `defaultEnableCandidate=false`、`explicitOptInRequired=true`，并列出 benchmark / Agent parity / optional / packaged / risk review 阻塞项。
+- [x] 新增只读 default-enable readiness helper，输入只接收布尔 gate / evidence，不读取 binary、不读取路径、不做安装、不改变 feature flag。
+- [x] 在 `native-runtime:benchmark` summary 中接入 readiness：benchmark gate 与 Agent nested parity 可由本轮 summary 推导，optional / packaged / risk review 继续阻塞默认启用。
+- [x] 在 `smoke:native-runtime` summary 中接入 readiness：packaged / optional gate 可由 smoke 现有字段推导，benchmark / Agent parity / risk review 未随 smoke 输入完成时继续阻塞默认启用。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增 optionalDependencies。
+
+验证计划：
+
+- [x] 先运行新增 / 相关测试确认红灯，再实现。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行小规模 `bun run --filter='@codeinsights/electron' native-runtime:benchmark -- --records 200 --payload-bytes 128 --workspace-files 200 --log-bytes 65536 --iterations 1`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：由本轮实现提交生成；状态同步提交会回填实际提交号。
+- 已新增 `native-runtime-default-enable-readiness.ts` 纯 helper，把 benchmark gate、Agent facade native extractor / parity、optionalDependencies declaration、optional package install-chain、packaged app evidence / identity、real packaged binary 和人工风险复核收敛为 `nativeSearchDefaultEnableReadiness`。
+- `nativeSearchDefaultEnableReadiness.defaultEnableCandidate` 只有所有 gate 均为 true 时才会为 true；当前 benchmark / smoke summary 均输出 `defaultEnableCandidate=false`、`explicitOptInRequired=true`，native 继续显式 opt-in / default off。
+- `native-runtime:benchmark` summary 已接入 readiness：可从 `nativeSearchGate` 与 `agentFacadeSearch` 推导 benchmark / Agent parity 信号，但 optional / packaged / risk review 在 benchmark 输入中仍为 false。
+- `smoke:native-runtime` summary 已接入 readiness：可从 packaged / optional smoke 字段推导 install-chain、packaged evidence / identity 和 real packaged binary 信号，但 benchmark / Agent parity / risk review 在 smoke 输入中仍为 false。
+- 代码审查子代理指出 `realPackagedBinaryVerified` 顶层 summary 可被输入绕过 evidence / identity gate；已补红灯测试并修复为同时要求 `optionalDependenciesInstallChainVerified`、`packagedAppEvidenceVerified`、`packagedAppIdentityVerified` 和 `verification.realPackagedBinaryVerified`，`bundledBinaryVerified` 也只能跟随修正后的 real gate。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.150` 并同步 `bun.lock`；未新增 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：新增测试先红灯；实现后 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/scripts/native-runtime-benchmark.test.ts`（32 pass）；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；小规模 `native-runtime:benchmark`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- Registry / 边界验证：4 个计划 `@codeinsights/native-search-*` 包仍为 npm `E404`；禁改文件扫描无命中；`apps/electron/package.json` / `bun.lock` / `apps/electron/electron-builder.yml` 中无真实 native search optionalDependencies；未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未 push，未创建 PR。
+
 ## 2026-06-04 Rust/Go Phase 5 Agent nested content native parity 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮选择 Agent facade nested content native parity 作为最小可执行切片：在 default off / 显式 opt-in 不变的前提下，为受限的 SDK nested text block 搜索补契约和 benchmark 标记，让 native sidecar 能和生产 Agent `message.content[]` text 提取语义对齐。仍不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。

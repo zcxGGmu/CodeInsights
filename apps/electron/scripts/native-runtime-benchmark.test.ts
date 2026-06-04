@@ -241,6 +241,33 @@ describe('native-runtime-benchmark helpers', () => {
       'native-chat-search-large-history',
       'native-agent-runtime-search',
     ])
+    expect(summary.nativeSearchDefaultEnableReadiness).toMatchObject({
+      evaluated: true,
+      defaultEnableCandidate: false,
+      explicitOptInRequired: true,
+      blockers: [
+        'native_benchmark_gate_not_passed',
+        'agent_facade_native_parity_not_evaluated',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaged_app_evidence_not_verified',
+        'packaged_app_identity_not_verified',
+        'packaged_app_bundled_binary_not_verified',
+        'default_enable_risk_review_not_completed',
+      ],
+      gates: {
+        benchmarkEvaluated: true,
+        benchmarkGatePassed: false,
+        agentFacadeNativeExtractorDeclared: true,
+        agentFacadeNativeParityEvaluated: false,
+        optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: false,
+        packagedAppEvidenceVerified: false,
+        packagedAppIdentityVerified: false,
+        realPackagedBinaryVerified: false,
+        riskReviewCompleted: false,
+      },
+    })
   })
 
   test('buildBenchmarkSummary 未提供 native binary 时仍保留默认启用阻塞项', () => {
@@ -275,6 +302,18 @@ describe('native-runtime-benchmark helpers', () => {
       ],
       comparisons: [],
     })
+    expect(summary.nativeSearchDefaultEnableReadiness.blockers).toEqual([
+      'native_benchmark_not_evaluated',
+      'native_benchmark_gate_not_passed',
+      'agent_facade_native_extractor_not_declared',
+      'agent_facade_native_parity_not_evaluated',
+      'optional_dependencies_not_declared',
+      'optional_package_install_chain_not_verified',
+      'packaged_app_evidence_not_verified',
+      'packaged_app_identity_not_verified',
+      'packaged_app_bundled_binary_not_verified',
+      'default_enable_risk_review_not_completed',
+    ])
   })
 
   test('buildBenchmarkSummary benchmark 通过时仍不把 packaged / optional 阻塞误判为可默认启用', () => {
@@ -389,6 +428,20 @@ describe('native-runtime-benchmark helpers', () => {
       defaultEnableBlockers: [],
     })
     expect(summary.nativeSearchGate.defaultEnableCandidate).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness).toMatchObject({
+      defaultEnableCandidate: false,
+      explicitOptInRequired: true,
+      blockers: [
+        'native_benchmark_not_evaluated',
+        'native_benchmark_gate_not_passed',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaged_app_evidence_not_verified',
+        'packaged_app_identity_not_verified',
+        'packaged_app_bundled_binary_not_verified',
+        'default_enable_risk_review_not_completed',
+      ],
+    })
   })
 
   test('runBenchmark 输出 workspace cold build、warm search 与 Agent facade 指标', async () => {
