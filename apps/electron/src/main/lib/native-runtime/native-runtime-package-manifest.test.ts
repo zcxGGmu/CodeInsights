@@ -4,6 +4,7 @@ import {
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
+  validateNativeSearchOptionalDependencies,
 } from './native-runtime-package-manifest'
 
 const VALID_SHA256 = 'a'.repeat(64)
@@ -115,5 +116,75 @@ describe('native-runtime-package-manifest', () => {
   test('不支持的平台不会生成 package plan', () => {
     expect(getNativeSearchOptionalPackagePlan('freebsd' as NodeJS.Platform, 'x64')).toBeUndefined()
     expect(getNativeSearchOptionalPackagePlan('darwin', 'arm' as NodeJS.Architecture)).toBeUndefined()
+  })
+
+  test('校验 package.json 中 native search optionalDependencies 声明矩阵', () => {
+    const completeOptionalDependencies = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [plan.packageName, '0.0.2']),
+    )
+
+    expect(validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...completeOptionalDependencies,
+        'opencode-darwin-arm64': '1.15.11',
+      },
+    })).toEqual({
+      declared: true,
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      missingPackages: [],
+      invalidPackages: [],
+    })
+
+    const missingPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]?.packageName
+    if (!missingPackage) throw new Error('native search optional package plan should exist')
+    const incompleteOptionalDependencies = { ...completeOptionalDependencies }
+    delete incompleteOptionalDependencies[missingPackage]
+
+    const missingResult = validateNativeSearchOptionalDependencies({
+      optionalDependencies: incompleteOptionalDependencies,
+    })
+    expect(missingResult.declared).toBe(false)
+    expect(missingResult.missingPackages).toEqual([missingPackage])
+    expect(missingResult.invalidPackages).toEqual([])
+
+    const invalidVersionPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[1]?.packageName
+    if (!invalidVersionPackage) throw new Error('native search optional package plan should include a second package')
+    const invalidResult = validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...completeOptionalDependencies,
+        [missingPackage]: '',
+        [invalidVersionPackage]: 123,
+      },
+    })
+    expect(invalidResult.declared).toBe(false)
+    expect(invalidResult.missingPackages).toEqual([])
+    expect(invalidResult.invalidPackages).toEqual([
+      missingPackage,
+      invalidVersionPackage,
+    ])
+
+    const pathLikeResult = validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...completeOptionalDependencies,
+        [missingPackage]: 'file:/Users/demo/native-search',
+        [invalidVersionPackage]: 'workspace:*',
+      },
+    })
+    expect(pathLikeResult.declared).toBe(false)
+    expect(pathLikeResult.invalidPackages).toEqual([
+      missingPackage,
+      invalidVersionPackage,
+    ])
+  })
+
+  test('缺少 optionalDependencies 对象时返回完整缺失列表且不读取真实 node_modules', () => {
+    const result = validateNativeSearchOptionalDependencies({})
+
+    expect(result).toEqual({
+      declared: false,
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      missingPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      invalidPackages: [],
+    })
   })
 })

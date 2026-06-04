@@ -9,6 +9,7 @@ import {
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
 import {
   buildNativeRuntimeSmokeSummary,
+  getNativeRuntimeSmokeExitCode,
   parseNativeRuntimeSmokeArgs,
   runNativeRuntimeSmoke,
 } from './native-runtime-smoke'
@@ -64,6 +65,8 @@ describe('native-runtime-smoke', () => {
       verification: {
         requiresPrebuiltPackagedApp: true,
         realPackagedBinaryVerified: false,
+        optionalDependenciesDeclared: false,
+        missingOptionalDependencies: ['@codeinsights/native-search-darwin-arm64'],
       },
       cases: [{
         name: 'native-available',
@@ -76,6 +79,8 @@ describe('native-runtime-smoke', () => {
     expect(summary.nativeSearchBinaryProvided).toBe(true)
     expect(summary.appNodeModulesRootProvided).toBe(true)
     expect(summary.requiresPrebuiltPackagedApp).toBe(true)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.missingOptionalDependencies).toEqual(['@codeinsights/native-search-darwin-arm64'])
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.packagedAppIdentityVerified).toBe(false)
@@ -83,6 +88,82 @@ describe('native-runtime-smoke', () => {
     expect(serialized).not.toContain('/Users/demo/native-search')
     expect(serialized).not.toContain('CodeInsights.app')
     expect(serialized).toContain('[home]/native-search')
+  })
+
+  test('summary builder 不允许绕过 optionalDependencies gate 证明真实 packaged binary', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        bundledBinaryVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalDependenciesDeclared: false,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'realPackagedBinaryVerified=true',
+      }],
+    })
+
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+  })
+
+  test('smoke exit code 在任意 case failed 时返回 1', () => {
+    const passedSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'skipped',
+        detail: 'requiresPrebuiltPackagedApp=true',
+      }],
+    })
+    const failedSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'failed',
+        detail: 'resolver=package_missing',
+      }],
+    })
+
+    expect(getNativeRuntimeSmokeExitCode(passedSummary)).toBe(0)
+    expect(getNativeRuntimeSmokeExitCode(failedSummary)).toBe(1)
+  })
+
+  test('CLI 在任意 case failed 时返回非零退出码', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-runtime-smoke-cli-'))
+    const appNodeModulesRoot = join(rootDir, 'node_modules')
+    mkdirSync(appNodeModulesRoot, { recursive: true })
+
+    try {
+      const result = Bun.spawnSync({
+        cmd: [
+          process.execPath,
+          'run',
+          'scripts/native-runtime-smoke.ts',
+          '--mode',
+          'packaged-app-layout',
+          '--app-node-modules-root',
+          appNodeModulesRoot,
+        ],
+        cwd: join(import.meta.dir, '..'),
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stdout.toString()).toContain('"status": "failed"')
+      expect(result.stdout.toString()).toContain('"realPackagedBinaryVerified": false')
+      expect(result.stderr.toString()).toBe('')
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true })
+    }
   })
 
   test('env binary 属于显式 opt-in，summary 仍脱敏路径', () => {
@@ -214,6 +295,8 @@ describe('native-runtime-smoke', () => {
       expect(summary.packagedAppLayoutVerified).toBe(true)
       expect(summary.packagedAppEvidenceVerified).toBe(true)
       expect(summary.packagedAppIdentityVerified).toBe(true)
+      expect(summary.optionalDependenciesDeclared).toBe(false)
+      expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
       expect(summary.realPackagedBinaryVerified).toBe(false)
       expect(summary.usesTemporaryFixture).toBe(true)
       expect(summary.cases).toContainEqual(expect.objectContaining({
@@ -222,6 +305,7 @@ describe('native-runtime-smoke', () => {
       }))
       expect(JSON.stringify(summary)).toContain('packagedAppEvidence=unpacked-app')
       expect(JSON.stringify(summary)).toContain('packagedAppIdentityVerified=true')
+      expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
       expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
       expect(JSON.stringify(summary)).not.toContain('binaryPath')
@@ -372,15 +456,23 @@ describe('native-runtime-smoke', () => {
       status: 'passed',
     }))
     expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-optional-dependencies-preflight',
+      status: 'skipped',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'typescript-fallback-search',
       status: 'passed',
     }))
     expect(JSON.stringify(summary)).toContain('bundledBinaryVerified=false')
     expect(JSON.stringify(summary)).toContain('fixtureBundledPackageVerified=true')
+    expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
     expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.fixtureBundledPackageVerified).toBe(true)
     expect(summary.usesTemporaryFixture).toBe(true)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
+    expect(summary.invalidOptionalDependencies).toEqual([])
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)

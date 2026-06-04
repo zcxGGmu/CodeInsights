@@ -22,6 +22,13 @@ export interface NativeSearchPackageManifest {
   binarySha256: string
 }
 
+export interface NativeSearchOptionalDependenciesValidationResult {
+  declared: boolean
+  expectedPackages: string[]
+  missingPackages: string[]
+  invalidPackages: string[]
+}
+
 interface BuildNativeSearchPackageManifestOptions {
   plan: NativeSearchOptionalPackagePlan
   packageVersion: string
@@ -76,6 +83,66 @@ export function getNativeSearchOptionalPackagePlan(
   return NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((plan) => (
     plan.platform === platform && plan.arch === arch
   ))
+}
+
+export function getNativeSearchOptionalDependencyNames(): string[] {
+  return NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+}
+
+export function validateNativeSearchOptionalDependencies(
+  packageJson: unknown,
+): NativeSearchOptionalDependenciesValidationResult {
+  const expectedPackages = getNativeSearchOptionalDependencyNames()
+  const optionalDependencies = isRecord(packageJson)
+    && isRecord(packageJson.optionalDependencies)
+    ? packageJson.optionalDependencies
+    : undefined
+  const missingPackages: string[] = []
+  const invalidPackages: string[] = []
+
+  for (const packageName of expectedPackages) {
+    const value = optionalDependencies?.[packageName]
+    if (value == null) {
+      missingPackages.push(packageName)
+      continue
+    }
+    if (!isValidOptionalDependencyVersionSpec(value)) {
+      invalidPackages.push(packageName)
+    }
+  }
+
+  return {
+    declared: missingPackages.length === 0 && invalidPackages.length === 0,
+    expectedPackages,
+    missingPackages,
+    invalidPackages,
+  }
+}
+
+function isValidOptionalDependencyVersionSpec(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+
+  const normalizedValue = value.trim().toLowerCase()
+  if (normalizedValue.length === 0) return false
+  if (
+    normalizedValue.startsWith('file:')
+    || normalizedValue.startsWith('link:')
+    || normalizedValue.startsWith('workspace:')
+    || normalizedValue.startsWith('git:')
+    || normalizedValue.startsWith('git+')
+    || normalizedValue.startsWith('github:')
+    || normalizedValue.startsWith('http:')
+    || normalizedValue.startsWith('https:')
+    || normalizedValue.startsWith('.')
+    || normalizedValue.startsWith('/')
+    || normalizedValue.startsWith('~/.')
+    || normalizedValue.includes('/')
+    || normalizedValue.includes('\\')
+  ) {
+    return false
+  }
+
+  return true
 }
 
 export function buildNativeSearchPackageManifest(
