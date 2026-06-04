@@ -66,6 +66,7 @@ describe('native-runtime-smoke', () => {
         requiresPrebuiltPackagedApp: true,
         realPackagedBinaryVerified: false,
         optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: false,
         missingOptionalDependencies: ['@codeinsights/native-search-darwin-arm64'],
       },
       cases: [{
@@ -80,6 +81,7 @@ describe('native-runtime-smoke', () => {
     expect(summary.appNodeModulesRootProvided).toBe(true)
     expect(summary.requiresPrebuiltPackagedApp).toBe(true)
     expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.missingOptionalDependencies).toEqual(['@codeinsights/native-search-darwin-arm64'])
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
@@ -100,6 +102,7 @@ describe('native-runtime-smoke', () => {
         packagedAppEvidenceVerified: true,
         packagedAppIdentityVerified: true,
         optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: true,
         realPackagedBinaryVerified: true,
       },
       cases: [{
@@ -110,6 +113,7 @@ describe('native-runtime-smoke', () => {
     })
 
     expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
   })
@@ -296,6 +300,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.packagedAppEvidenceVerified).toBe(true)
       expect(summary.packagedAppIdentityVerified).toBe(true)
       expect(summary.optionalDependenciesDeclared).toBe(false)
+      expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
       expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
       expect(summary.realPackagedBinaryVerified).toBe(false)
       expect(summary.usesTemporaryFixture).toBe(true)
@@ -306,6 +311,7 @@ describe('native-runtime-smoke', () => {
       expect(JSON.stringify(summary)).toContain('packagedAppEvidence=unpacked-app')
       expect(JSON.stringify(summary)).toContain('packagedAppIdentityVerified=true')
       expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
+      expect(JSON.stringify(summary)).toContain('optionalDependenciesInstallChainVerified=false')
       expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
       expect(JSON.stringify(summary)).not.toContain('binaryPath')
@@ -460,19 +466,30 @@ describe('native-runtime-smoke', () => {
       status: 'skipped',
     }))
     expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'packaged-optional-dependencies-install-chain-preflight',
+      status: 'skipped',
+    }))
+    expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'typescript-fallback-search',
       status: 'passed',
     }))
     expect(JSON.stringify(summary)).toContain('bundledBinaryVerified=false')
     expect(JSON.stringify(summary)).toContain('fixtureBundledPackageVerified=true')
     expect(JSON.stringify(summary)).toContain('optionalDependenciesDeclared=false')
+    expect(JSON.stringify(summary)).toContain('optionalDependenciesInstallChainVerified=false')
     expect(JSON.stringify(summary)).toContain('realPackagedBinaryVerified=false')
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.fixtureBundledPackageVerified).toBe(true)
     expect(summary.usesTemporaryFixture).toBe(true)
     expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.optionalDependenciesLockfileVerified).toBe(false)
+    expect(summary.optionalDependenciesInstalledPackagesVerified).toBe(false)
     expect(summary.missingOptionalDependencies.length).toBeGreaterThan(0)
     expect(summary.invalidOptionalDependencies).toEqual([])
+    expect(summary.missingOptionalDependencyLockfilePackages.length).toBeGreaterThan(0)
+    expect(summary.missingInstalledOptionalDependencies.length).toBeGreaterThan(0)
+    expect(summary.invalidInstalledOptionalDependencies).toEqual([])
     expect(summary.packagedAppLayoutVerified).toBe(false)
     expect(summary.packagedAppEvidenceVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)

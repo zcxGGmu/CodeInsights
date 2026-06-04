@@ -29,6 +29,22 @@ export interface NativeSearchOptionalDependenciesValidationResult {
   invalidPackages: string[]
 }
 
+export interface NativeSearchOptionalPackageInstallChainValidationResult {
+  verified: boolean
+  optionalDependencies: NativeSearchOptionalDependenciesValidationResult
+  lockfileVerified: boolean
+  installedPackagesVerified: boolean
+  missingLockfilePackages: string[]
+  missingInstalledPackages: string[]
+  invalidInstalledPackages: string[]
+}
+
+interface ValidateNativeSearchOptionalPackageInstallChainOptions {
+  packageJson: unknown
+  lockfileText?: string
+  installedPackageManifests?: Record<string, unknown>
+}
+
 interface BuildNativeSearchPackageManifestOptions {
   plan: NativeSearchOptionalPackagePlan
   packageVersion: string
@@ -106,7 +122,7 @@ export function validateNativeSearchOptionalDependencies(
       missingPackages.push(packageName)
       continue
     }
-    if (!isValidOptionalDependencyVersionSpec(value)) {
+    if (!isValidOptionalDependencyVersionSpec(value, packageName)) {
       invalidPackages.push(packageName)
     }
   }
@@ -119,12 +135,93 @@ export function validateNativeSearchOptionalDependencies(
   }
 }
 
-function isValidOptionalDependencyVersionSpec(value: unknown): value is string {
+export function validateNativeSearchOptionalPackageInstallChain(
+  options: ValidateNativeSearchOptionalPackageInstallChainOptions,
+): NativeSearchOptionalPackageInstallChainValidationResult {
+  const optionalDependencies = validateNativeSearchOptionalDependencies(options.packageJson)
+  const lockfileText = options.lockfileText ?? ''
+  const installedPackageManifests = options.installedPackageManifests ?? {}
+  const missingLockfilePackages: string[] = []
+  const missingInstalledPackages: string[] = []
+  const invalidInstalledPackages: string[] = []
+
+  for (const packageName of optionalDependencies.expectedPackages) {
+    const versionSpec = getOptionalDependencyVersionSpec(options.packageJson, packageName)
+    if (!lockfileContainsResolvedPackageEntry(lockfileText, packageName, versionSpec)) {
+      missingLockfilePackages.push(packageName)
+    }
+
+    const installedManifest = installedPackageManifests[packageName]
+    if (!isRecord(installedManifest)) {
+      missingInstalledPackages.push(packageName)
+      continue
+    }
+
+    if (!isInstalledPackageManifestConsistent(
+      installedManifest,
+      packageName,
+      versionSpec,
+    )) {
+      invalidInstalledPackages.push(packageName)
+    }
+  }
+
+  const lockfileVerified = missingLockfilePackages.length === 0
+  const installedPackagesVerified = missingInstalledPackages.length === 0
+    && invalidInstalledPackages.length === 0
+
+  return {
+    verified: optionalDependencies.declared && lockfileVerified && installedPackagesVerified,
+    optionalDependencies,
+    lockfileVerified,
+    installedPackagesVerified,
+    missingLockfilePackages,
+    missingInstalledPackages,
+    invalidInstalledPackages,
+  }
+}
+
+function isValidOptionalDependencyVersionSpec(value: unknown, expectedPackageName: string): value is string {
   if (typeof value !== 'string') return false
 
+  const normalizedValue = value.trim()
+  const normalizedLowerValue = normalizedValue.toLowerCase()
+  if (normalizedLowerValue.length === 0) return false
+  if (normalizedLowerValue.startsWith('npm:')) {
+    return isValidNpmAliasSpec(normalizedValue, expectedPackageName)
+  }
+  if (
+    normalizedLowerValue.startsWith('file:')
+    || normalizedLowerValue.startsWith('link:')
+    || normalizedLowerValue.startsWith('workspace:')
+    || normalizedLowerValue.startsWith('git:')
+    || normalizedLowerValue.startsWith('git+')
+    || normalizedLowerValue.startsWith('github:')
+    || normalizedLowerValue.startsWith('http:')
+    || normalizedLowerValue.startsWith('https:')
+    || normalizedLowerValue.startsWith('.')
+    || normalizedLowerValue.startsWith('/')
+    || normalizedLowerValue.startsWith('~/.')
+    || normalizedLowerValue.includes('/')
+    || normalizedLowerValue.includes('\\')
+  ) {
+    return false
+  }
+
+  return isPackageVersion(normalizedValue)
+}
+
+function isValidNpmAliasSpec(value: string, expectedPackageName: string): boolean {
+  const aliasPrefix = `npm:${expectedPackageName}@`
+  if (!value.startsWith(aliasPrefix)) return false
+
+  return isValidPlainRegistrySpecifier(value.slice(aliasPrefix.length))
+}
+
+function isValidPlainRegistrySpecifier(value: string): boolean {
   const normalizedValue = value.trim().toLowerCase()
   if (normalizedValue.length === 0) return false
-  if (
+  return !(
     normalizedValue.startsWith('file:')
     || normalizedValue.startsWith('link:')
     || normalizedValue.startsWith('workspace:')
@@ -138,11 +235,60 @@ function isValidOptionalDependencyVersionSpec(value: unknown): value is string {
     || normalizedValue.startsWith('~/.')
     || normalizedValue.includes('/')
     || normalizedValue.includes('\\')
-  ) {
-    return false
-  }
+  ) && isPackageVersion(normalizedValue)
+}
 
-  return true
+function lockfileContainsResolvedPackageEntry(
+  lockfileText: string,
+  packageName: string,
+  versionSpec: string | undefined,
+): boolean {
+  const exactVersion = extractExactPackageVersion(versionSpec, packageName)
+  if (!exactVersion) return false
+
+  const escapedPackageName = escapeRegExp(packageName)
+  const escapedVersion = escapeRegExp(exactVersion)
+  return new RegExp(
+    `"${escapedPackageName}"\\s*:\\s*\\[\\s*"${escapedPackageName}@${escapedVersion}"`,
+  ).test(lockfileText)
+}
+
+function getOptionalDependencyVersionSpec(
+  packageJson: unknown,
+  packageName: string,
+): string | undefined {
+  if (!isRecord(packageJson) || !isRecord(packageJson.optionalDependencies)) return undefined
+  const value = packageJson.optionalDependencies[packageName]
+  return typeof value === 'string' ? value.trim() : undefined
+}
+
+function isInstalledPackageManifestConsistent(
+  packageManifest: Record<string, unknown>,
+  packageName: string,
+  versionSpec: string | undefined,
+): boolean {
+  if (packageManifest.name !== packageName) return false
+  if (typeof packageManifest.version !== 'string' || !isPackageVersion(packageManifest.version)) return false
+
+  const expectedVersion = extractExactPackageVersion(versionSpec, packageName)
+  return expectedVersion == null || packageManifest.version === expectedVersion
+}
+
+function extractExactPackageVersion(
+  versionSpec: string | undefined,
+  packageName: string,
+): string | undefined {
+  if (!versionSpec) return undefined
+  const trimmedSpec = versionSpec.trim()
+  const aliasPrefix = `npm:${packageName}@`
+  const candidateVersion = trimmedSpec.startsWith(aliasPrefix)
+    ? trimmedSpec.slice(aliasPrefix.length)
+    : trimmedSpec
+  return isPackageVersion(candidateVersion) ? candidateVersion : undefined
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export function buildNativeSearchPackageManifest(

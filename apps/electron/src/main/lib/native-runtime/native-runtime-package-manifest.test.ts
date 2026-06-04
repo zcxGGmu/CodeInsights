@@ -4,6 +4,7 @@ import {
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
+  validateNativeSearchOptionalPackageInstallChain,
   validateNativeSearchOptionalDependencies,
 } from './native-runtime-package-manifest'
 
@@ -175,6 +176,155 @@ describe('native-runtime-package-manifest', () => {
       missingPackage,
       invalidVersionPackage,
     ])
+  })
+
+  test('允许安全的 npm registry alias，拒绝 alias 指向非 native search 包', () => {
+    const aliasOptionalDependencies = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
+        plan.packageName,
+        `npm:${plan.packageName}@0.0.2`,
+      ]),
+    )
+
+    expect(validateNativeSearchOptionalDependencies({
+      optionalDependencies: aliasOptionalDependencies,
+    })).toEqual({
+      declared: true,
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      missingPackages: [],
+      invalidPackages: [],
+    })
+
+    const aliasedPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]?.packageName
+    if (!aliasedPackage) throw new Error('native search optional package plan should exist')
+    const crossPlatformPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[1]?.packageName
+    if (!crossPlatformPackage) throw new Error('native search optional package plan should include a second package')
+
+    expect(validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...aliasOptionalDependencies,
+        [aliasedPackage]: 'npm:@demo/native-search-darwin-arm64@0.0.2',
+      },
+    })).toEqual(expect.objectContaining({
+      declared: false,
+      invalidPackages: [aliasedPackage],
+    }))
+
+    expect(validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...aliasOptionalDependencies,
+        [aliasedPackage]: `npm:${crossPlatformPackage}@0.0.2`,
+      },
+    })).toEqual(expect.objectContaining({
+      declared: false,
+      invalidPackages: [aliasedPackage],
+    }))
+
+    expect(validateNativeSearchOptionalDependencies({
+      optionalDependencies: {
+        ...aliasOptionalDependencies,
+        [aliasedPackage]: '^0.0.2',
+        [crossPlatformPackage]: `npm:${crossPlatformPackage}@latest`,
+      },
+    })).toEqual(expect.objectContaining({
+      declared: false,
+      invalidPackages: [
+        aliasedPackage,
+        crossPlatformPackage,
+      ],
+    }))
+  })
+
+  test('校验 optional package 声明、lockfile 与已安装 package manifest 的一致性', () => {
+    const optionalDependencies = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [plan.packageName, '0.0.2']),
+    )
+    const installedPackageManifests = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
+        plan.packageName,
+        { name: plan.packageName, version: '0.0.2' },
+      ]),
+    )
+    const lockfileText = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+      .map((plan) => `    "${plan.packageName}": ["${plan.packageName}@0.0.2", "", {}, "sha512-fixture"],`)
+      .join('\n')
+
+    expect(validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText,
+      installedPackageManifests,
+    })).toEqual({
+      verified: true,
+      optionalDependencies: {
+        declared: true,
+        expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+        missingPackages: [],
+        invalidPackages: [],
+      },
+      lockfileVerified: true,
+      installedPackagesVerified: true,
+      missingLockfilePackages: [],
+      missingInstalledPackages: [],
+      invalidInstalledPackages: [],
+    })
+
+    const missingResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: {},
+      lockfileText: '',
+      installedPackageManifests: {},
+    })
+    expect(missingResult.verified).toBe(false)
+    expect(missingResult.optionalDependencies.declared).toBe(false)
+    expect(missingResult.lockfileVerified).toBe(false)
+    expect(missingResult.installedPackagesVerified).toBe(false)
+    expect(missingResult.missingLockfilePackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(missingResult.missingInstalledPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(JSON.stringify(missingResult)).not.toContain('/Users/')
+    expect(JSON.stringify(missingResult)).not.toContain('node_modules')
+
+    const invalidInstalledPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]?.packageName
+    if (!invalidInstalledPackage) throw new Error('native search optional package plan should exist')
+    const invalidResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText,
+      installedPackageManifests: {
+        ...installedPackageManifests,
+        [invalidInstalledPackage]: {
+          name: '@demo/native-search-darwin-arm64',
+          version: '0.0.2',
+        },
+      },
+    })
+    expect(invalidResult.verified).toBe(false)
+    expect(invalidResult.invalidInstalledPackages).toEqual([invalidInstalledPackage])
+
+    const importerOnlyLockfile = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+      .map((plan) => `        "${plan.packageName}": "0.0.2",`)
+      .join('\n')
+    const importerOnlyResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText: importerOnlyLockfile,
+      installedPackageManifests,
+    })
+    expect(importerOnlyResult.verified).toBe(false)
+    expect(importerOnlyResult.lockfileVerified).toBe(false)
+    expect(importerOnlyResult.missingLockfilePackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+
+    const missingInstalledResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText,
+      installedPackageManifests: {},
+    })
+    expect(missingInstalledResult.verified).toBe(false)
+    expect(missingInstalledResult.optionalDependencies.declared).toBe(true)
+    expect(missingInstalledResult.lockfileVerified).toBe(true)
+    expect(missingInstalledResult.installedPackagesVerified).toBe(false)
   })
 
   test('缺少 optionalDependencies 对象时返回完整缺失列表且不读取真实 node_modules', () => {
