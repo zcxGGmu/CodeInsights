@@ -1,5 +1,47 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-04 Rust/Go Phase 5 optional package install-chain preflight 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮只推进真实 optional package / optionalDependencies 实际声明与安装链路的只读预检模型：补齐 exact semver / `npm:<同名 package>@exact-semver` 版本声明校验、lockfile / installed optional package consistency fixture 和 smoke summary 字段。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。本轮不直接把尚未发布 / 未安装的 `@codeinsights/native-search-*` 写入 `apps/electron/package.json`，只让当前仓库继续报告缺失声明与未验证真实 packaged binary。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go 优化方案、development checklist、Phase 5 dependency decision record、sidecar protocol / smoke plan、next-session prompt 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 和 `git log -12 --oneline`，确认当前分支为 `rust-go-refactor`，工作树干净，最近历史包含 `eb715c46`、`05df1687`、`563b804c`、`16d5af21`、`31e37cbb`、`800dc885`、`52613780`、`24d1b657`、`e95cd284`、`ce104a59`、`8226c992`。
+- [x] 确认当前文档恢复入口仍停在 `05df1687`，本轮状态同步需要回填实际 HEAD `eb715c46` 或本轮状态文档提交后的最新 Rust / Go docs 提交。
+- [x] 只读检查 `native-runtime-package-manifest.ts`、`native-runtime-package-resolver.ts`、`native-runtime-smoke.ts`、`apps/electron/package.json` 和 `native/search/`，确认当前没有真实 native search optionalDependencies，也没有 packaged native binary。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-package-manifest.test.ts`，锁住 optionalDependencies 支持 exact semver 与 `npm:@codeinsights/native-search-*@x.y.z` 同名 alias，拒绝 alias 指向非 native search 包、跨平台包、空 alias、range、`latest`、`file:` / `workspace:` / git / http / path-like spec。
+- [x] 新增只读 installed package / lockfile consistency helper 测试：完整声明 + lockfile/installed manifest 一致时通过；当前仓库缺少 native search 声明、lockfile 或 installed package 时必须返回 `installedPackagesVerified=false` / `lockfileVerified=false`，且不读取 binary、不输出路径。
+- [x] 扩展 `packaged-manifest` smoke：新增 optional package install-chain preflight case 与 summary 字段，当前仓库继续输出 `optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`realPackagedBinaryVerified=false`。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增 `@codeinsights/native-search-*` optionalDependencies。
+- [x] 更新 Phase 5 sidecar protocol / smoke plan、development checklist、next-session-prompt.md 和必要 lessons，明确本轮只完成 install-chain preflight 设计，不等于真实 optional package 发布 / 真实 packaged bundled binary smoke。
+
+验证计划：
+
+- [x] 先运行新增 / 相关测试确认红灯，再实现。
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-resolver.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck` 和 `bun run --filter='@codeinsights/electron' build:main`。
+- [x] 运行 `bun install --frozen-lockfile --dry-run`。
+- [x] 运行 `git diff --check`，并确认未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`，未创建 packaged native binary，未新增 native search optionalDependencies。
+- [x] 阶段完成后单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`1114233b feat(rust-go): 补齐 Phase 5 optional package 安装链路预检`。
+- 已新增 `validateNativeSearchOptionalPackageInstallChain()`，在 declaration gate 之外只读校验 native search optionalDependencies、`bun.lock` resolved package entry 和 installed package manifest 一致性；该 helper 不读取 binary、不输出路径、不证明真实 packaged bundled binary。
+- optionalDependencies 版本声明已收紧：只接受 exact semver 或 `npm:<同名 native search package>@exact-semver`，拒绝跨包 alias、跨平台 alias、`latest` / range、空值、非字符串、`file:`、`workspace:`、git / http URL 和 path-like spec。
+- `packaged-manifest` smoke 已新增 `packaged-optional-dependencies-install-chain-preflight` case 与 summary 字段：`optionalDependenciesInstallChainVerified`、`optionalDependenciesLockfileVerified`、`optionalDependenciesInstalledPackagesVerified`、`missingOptionalDependencyLockfilePackages`、`missingInstalledOptionalDependencies`、`invalidInstalledOptionalDependencies`。当前仓库未声明真实 `@codeinsights/native-search-*` optionalDependencies，因此该 case 保持 skipped，summary 继续明确 `optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`realPackagedBinaryVerified=false`。
+- 代码审查风险已修正：`realPackagedBinaryVerified=true` 现在必须满足 install-chain verified；lockfile 检查要求 resolved package entry，不能只因 importer 文本包含包名通过；声明存在但 lockfile / installed package 不完整时 install-chain preflight 会失败。
+- 已递增 `@codeinsights/electron` patch 版本到 `0.0.146` 并同步 `bun.lock`；没有添加 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：目标 `bun test` 三个文件；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`；禁改文件 / native binary / 真实 optionalDependencies 检查无命中。
+- 边界保持：native search 继续显式 opt-in / default off；未创建 packaged native binary；未修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；未 push，未创建 PR。真实 optional package 发布 / 实际 optionalDependencies 声明与安装执行、真实 packaged app bundled binary smoke、Agent event-loop default-enable 风险评估和 Phase 6-9 仍未完成。
+- 状态同步提交：由本轮文档提交生成，最终以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准。
+
 ## 2026-06-04 Rust/Go Phase 5 optionalDependencies 恢复入口回填计划
 
 范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词。当前实现基线为 `563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`，最新状态同步提交为 `05df1687 docs(rust-go): 同步 Phase 5 optionalDependencies 预检后续状态`。本轮只回填恢复入口和习惯固化，不改业务代码，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
@@ -16,7 +58,7 @@
 
 - 本轮只做状态文档同步，没有修改业务代码、Rust / Go 源码、打包配置或根文档。
 - 最新开发基线保持为 `563b804c feat(rust-go): 补齐 Phase 5 optionalDependencies 声明预检 gate`；最新已确认恢复入口回填为 `05df1687 docs(rust-go): 同步 Phase 5 optionalDependencies 预检后续状态`。若本轮状态同步再次提交，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
-- 已完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 已完成 search sidecar、sidecar manager、fallback gate、contract parity、benchmark、fake sidecar / cache corruption smoke、native-cache schema、optional package manifest schema、packaged-manifest preflight、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate 和 optionalDependencies declaration preflight gate；真实 optional package 发布 / optionalDependencies 实际声明与安装链路、真实 packaged app bundled binary smoke、default-enable 风险评估、Phase 6-9 仍未完成。
+- 已完成 / 未完成状态保持：Phase 0-4 已完成；Phase 5 当时已完成 search sidecar、sidecar manager、fallback gate、contract parity、benchmark、fake sidecar / cache corruption smoke、native-cache schema、optional package manifest schema、packaged-manifest preflight、bundled package resolver fixture、packaged app layout preflight smoke、packaged app evidence classifier、`packagedAppIdentityVerified` gate 和 optionalDependencies declaration preflight gate；真实 optional package 发布 / 安装执行、真实 packaged app bundled binary smoke、default-enable 风险评估、Phase 6-9 当时仍未完成。后续 `1114233b` 已补 optional package install-chain preflight。
 - 已在 `tasks/lessons.md` 固化习惯：阶段性任务完成并通过验证后，自动更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交状态文档。
 - 边界保持：native 继续显式 opt-in / default off；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
 - 验证通过：旧恢复入口 / 旧测试计数 / 旧 optionalDependencies 措辞扫描无阻断；`git diff --check`；`git diff --name-only | rg '(^README\.md$|^AGENTS\.md$|^apps/electron/electron-builder\.yml$|native/search/target|\.exe$|codeinsights-native-search$)' || true` 无命中。
@@ -55,9 +97,9 @@
 
 ### Review
 
-- 已新增 `validateNativeSearchOptionalDependencies()` 和 `getNativeSearchOptionalDependencyNames()`，只校验传入 package manifest 的 `optionalDependencies` 声明是否覆盖 4 个 native search 平台包，且版本声明必须是 registry-like 字符串；空值、非字符串、`file:`、`workspace:`、git / http URL 和 path-like spec 都进入 invalid list。该 helper 不读取真实 `node_modules`，不解析 binary，也不证明 optional package 已安装。
+- 已新增 `validateNativeSearchOptionalDependencies()` 和 `getNativeSearchOptionalDependencyNames()`，只校验传入 package manifest 的 `optionalDependencies` 声明是否覆盖 4 个 native search 平台包；当时版本声明要求宽松 registry 字符串，后续已由 `1114233b` 收紧为 exact semver 或 `npm:<同名 native search package>@exact-semver`。该 helper 不读取真实 `node_modules`，不解析 binary，也不证明 optional package 已安装。
 - `smoke:native-runtime -- --mode packaged-manifest` 现在新增 `packaged-optional-dependencies-preflight` case。当前 `apps/electron/package.json` 尚未声明 `@codeinsights/native-search-*`，因此 summary 明确输出 `optionalDependenciesDeclared=false`、4 个 `missingOptionalDependencies`、`invalidOptionalDependencies=[]`、`bundledBinaryVerified=false`、`realPackagedBinaryVerified=false`，但保持 smoke 通过，因为这是下一阶段前置 gate 而不是真实 packaged binary smoke。
-- `packaged-app-layout` 的真实验证 gate 已收紧：即使 resolver、packaged evidence、identity 都通过，`realPackagedBinaryVerified=true` 仍必须额外满足 `optionalDependenciesDeclared=true` 且非临时 fixture。当前仓库缺少 native search optionalDependencies，所以仍不能证明真实 packaged binary。
+- `packaged-app-layout` 的真实验证 gate 已收紧：即使 resolver、packaged evidence、identity 都通过，`realPackagedBinaryVerified=true` 当时已要求 `optionalDependenciesDeclared=true` 且非临时 fixture；后续 `1114233b` 已进一步要求 `optionalDependenciesInstallChainVerified=true`。当前仓库缺少 native search optionalDependencies，所以仍不能证明真实 packaged binary。
 - 已递增 `@codeinsights/electron` patch 版本到 `0.0.145` 并同步 `bun.lock`；没有添加 `@codeinsights/native-search-*` optionalDependencies。
 - 红灯验证已执行：新增测试先失败于缺少 `validateNativeSearchOptionalDependencies` 导出、summary 字段、preflight case 和 failed case 非零退出 helper；实现后目标测试转绿。
 - 代码审查子代理发现一个阻断问题：初版 smoke CLI 即使 case failed 也可能保持 0 退出码。已补 `getNativeRuntimeSmokeExitCode()`，CLI 遇到任意 failed case 返回非零退出码；复审无阻断。

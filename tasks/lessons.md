@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 optional package install-chain preflight 边界
+
+- optional native package 的安装链路预检不能只检查 `apps/electron/package.json` 声明；必须同时验证声明版本、`bun.lock` resolved package entry 和已安装 package manifest，一旦存在声明但 lockfile / installed package 不完整，smoke 应失败而不是 skipped。
+- optionalDependencies 版本声明只接受 exact semver 或 `npm:<同名 native search package>@exact-semver`；跨包 alias、`latest`、range、`file:`、`workspace:`、git / http URL、path-like spec 都应进入 invalid，除非后续引入可靠 lockfile parser 并重新记录 decision。
+- lockfile 预检必须查找已解析 package entry，不能因为 importer dependency 文本包含包名就当作已安装；install-chain helper 仍只读 package manifest / lockfile / installed manifest，不读取 binary、不输出路径、不证明真实 packaged bundled binary。
+
 ## 2026-06-04 阶段完成后的状态同步习惯
 
 - 每个阶段性任务完成并通过验证后，必须自动做状态同步闭环：更新 development checklist 的完成 / 未完成清单、更新 `next-session-prompt.md` 的可复制提示词、更新 `tasks/todo.md` Review、按需补 lessons，并单独提交状态文档；不要等用户再次提醒。
@@ -8,9 +14,9 @@
 ## 2026-06-04 Rust / Go Phase 5 optionalDependencies preflight gate 边界
 
 - 在真实 native optional package 尚未发布 / 安装、且不能修改 `electron-builder.yml` 时，不要直接把 `@codeinsights/native-search-*` 写入 `apps/electron/package.json` 的 `optionalDependencies`；应先做 package manifest 声明预检，输出 `optionalDependenciesDeclared=false` 与缺失包名列表，并保持 `realPackagedBinaryVerified=false`。
-- `packaged-manifest` 新增的 optionalDependencies preflight 只证明当前 package.json 声明矩阵是否准备好，不读取真实 `node_modules`、不证明 binary 存在、不替代 resolver / packaged app layout / status smoke。缺失声明在当前阶段可以是 skipped preflight；版本声明必须是 registry-like 字符串，空值、非字符串、`file:`、`workspace:`、git / http URL 和 path-like spec 都应视为 invalid。
+- `packaged-manifest` 新增的 optionalDependencies declaration preflight 只证明当前 package.json 声明矩阵是否准备好，不读取真实 binary、不替代 resolver / packaged app layout / status smoke。缺失声明在当前阶段可以是 skipped preflight；版本声明必须是 exact semver 或 `npm:<同名 native search package>@exact-semver`，空值、非字符串、`latest` / range、跨包 alias、`file:`、`workspace:`、git / http URL 和 path-like spec 都应视为 invalid。
 - `native-runtime-smoke` CLI 遇到任意 failed case 必须返回非零退出码；skipped preflight 只表示当前阶段尚未具备真实输入，不能掩盖 schema invalid 或真实 gate failed。
-- `realPackagedBinaryVerified=true` 必须同时满足 resolver 成功、非临时 fixture、packaged app evidence、`packagedAppIdentityVerified=true`、`optionalDependenciesDeclared=true` 和真实 optional package / binary 存在。只要 optionalDependencies 声明 gate 未通过，即使手工传入 packaged app root 且 resolver 通过，也不得标记真实 bundled binary 已验证。
+- `realPackagedBinaryVerified=true` 必须同时满足 resolver 成功、非临时 fixture、packaged app evidence、`packagedAppIdentityVerified=true`、`optionalDependenciesDeclared=true`、`optionalDependenciesInstallChainVerified=true` 和真实 optional package / binary 存在。只要 optionalDependencies 声明 gate 或 install-chain gate 未通过，即使手工传入 packaged app root 且 resolver 通过，也不得标记真实 bundled binary 已验证。
 
 ## 2026-06-04 Rust / Go Phase 5 packaged app evidence smoke 边界
 
