@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-04 Rust / Go Phase 5 恢复入口回填默认动作
+
+- 当当前 HEAD 已经是 Rust / Go docs 状态同步提交，而 checklist / next-session prompt 仍把上一轮 docs 提交写成最新恢复入口时，用户再次要求“更新最新开发状态 / 标注完成未完成 / 下次启动提示词”必须按小阶段处理：写 `tasks/todo.md` 计划、回填当前 `git log` 可确认的最新 docs 提交、更新 lessons、验证禁改边界、单独提交。
+- 下次启动提示词里的历史检查要覆盖当前新增 docs 提交后可能被挤出最近 12 条的关键旧提交；需要确认 `8226c992` 这类历史节点时使用 `git log -20 --oneline`，避免提示词要求最近 12 条但实际已经排到第 13 条。
+
 ## 2026-06-04 Rust / Go Phase 5 optional package install-chain preflight 边界
 
 - optional native package 的安装链路预检不能只检查 `apps/electron/package.json` 声明；必须同时验证声明版本、`bun.lock` resolved package entry 和已安装 package manifest，一旦存在声明但 lockfile / installed package 不完整，smoke 应失败而不是 skipped。
