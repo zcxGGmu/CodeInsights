@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional packaged 最新恢复入口回填
+
+- `3d82125e docs(rust-go): 同步 Phase 5 optional packaged 执行顺序后续状态` 已成为 optional / packaged execution plan 后的最新已确认恢复入口；后续给 Rust / Go 下次启动提示词时，最新开发基线应继续指向 `ce89f490`，最新恢复入口应从 `3d82125e` 或其后的最新 Rust / Go docs 提交继续。
+- 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，必须同时检查 development checklist 顶部状态和底部可复制提示词；只更新顶部会留下可恢复入口不一致。
+- 用户再次强调“每个阶段性任务完成后自动去做”时，把它作为当前项目默认收尾动作：阶段实现提交后自动同步 checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交；如果当前 HEAD 已经是 docs 状态同步提交，也要回填该 docs 提交为下一轮恢复入口。
+
 ## 2026-06-05 Rust / Go Phase 5 optional / packaged execution plan 边界
 
 - optional / packaged execution plan 只能描述下一步执行顺序：publish-target preflight -> package-source preflight -> optional package publication -> optionalDependencies declaration -> install-chain -> packaging config allowlist -> packaged app bundled binary smoke -> default-enable risk review。它不发布、不安装、不改 builder、不读取 binary，也不能证明真实 packaged binary。
