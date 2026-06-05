@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional package source preflight 边界
+
+- optional package source preflight 只验证 planned in-memory npm package source blueprint：package name / version、`private=false`、license / description、`os` / `cpu`、`bin.codeinsights-native-search`、精确 `files` allowlist、`publishConfig.access=public` 和对应 `native-search-package.json` 计划；它不运行 `npm pack`、不发布、不安装、不读取 binary、不计算真实 binary SHA、不修改 optionalDependencies，也不证明 packaged app bundled binary。
+- source manifest validator 必须拒绝 path-like 字段、运行时 dependency 字段，以及 install / publish lifecycle scripts（包括 `preinstall`、`install`、`postinstall`、`prepublish`、`prepublishOnly`、`publish`、`postpublish` 等），避免 planned package source 在发布或安装时执行额外逻辑。
+- `optionalPackageSourceReady=true` 只表示 4 个 planned package source metadata 形状可继续进入真实发布前置；不能外推为 `optionalPackagesPublished=true`、`optionalDependenciesDeclared=true`、`optionalDependenciesInstallChainVerified=true`、`packagingConfigVerified=true`、`realPackagedBinaryVerified=true`、`bundledBinaryVerified=true` 或 default-enable candidate。
+
 ## 2026-06-05 Rust / Go 状态同步恢复入口回填习惯
 
 - 用户要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，即使上一轮已经做过状态同步，也要先用 `git status --short --branch` 和 `git log -25 --oneline` 核对真实 HEAD，再把当前最新 Rust / Go docs 提交回填到 checklist 与 next-session prompt。

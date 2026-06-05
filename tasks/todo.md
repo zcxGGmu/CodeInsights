@@ -1,5 +1,41 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-05 Rust/Go Phase 5 optional package source preflight 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，最新开发基线为 `dc75f380 feat(rust-go): 对齐 Phase 5 native search release source version`，最新已确认恢复入口为 `e11f4476 docs(rust-go): 回填 Phase 5 release source 最新恢复入口`。本轮只推进真实 optional package 发布前置中的“本地 package source / npm pack metadata 形状”只读 gate：验证 4 个 planned `@codeinsights/native-search-*` package source manifest 是否具备 exact package name/version、private=false、license、os/cpu、bin、files allowlist 和闭合 `native-search-package.json` 计划，但不创建 packaged native binary、不执行 `npm publish`、不运行安装链路、不修改 `apps/electron/package.json` optionalDependencies、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。native 继续 default off / 显式 opt-in；ready 仍不等于 verified。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前 HEAD 为 `e11f4476`，最新开发基线 `dc75f380` 在最近历史中。
+- [x] 只读复核当前 optional package / packaged smoke helper，确认本轮不具备真实发布、真实安装或 builder allowlist 实际修改权限。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-package-manifest.test.ts` 和 `native-runtime-smoke.test.ts`，锁住 optional package source preflight 的 passed / failed / 默认不联网 / 不证明 publication 或 packaged binary 边界。
+- [x] 在 `native-runtime-package-manifest.ts` 新增只读 `validateNativeSearchOptionalPackageSources()` helper：只消费 planned package source manifest 对象和 package version，校验 package.json metadata、files allowlist、`native-search-package.json` manifest plan，不读取 binary、不读取路径、不发布、不安装。
+- [x] 在 `smoke:native-runtime` 新增 `--mode optional-package-source`，输出 `optionalPackageSourceChecked`、`optionalPackageSourceReady`、`optionalPackageSourceBlockers`、`optionalPackageSourceReadyPackages`、`invalidOptionalPackageSourcePackages` 等 summary 字段；ready 不改变 `optionalPackagesPublished`、`optionalDependenciesDeclared`、`optionalDependenciesInstallChainVerified`、`packagingConfigVerified`、`realPackagedBinaryVerified`、`bundledBinaryVerified` 或 default enable。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增真实 `@codeinsights/native-search-*` optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3` 和显式 `--check-registry` dry-run，确认 source preflight 不改变 publish-target / publication 语义。
+- [x] 运行 no-go smoke：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 与 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 已完成 optional package source preflight：新增 `validateNativeSearchOptionalPackageSources()` 和 `smoke:native-runtime -- --mode optional-package-source`，只读验证 planned package source manifest 的 metadata 形状、`files` allowlist、`native-search-package.json` 计划与 exact package version；ready 仅表示 source blueprint 准备好，不等于 package 已发布、依赖已声明/安装、builder allowlist 已修改或 packaged binary 已验证。
+- 已补齐边界：source preflight 明确拒绝 lifecycle scripts、运行时 dependency 字段和 path-like 字段，不会运行 `npm pack`、`npm publish`、安装链路或 packaged smoke。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`；`smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`；`smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3` 与 `--check-registry`；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界仍保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 `@codeinsights/native-search-*` optionalDependencies；未 push，未创建 PR。
+- 状态同步已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review；最新开发基线推进到 `05c393bb`，最新已确认恢复入口先记录为 `e11f4476`，本轮 docs 提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 禁改边界验证通过：`git diff -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；真实 native optionalDependencies 扫描无输出；`git status --short --branch` 仅显示本轮 5 个 docs / tasks 文件。
+
 ## 2026-06-05 Rust/Go Phase 5 release source version 最新恢复入口回填计划
 
 范围确认：用户要求更新 Rust / Go Phase 5 最新开发状态、标清已完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步文档。本轮只做状态文档回填：最新开发基线保持为 `dc75f380 feat(rust-go): 对齐 Phase 5 native search release source version`，把当前 `git log` 已确认的最新 Rust / Go docs 状态同步提交 `1b496638 docs(rust-go): 同步 Phase 5 release source version 后续状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
