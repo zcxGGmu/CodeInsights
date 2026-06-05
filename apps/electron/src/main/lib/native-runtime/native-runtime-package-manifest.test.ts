@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildNativeSearchPackagingConfigAllowlistChangePlan,
+  buildNativeSearchOptionalPackagePublicationChangePlan,
   buildNativeSearchOptionalDependenciesInstallChainChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalPackagePlan,
@@ -1258,6 +1259,300 @@ files:
         'do_not_enable_native_by_default_before_verified',
       ],
     })
+  })
+
+  test('optional package publication change plan 默认 blocked，不证明 package 已发布', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const plan = buildNativeSearchOptionalPackagePublicationChangePlan({
+      packageVersion: '0.0.3',
+      publishTarget: {
+        checked: false,
+        ready: false,
+        packageVersion: '0.0.3',
+        blockers: ['registry_check_required'],
+        expectedPackages,
+        availablePackages: [],
+        publishedVersionCollisionPackages: [],
+        invalidPackages: [],
+        unavailablePackages: [],
+        nativeSearchVersionConsistencyVerified: true,
+        nativeSearchCargoVersion: '0.0.3',
+        nativeSearchBinaryVersion: '0.0.3',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      packageSource: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        readyPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      publication: {
+        published: false,
+        expectedPackages,
+        publishedPackages: [],
+        missingPackages: expectedPackages,
+        invalidPackages: [],
+        unavailablePackages: [],
+      },
+    })
+
+    expect(plan).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      packageVersion: '0.0.3',
+      publishTargetReady: false,
+      packageSourceReady: true,
+      optionalPackagesPublished: false,
+      approvalRequired: true,
+      plannedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => ({
+        packageName: packagePlan.packageName,
+        packageVersion: '0.0.3',
+      })),
+      publishedPackages: [],
+      missingPublishedPackages: expectedPackages,
+      invalidPublishedPackages: [],
+      unavailablePublishedPackages: [],
+      blockedBy: [
+        'optional_package_publish_target_not_ready',
+        'optional_packages_not_published',
+      ],
+      candidateReviewAction: 'prepare_optional_package_publication_for_review',
+      candidatePreflightCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3 --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ],
+      candidatePublicationCommands: [
+        'npm publish <native-search-package-source:@codeinsights/native-search-darwin-arm64> --access public',
+        'npm publish <native-search-package-source:@codeinsights/native-search-darwin-x64> --access public',
+        'npm publish <native-search-package-source:@codeinsights/native-search-win32-x64> --access public',
+        'npm publish <native-search-package-source:@codeinsights/native-search-linux-x64> --access public',
+      ],
+      forbiddenActions: [
+        'do_not_run_npm_publish_without_release_approval',
+        'do_not_run_npm_pack_as_part_of_this_change_plan',
+        'do_not_modify_package_json_before_publication_verified',
+        'do_not_modify_bun_lock_before_publication_verified',
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_treat_publication_plan_as_packages_published',
+        'do_not_treat_publication_plan_as_install_chain_verified',
+        'do_not_treat_publication_plan_as_packaged_binary_verified',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+    expect(JSON.stringify(plan)).not.toContain('/Users/')
+    expect(JSON.stringify(plan)).not.toContain('binaryPath')
+    expect(JSON.stringify(plan)).not.toContain('registry.npmjs.org')
+  })
+
+  test('optional package publication change plan 在 target/source ready 且 registry 未发布时进入 review', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => packagePlan.packageName)
+    const plan = buildNativeSearchOptionalPackagePublicationChangePlan({
+      packageVersion: '0.0.3',
+      publishTarget: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        availablePackages: expectedPackages,
+        publishedVersionCollisionPackages: [],
+        invalidPackages: [],
+        unavailablePackages: [],
+        nativeSearchVersionConsistencyVerified: true,
+        nativeSearchCargoVersion: '0.0.3',
+        nativeSearchBinaryVersion: '0.0.3',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      packageSource: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        readyPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      publication: {
+        published: false,
+        expectedPackages,
+        publishedPackages: [],
+        missingPackages: expectedPackages,
+        invalidPackages: [],
+        unavailablePackages: [],
+      },
+    })
+
+    expect(plan.status).toBe('ready_for_review')
+    expect(plan.publishTargetReady).toBe(true)
+    expect(plan.packageSourceReady).toBe(true)
+    expect(plan.optionalPackagesPublished).toBe(false)
+    expect(plan.blockedBy).toEqual([])
+    expect(plan.publishedPackages).toEqual([])
+    expect(plan.plannedPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => ({
+        packageName: packagePlan.packageName,
+        packageVersion: '0.0.3',
+      })),
+    )
+  })
+
+  test('optional package publication change plan 已发布时不再建议发布', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => packagePlan.packageName)
+    const plan = buildNativeSearchOptionalPackagePublicationChangePlan({
+      packageVersion: '0.0.3',
+      publishTarget: {
+        checked: true,
+        ready: false,
+        packageVersion: '0.0.3',
+        blockers: ['publish_target_version_already_exists'],
+        expectedPackages,
+        availablePackages: [],
+        publishedVersionCollisionPackages: expectedPackages,
+        invalidPackages: [],
+        unavailablePackages: [],
+        nativeSearchVersionConsistencyVerified: true,
+        nativeSearchCargoVersion: '0.0.3',
+        nativeSearchBinaryVersion: '0.0.3',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      packageSource: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        readyPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      publication: {
+        published: true,
+        expectedPackages,
+        publishedPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        unavailablePackages: [],
+      },
+    })
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.optionalPackagesPublished).toBe(true)
+    expect(plan.publishedPackages).toEqual(expectedPackages)
+    expect(plan.blockedBy).toEqual(['optional_packages_already_published'])
+    expect(plan.candidatePublicationCommands).toEqual([])
+  })
+
+  test('optional package publication change plan partial publication 只建议未发布包', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => packagePlan.packageName)
+    const publishedPackage = expectedPackages[0]
+    if (!publishedPackage) throw new Error('expected package plan should exist')
+    const missingPackages = expectedPackages.filter((packageName) => packageName !== publishedPackage)
+    const plan = buildNativeSearchOptionalPackagePublicationChangePlan({
+      packageVersion: '0.0.3',
+      publishTarget: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        availablePackages: missingPackages,
+        publishedVersionCollisionPackages: [publishedPackage],
+        invalidPackages: [],
+        unavailablePackages: [],
+        nativeSearchVersionConsistencyVerified: true,
+        nativeSearchCargoVersion: '0.0.3',
+        nativeSearchBinaryVersion: '0.0.3',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      packageSource: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        readyPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      publication: {
+        published: false,
+        expectedPackages,
+        publishedPackages: [publishedPackage],
+        missingPackages,
+        invalidPackages: [],
+        unavailablePackages: [],
+      },
+    })
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.publishedPackages).toEqual([publishedPackage])
+    expect(plan.blockedBy).toEqual(['optional_package_publication_partial'])
+    expect(plan.candidatePublicationCommands).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+        .filter((packagePlan) => packagePlan.packageName !== publishedPackage)
+        .map((packagePlan) => (
+          `npm publish <native-search-package-source:${packagePlan.packageName}> --access public`
+        )),
+    )
+  })
+
+  test('optional package publication change plan 拒绝 target/source 版本漂移', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((packagePlan) => packagePlan.packageName)
+    const plan = buildNativeSearchOptionalPackagePublicationChangePlan({
+      packageVersion: '0.0.3',
+      publishTarget: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.4',
+        blockers: [],
+        expectedPackages,
+        availablePackages: expectedPackages,
+        publishedVersionCollisionPackages: [],
+        invalidPackages: [],
+        unavailablePackages: [],
+        nativeSearchVersionConsistencyVerified: true,
+        nativeSearchCargoVersion: '0.0.4',
+        nativeSearchBinaryVersion: '0.0.4',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      packageSource: {
+        checked: true,
+        ready: true,
+        packageVersion: '0.0.3',
+        blockers: [],
+        expectedPackages,
+        readyPackages: expectedPackages,
+        missingPackages: [],
+        invalidPackages: [],
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      publication: {
+        published: false,
+        expectedPackages,
+        publishedPackages: [],
+        missingPackages: expectedPackages,
+        invalidPackages: [],
+        unavailablePackages: [],
+      },
+    })
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.publishTargetReady).toBe(false)
+    expect(plan.packageSourceReady).toBe(true)
+    expect(plan.blockedBy).toEqual([
+      'optional_package_publish_target_not_ready',
+      'optional_packages_not_published',
+    ])
   })
 
   test('optional package execution plan 保持顺序 gate，不允许单项 evidence 跳过前置阶段', () => {

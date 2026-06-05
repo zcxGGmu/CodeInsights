@@ -14,6 +14,7 @@ import {
 } from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import {
   buildNativeSearchPackagingConfigAllowlistChangePlan,
+  buildNativeSearchOptionalPackagePublicationChangePlan,
   buildNativeSearchOptionalDependenciesInstallChainChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalDependencyExpectedVersions,
@@ -27,6 +28,7 @@ import {
   validateNativeSearchOptionalPackageInstallChain,
   buildNativeSearchOptionalPackageExecutionPlan,
   type NativeSearchPackagingConfigAllowlistChangePlan,
+  type NativeSearchOptionalPackagePublicationChangePlan,
   type NativeSearchOptionalDependenciesInstallChainChangePlan,
   type NativeSearchOptionalPackageSourceBlocker,
   type NativeSearchOptionalPackageSourceValidationResult,
@@ -111,6 +113,7 @@ export interface NativeRuntimeSmokeSummary {
   optionalDependenciesDeclared: boolean
   optionalPackagePublicationChecked: boolean
   optionalPackagesPublished: boolean
+  optionalPackagePublicationChangePlan: NativeSearchOptionalPackagePublicationChangePlan
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
@@ -118,6 +121,7 @@ export interface NativeRuntimeSmokeSummary {
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
   optionalDependenciesInstallChainChangePlan: NativeSearchOptionalDependenciesInstallChainChangePlan
+  publishedOptionalPackages: string[]
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
@@ -174,6 +178,7 @@ interface NativeRuntimeSmokeVerification {
   missingOptionalDependencies?: string[]
   invalidOptionalDependencies?: string[]
   missingPublishedOptionalPackages?: string[]
+  publishedOptionalPackages?: string[]
   invalidPublishedOptionalPackages?: string[]
   unavailablePublishedOptionalPackages?: string[]
   optionalPackagePublishTargetChecked?: boolean
@@ -268,6 +273,10 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const optionalPackageSourceChecked = Boolean(verification.optionalPackageSourceChecked)
   const optionalPackageSourceReady = optionalPackageSourceChecked
     && Boolean(verification.optionalPackageSourceReady)
+  const optionalPackagePublicationPlanVersion = verification.optionalPackagePublishTargetVersion
+    ?? verification.optionalPackageSourceVersion
+    ?? verification.optionalDependenciesInstallChainPlanVersion
+    ?? null
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
   const optionalDependenciesLockfileVerified = optionalDependenciesDeclared
@@ -289,6 +298,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const missingInstalledOptionalDependencies = verification.missingInstalledOptionalDependencies ?? []
   const invalidInstalledOptionalDependencies = verification.invalidInstalledOptionalDependencies ?? []
   const missingPublishedOptionalPackages = verification.missingPublishedOptionalPackages ?? []
+  const publishedOptionalPackages = verification.publishedOptionalPackages ?? []
   const invalidPublishedOptionalPackages = verification.invalidPublishedOptionalPackages ?? []
   const unavailablePublishedOptionalPackages = verification.unavailablePublishedOptionalPackages ?? []
   const optionalDependenciesInstallChainPlanVersion = verification.optionalDependenciesInstallChainPlanVersion
@@ -301,12 +311,53 @@ export function buildNativeRuntimeSmokeSummary(input: {
     ?? (optionalDependenciesLockfileVerified ? [] : expectedOptionalDependencyPackages)
   const planMissingInstalledPackages = verification.missingInstalledOptionalDependencies
     ?? (optionalDependenciesInstalledPackagesVerified ? [] : expectedOptionalDependencyPackages)
+  const optionalPackagePublicationChangePlan = buildNativeSearchOptionalPackagePublicationChangePlan({
+    packageVersion: optionalPackagePublicationPlanVersion,
+    publishTarget: {
+      checked: optionalPackagePublishTargetChecked,
+      ready: optionalPackagePublishTargetReady,
+      packageVersion: verification.optionalPackagePublishTargetVersion ?? null,
+      blockers: verification.optionalPackagePublishTargetBlockers ?? [],
+      expectedPackages: expectedOptionalDependencyPackages,
+      availablePackages: verification.publishTargetAvailablePackages ?? [],
+      publishedVersionCollisionPackages: verification.publishedVersionCollisionPackages ?? [],
+      invalidPackages: verification.invalidPublishTargetPackages ?? [],
+      unavailablePackages: verification.unavailablePublishTargetPackages ?? [],
+      nativeSearchVersionConsistencyVerified: Boolean(verification.nativeSearchVersionConsistencyVerified),
+      nativeSearchCargoVersion: verification.nativeSearchCargoVersion ?? null,
+      nativeSearchBinaryVersion: verification.nativeSearchBinaryVersion ?? null,
+      plannedOptionalPackageManifestsVerified: Boolean(verification.plannedOptionalPackageManifestsVerified),
+    },
+    packageSource: {
+      checked: optionalPackageSourceChecked,
+      ready: optionalPackageSourceReady,
+      packageVersion: verification.optionalPackageSourceVersion ?? null,
+      blockers: verification.optionalPackageSourceBlockers ?? [],
+      expectedPackages: expectedOptionalDependencyPackages,
+      readyPackages: verification.optionalPackageSourceReadyPackages ?? [],
+      missingPackages: verification.missingOptionalPackageSourcePackages ?? [],
+      invalidPackages: verification.invalidOptionalPackageSourcePackages ?? [],
+      plannedOptionalPackageManifestsVerified: Boolean(verification.plannedOptionalPackageSourceManifestsVerified),
+    },
+    publication: {
+      published: optionalPackagesPublished,
+      expectedPackages: expectedOptionalDependencyPackages,
+      publishedPackages: publishedOptionalPackages.length > 0
+        ? publishedOptionalPackages
+        : optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
+      missingPackages: missingPublishedOptionalPackages,
+      invalidPackages: invalidPublishedOptionalPackages,
+      unavailablePackages: unavailablePublishedOptionalPackages,
+    },
+  })
   const optionalDependenciesInstallChainChangePlan = buildNativeSearchOptionalDependenciesInstallChainChangePlan({
     packageVersion: optionalDependenciesInstallChainPlanVersion,
     publication: {
       published: optionalPackagesPublished,
       expectedPackages: expectedOptionalDependencyPackages,
-      publishedPackages: optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
+      publishedPackages: publishedOptionalPackages.length > 0
+        ? publishedOptionalPackages
+        : optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
       missingPackages: missingPublishedOptionalPackages,
       invalidPackages: invalidPublishedOptionalPackages,
       unavailablePackages: unavailablePublishedOptionalPackages,
@@ -386,6 +437,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     optionalDependenciesDeclared,
     optionalPackagePublicationChecked,
     optionalPackagesPublished,
+    optionalPackagePublicationChangePlan,
     optionalDependenciesInstallChainVerified,
     optionalDependenciesLockfileVerified,
     optionalDependenciesInstalledPackagesVerified,
@@ -393,6 +445,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     missingOptionalDependencies,
     invalidOptionalDependencies,
     optionalDependenciesInstallChainChangePlan,
+    publishedOptionalPackages,
     missingPublishedOptionalPackages,
     invalidPublishedOptionalPackages,
     unavailablePublishedOptionalPackages,
@@ -599,6 +652,9 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         missingPublishedOptionalPackages: options.checkRegistry === true
           ? optionalPackagePublication.missingPackages
           : [],
+        publishedOptionalPackages: options.checkRegistry === true
+          ? optionalPackagePublication.publishedPackages
+          : [],
         invalidPublishedOptionalPackages: options.checkRegistry === true
           ? optionalPackagePublication.invalidPackages
           : [],
@@ -692,6 +748,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         optionalDependenciesInstalledPackagesVerified: packagedAppResult.optionalDependenciesInstalledPackagesVerified,
         packagingConfigVerified: packagedAppResult.packagingConfigVerified,
         missingPublishedOptionalPackages: packagedAppResult.missingPublishedOptionalPackages,
+        publishedOptionalPackages: packagedAppResult.publishedOptionalPackages,
         invalidPublishedOptionalPackages: packagedAppResult.invalidPublishedOptionalPackages,
         unavailablePublishedOptionalPackages: packagedAppResult.unavailablePublishedOptionalPackages,
         missingOptionalDependencies: packagedAppResult.missingOptionalDependencies,
@@ -1093,6 +1150,7 @@ interface PackagedAppLayoutCaseResult {
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
   packagingConfigVerified: boolean
+  publishedOptionalPackages: string[]
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
@@ -1298,6 +1356,7 @@ function buildPackagedAppPublicationFields(
   PackagedAppLayoutCaseResult,
   | 'optionalPackagePublicationChecked'
   | 'optionalPackagesPublished'
+  | 'publishedOptionalPackages'
   | 'missingPublishedOptionalPackages'
   | 'invalidPublishedOptionalPackages'
   | 'unavailablePublishedOptionalPackages'
@@ -1305,6 +1364,7 @@ function buildPackagedAppPublicationFields(
   return {
     optionalPackagePublicationChecked: registryChecked,
     optionalPackagesPublished: registryChecked && optionalPackagePublication.published,
+    publishedOptionalPackages: registryChecked ? optionalPackagePublication.publishedPackages : [],
     missingPublishedOptionalPackages: registryChecked ? optionalPackagePublication.missingPackages : [],
     invalidPublishedOptionalPackages: registryChecked ? optionalPackagePublication.invalidPackages : [],
     unavailablePublishedOptionalPackages: registryChecked ? optionalPackagePublication.unavailablePackages : [],

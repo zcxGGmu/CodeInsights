@@ -88,6 +88,46 @@ export interface NativeSearchOptionalPackagePublicationValidationResult {
   unavailablePackages: string[]
 }
 
+export interface NativeSearchPlannedOptionalPackagePublication {
+  packageName: string
+  packageVersion: string
+}
+
+export type NativeSearchOptionalPackagePublicationChangePlanStatus =
+  | 'blocked'
+  | 'ready_for_review'
+
+export type NativeSearchOptionalPackagePublicationChangePlanBlocker =
+  | 'optional_package_publication_version_required'
+  | 'optional_package_publication_version_invalid'
+  | 'optional_package_publish_target_not_ready'
+  | 'optional_package_source_not_ready'
+  | 'optional_packages_not_published'
+  | 'optional_packages_already_published'
+  | 'optional_package_publication_partial'
+  | 'optional_package_publication_metadata_invalid'
+  | 'optional_package_publication_state_unavailable'
+
+export interface NativeSearchOptionalPackagePublicationChangePlan {
+  schemaVersion: 1
+  status: NativeSearchOptionalPackagePublicationChangePlanStatus
+  packageVersion: string | null
+  publishTargetReady: boolean
+  packageSourceReady: boolean
+  optionalPackagesPublished: boolean
+  approvalRequired: boolean
+  plannedPackages: NativeSearchPlannedOptionalPackagePublication[]
+  publishedPackages: string[]
+  missingPublishedPackages: string[]
+  invalidPublishedPackages: string[]
+  unavailablePublishedPackages: string[]
+  blockedBy: NativeSearchOptionalPackagePublicationChangePlanBlocker[]
+  candidateReviewAction: string
+  candidatePreflightCommands: string[]
+  candidatePublicationCommands: string[]
+  forbiddenActions: string[]
+}
+
 export type NativeSearchOptionalPackagePublishTargetBlocker =
   | 'publish_target_version_required'
   | 'publish_target_version_invalid'
@@ -217,6 +257,13 @@ interface BuildNativeSearchOptionalDependenciesInstallChainChangePlanOptions {
   packageVersion?: string | null
   publication: NativeSearchOptionalPackagePublicationValidationResult
   installChain: NativeSearchOptionalPackageInstallChainValidationResult
+}
+
+interface BuildNativeSearchOptionalPackagePublicationChangePlanOptions {
+  packageVersion?: string | null
+  publishTarget: NativeSearchOptionalPackagePublishTargetValidationResult
+  packageSource: NativeSearchOptionalPackageSourceValidationResult
+  publication: NativeSearchOptionalPackagePublicationValidationResult
 }
 
 interface ValidateNativeSearchOptionalPackagePublicationOptions {
@@ -460,6 +507,100 @@ export function buildNativeSearchOptionalDependenciesInstallChainChangePlan(
       'do_not_treat_change_plan_as_optional_dependencies_declared',
       'do_not_treat_change_plan_as_install_chain_verified',
       'do_not_treat_change_plan_as_packaged_binary_verified',
+      'do_not_enable_native_by_default_before_verified',
+    ],
+  }
+}
+
+export function buildNativeSearchOptionalPackagePublicationChangePlan(
+  options: BuildNativeSearchOptionalPackagePublicationChangePlanOptions,
+): NativeSearchOptionalPackagePublicationChangePlan {
+  const packageVersion = normalizeOptionalString(options.packageVersion)
+  const packageVersionValid = packageVersion != null && isReleasePackageVersion(packageVersion)
+  const publishTargetVersionMatches = options.publishTarget.packageVersion === packageVersion
+  const packageSourceVersionMatches = options.packageSource.packageVersion === packageVersion
+  const publishTargetReady = options.publishTarget.checked
+    && options.publishTarget.ready
+    && publishTargetVersionMatches
+  const packageSourceReady = options.packageSource.checked
+    && options.packageSource.ready
+    && packageSourceVersionMatches
+  const optionalPackagesPublished = options.publication.published
+  const blockers: NativeSearchOptionalPackagePublicationChangePlanBlocker[] = []
+
+  if (packageVersion == null) {
+    blockers.push('optional_package_publication_version_required')
+  } else if (!packageVersionValid) {
+    blockers.push('optional_package_publication_version_invalid')
+  }
+
+  if (optionalPackagesPublished) {
+    blockers.push('optional_packages_already_published')
+  } else {
+    if (!publishTargetReady) blockers.push('optional_package_publish_target_not_ready')
+    if (!packageSourceReady) blockers.push('optional_package_source_not_ready')
+    if (!publishTargetReady || !packageSourceReady) {
+      blockers.push('optional_packages_not_published')
+    }
+  }
+
+  if (options.publication.publishedPackages.length > 0 && !optionalPackagesPublished) {
+    blockers.push('optional_package_publication_partial')
+  }
+  if (options.publication.invalidPackages.length > 0) {
+    blockers.push('optional_package_publication_metadata_invalid')
+  }
+  if (options.publication.unavailablePackages.length > 0) {
+    blockers.push('optional_package_publication_state_unavailable')
+  }
+
+  return {
+    schemaVersion: 1,
+    status: blockers.length === 0 ? 'ready_for_review' : 'blocked',
+    packageVersion,
+    publishTargetReady,
+    packageSourceReady,
+    optionalPackagesPublished,
+    approvalRequired: true,
+    plannedPackages: packageVersionValid && packageVersion != null
+      ? NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => ({
+        packageName: plan.packageName,
+        packageVersion,
+      }))
+      : [],
+    publishedPackages: options.publication.publishedPackages,
+    missingPublishedPackages: options.publication.missingPackages,
+    invalidPublishedPackages: options.publication.invalidPackages,
+    unavailablePublishedPackages: options.publication.unavailablePackages,
+    blockedBy: uniquePublicationChangePlanBlockers(blockers),
+    candidateReviewAction: 'prepare_optional_package_publication_for_review',
+    candidatePreflightCommands: packageVersionValid && packageVersion != null
+      ? [
+        `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version ${packageVersion} --check-registry`,
+        `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version ${packageVersion}`,
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ]
+      : [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version <native-search-package-version> --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version <native-search-package-version>",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ],
+    candidatePublicationCommands: blockers.includes('optional_packages_already_published')
+      ? []
+      : NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+        .filter((plan) => !options.publication.publishedPackages.includes(plan.packageName))
+        .map((plan) => (
+          `npm publish <native-search-package-source:${plan.packageName}> --access public`
+        )),
+    forbiddenActions: [
+      'do_not_run_npm_publish_without_release_approval',
+      'do_not_run_npm_pack_as_part_of_this_change_plan',
+      'do_not_modify_package_json_before_publication_verified',
+      'do_not_modify_bun_lock_before_publication_verified',
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_treat_publication_plan_as_packages_published',
+      'do_not_treat_publication_plan_as_install_chain_verified',
+      'do_not_treat_publication_plan_as_packaged_binary_verified',
       'do_not_enable_native_by_default_before_verified',
     ],
   }
@@ -1408,6 +1549,12 @@ function uniqueSourceBlockers(
 function uniqueInstallChainPlanBlockers(
   blockers: NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[],
 ): NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
+}
+
+function uniquePublicationChangePlanBlockers(
+  blockers: NativeSearchOptionalPackagePublicationChangePlanBlocker[],
+): NativeSearchOptionalPackagePublicationChangePlanBlocker[] {
   return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 
