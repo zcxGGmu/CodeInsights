@@ -19,9 +19,12 @@ import {
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
   validateNativeSearchOptionalPackagePublication,
+  validateNativeSearchOptionalPackageSources,
   validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
+  type NativeSearchOptionalPackageSourceBlocker,
+  type NativeSearchOptionalPackageSourceValidationResult,
   type NativeSearchOptionalPackagePublishTargetBlocker,
   type NativeSearchOptionalPackagePublishTargetValidationResult,
   type NativeSearchOptionalPackagePublicationValidationResult,
@@ -45,6 +48,7 @@ export type NativeRuntimeSmokeMode =
   | 'cache-corruption'
   | 'packaged-manifest'
   | 'packaged-app-layout'
+  | 'optional-package-source'
   | 'optional-package-publish-target'
 
 export interface NativeRuntimeSmokeOptions {
@@ -114,6 +118,14 @@ export interface NativeRuntimeSmokeSummary {
   optionalPackagePublishTargetReady: boolean
   optionalPackagePublishTargetVersion: string | null
   optionalPackagePublishTargetBlockers: NativeSearchOptionalPackagePublishTargetBlocker[]
+  optionalPackageSourceChecked: boolean
+  optionalPackageSourceReady: boolean
+  optionalPackageSourceVersion: string | null
+  optionalPackageSourceBlockers: NativeSearchOptionalPackageSourceBlocker[]
+  optionalPackageSourceReadyPackages: string[]
+  missingOptionalPackageSourcePackages: string[]
+  invalidOptionalPackageSourcePackages: string[]
+  plannedOptionalPackageSourceManifestsVerified: boolean
   publishTargetAvailablePackages: string[]
   publishedVersionCollisionPackages: string[]
   invalidPublishTargetPackages: string[]
@@ -158,6 +170,14 @@ interface NativeRuntimeSmokeVerification {
   optionalPackagePublishTargetReady?: boolean
   optionalPackagePublishTargetVersion?: string | null
   optionalPackagePublishTargetBlockers?: NativeSearchOptionalPackagePublishTargetBlocker[]
+  optionalPackageSourceChecked?: boolean
+  optionalPackageSourceReady?: boolean
+  optionalPackageSourceVersion?: string | null
+  optionalPackageSourceBlockers?: NativeSearchOptionalPackageSourceBlocker[]
+  optionalPackageSourceReadyPackages?: string[]
+  missingOptionalPackageSourcePackages?: string[]
+  invalidOptionalPackageSourcePackages?: string[]
+  plannedOptionalPackageSourceManifestsVerified?: boolean
   publishTargetAvailablePackages?: string[]
   publishedVersionCollisionPackages?: string[]
   invalidPublishTargetPackages?: string[]
@@ -290,6 +310,14 @@ export function buildNativeRuntimeSmokeSummary(input: {
     optionalPackagePublishTargetReady: Boolean(verification.optionalPackagePublishTargetReady),
     optionalPackagePublishTargetVersion: verification.optionalPackagePublishTargetVersion ?? null,
     optionalPackagePublishTargetBlockers: verification.optionalPackagePublishTargetBlockers ?? [],
+    optionalPackageSourceChecked: Boolean(verification.optionalPackageSourceChecked),
+    optionalPackageSourceReady: Boolean(verification.optionalPackageSourceReady),
+    optionalPackageSourceVersion: verification.optionalPackageSourceVersion ?? null,
+    optionalPackageSourceBlockers: verification.optionalPackageSourceBlockers ?? [],
+    optionalPackageSourceReadyPackages: verification.optionalPackageSourceReadyPackages ?? [],
+    missingOptionalPackageSourcePackages: verification.missingOptionalPackageSourcePackages ?? [],
+    invalidOptionalPackageSourcePackages: verification.invalidOptionalPackageSourcePackages ?? [],
+    plannedOptionalPackageSourceManifestsVerified: Boolean(verification.plannedOptionalPackageSourceManifestsVerified),
     publishTargetAvailablePackages: verification.publishTargetAvailablePackages ?? [],
     publishedVersionCollisionPackages: verification.publishedVersionCollisionPackages ?? [],
     invalidPublishTargetPackages: verification.invalidPublishTargetPackages ?? [],
@@ -510,6 +538,20 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         nativeSearchCargoVersion: publishTarget.nativeSearchCargoVersion,
         nativeSearchBinaryVersion: publishTarget.nativeSearchBinaryVersion,
         plannedOptionalPackageManifestsVerified: publishTarget.plannedOptionalPackageManifestsVerified,
+        realPackagedBinaryVerified: false,
+      }
+    } else if (options.mode === 'optional-package-source') {
+      const packageSource = readNativeSearchOptionalPackageSource(options.nativeSearchPackageVersion)
+      cases.push(buildOptionalPackageSourcePreflightCase(packageSource))
+      verification = {
+        optionalPackageSourceChecked: packageSource.checked,
+        optionalPackageSourceReady: packageSource.ready,
+        optionalPackageSourceVersion: packageSource.packageVersion,
+        optionalPackageSourceBlockers: packageSource.blockers,
+        optionalPackageSourceReadyPackages: packageSource.readyPackages,
+        missingOptionalPackageSourcePackages: packageSource.missingPackages,
+        invalidOptionalPackageSourcePackages: packageSource.invalidPackages,
+        plannedOptionalPackageSourceManifestsVerified: packageSource.plannedOptionalPackageManifestsVerified,
         realPackagedBinaryVerified: false,
       }
     } else if (options.mode === 'packaged-app-layout') {
@@ -820,6 +862,27 @@ function buildOptionalPackagePublishTargetPreflightCase(
       `nativeSearchCargoVersion=${result.nativeSearchCargoVersion ?? 'none'}`,
       `nativeSearchBinaryVersion=${result.nativeSearchBinaryVersion ?? 'none'}`,
       `plannedOptionalPackageManifestsVerified=${String(result.plannedOptionalPackageManifestsVerified)}`,
+      'optionalPackagesPublished=false',
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
+  }
+}
+
+function buildOptionalPackageSourcePreflightCase(
+  result: NativeSearchOptionalPackageSourceValidationResult,
+): NativeRuntimeSmokeCase {
+  return {
+    name: 'optional-package-source',
+    status: result.ready ? 'passed' : 'failed',
+    detail: [
+      'optionalPackageSourceChecked=true',
+      `optionalPackageSourceReady=${String(result.ready)}`,
+      `optionalPackageSourceVersion=${result.packageVersion ?? 'none'}`,
+      `optionalPackageSourceBlockers=${result.blockers.join(',') || 'none'}`,
+      `optionalPackageSourceReadyPackages=${result.readyPackages.join(',') || 'none'}`,
+      `missingOptionalPackageSourcePackages=${result.missingPackages.join(',') || 'none'}`,
+      `invalidOptionalPackageSourcePackages=${result.invalidPackages.join(',') || 'none'}`,
+      `plannedOptionalPackageSourceManifestsVerified=${String(result.plannedOptionalPackageManifestsVerified)}`,
       'optionalPackagesPublished=false',
       'realPackagedBinaryVerified=false',
     ].join('; '),
@@ -1205,6 +1268,56 @@ async function readNativeSearchOptionalPackagePublishTarget(
   })
 }
 
+function readNativeSearchOptionalPackageSource(
+  packageVersion: string | undefined,
+): NativeSearchOptionalPackageSourceValidationResult {
+  const normalizedPackageVersion = typeof packageVersion === 'string' ? packageVersion.trim() : undefined
+  const packageSources = Object.fromEntries(
+    NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
+      plan.packageName,
+      {
+        packageJson: buildNativeSearchOptionalPackageSourcePackageJson(plan, normalizedPackageVersion ?? '0.0.0'),
+        nativeSearchPackageManifest: buildNativeSearchPackageManifest({
+          plan,
+          packageVersion: normalizedPackageVersion ?? '0.0.0',
+          binarySha256: '0'.repeat(64),
+        }),
+      },
+    ]),
+  )
+
+  return validateNativeSearchOptionalPackageSources({
+    packageVersion,
+    packageSources,
+  })
+}
+
+function buildNativeSearchOptionalPackageSourcePackageJson(
+  plan: (typeof NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS)[number],
+  packageVersion: string,
+): Record<string, unknown> {
+  return {
+    name: plan.packageName,
+    version: packageVersion,
+    description: `CodeInsights native search sidecar for ${plan.platform} ${plan.arch}`,
+    private: false,
+    license: 'MIT',
+    os: [plan.platform],
+    cpu: [plan.arch],
+    bin: {
+      'codeinsights-native-search': `bin/${plan.binaryName}`,
+    },
+    files: [
+      'package.json',
+      'native-search-package.json',
+      `bin/${plan.binaryName}`,
+    ],
+    publishConfig: {
+      access: 'public',
+    },
+  }
+}
+
 async function readNativeSearchOptionalPackageRegistryMetadata(): Promise<{
   registryMetadata: Record<string, unknown>
   unavailablePackages: string[]
@@ -1542,6 +1655,7 @@ function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
     || value === 'cache-corruption'
     || value === 'packaged-manifest'
     || value === 'packaged-app-layout'
+    || value === 'optional-package-source'
     || value === 'optional-package-publish-target'
   ) {
     return value

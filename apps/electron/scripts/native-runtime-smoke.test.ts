@@ -80,6 +80,21 @@ describe('native-runtime-smoke', () => {
     })
   })
 
+  test('parseNativeRuntimeSmokeArgs 支持 optional package source preflight', () => {
+    const options = parseNativeRuntimeSmokeArgs([
+      '--mode',
+      'optional-package-source',
+      '--native-search-package-version',
+      '0.0.3',
+    ])
+
+    expect(options).toEqual({
+      mode: 'optional-package-source',
+      nativeSearchPackageVersion: '0.0.3',
+      query: '关键字',
+    })
+  })
+
   test('summary 不泄露 binary path 或 home path', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'native-available',
@@ -201,6 +216,48 @@ describe('native-runtime-smoke', () => {
     expect(summary.nativeSearchCargoVersion).toBe('0.0.3')
     expect(summary.nativeSearchBinaryVersion).toBe('0.0.3')
     expect(summary.plannedOptionalPackageManifestsVerified).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.explicitOptInRequired).toBe(true)
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
+
+  test('summary 输出 optional package source preflight 字段且不改变真实 packaged gate', () => {
+    const readyPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-source',
+      verification: {
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceBlockers: [],
+        optionalPackageSourceReadyPackages: readyPackages,
+        missingOptionalPackageSourcePackages: [],
+        invalidOptionalPackageSourcePackages: [],
+        plannedOptionalPackageSourceManifestsVerified: true,
+      },
+      cases: [{
+        name: 'optional-package-source',
+        status: 'passed',
+        detail: 'optionalPackageSourceReady=true',
+      }],
+    })
+
+    expect(summary.optionalPackageSourceChecked).toBe(true)
+    expect(summary.optionalPackageSourceReady).toBe(true)
+    expect(summary.optionalPackageSourceVersion).toBe('0.0.3')
+    expect(summary.optionalPackageSourceBlockers).toEqual([])
+    expect(summary.optionalPackageSourceReadyPackages).toEqual(readyPackages)
+    expect(summary.missingOptionalPackageSourcePackages).toEqual([])
+    expect(summary.invalidOptionalPackageSourcePackages).toEqual([])
+    expect(summary.plannedOptionalPackageSourceManifestsVerified).toBe(true)
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
@@ -957,6 +1014,60 @@ describe('native-runtime-smoke', () => {
       status: 'skipped',
     }))
     expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
+  })
+
+  test('optional package source preflight 只验证本地计划 source，不证明 package 已发布', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'optional-package-source',
+      query: '关键字',
+      nativeSearchPackageVersion: '0.0.3',
+    })
+
+    expect(summary.optionalPackageSourceChecked).toBe(true)
+    expect(summary.optionalPackageSourceReady).toBe(true)
+    expect(summary.optionalPackageSourceVersion).toBe('0.0.3')
+    expect(summary.optionalPackageSourceReadyPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackageSourceBlockers).toEqual([])
+    expect(summary.missingOptionalPackageSourcePackages).toEqual([])
+    expect(summary.invalidOptionalPackageSourcePackages).toEqual([])
+    expect(summary.plannedOptionalPackageSourceManifestsVerified).toBe(true)
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'optional-package-source',
+      status: 'passed',
+    }))
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
+    expect(summary.optionalPackagePublicationChecked).toBe(false)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
+
+  test('optional package source preflight 缺少版本时 failed', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'optional-package-source',
+      query: '关键字',
+    })
+
+    expect(summary.optionalPackageSourceChecked).toBe(true)
+    expect(summary.optionalPackageSourceReady).toBe(false)
+    expect(summary.optionalPackageSourceVersion).toBe(null)
+    expect(summary.optionalPackageSourceBlockers).toContain('package_source_version_required')
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'optional-package-source',
+      status: 'failed',
+    }))
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
   })
 
   test('optional package publish-target 显式 registry 下 404 且 release source version 时 ready', async () => {

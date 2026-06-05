@@ -6,6 +6,7 @@ import {
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
   validateNativeSearchOptionalPackageInstallChain,
   validateNativeSearchOptionalPackagePublication,
+  validateNativeSearchOptionalPackageSources,
   validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchOptionalDependencies,
   validateNativeSearchPackagingConfig,
@@ -648,6 +649,172 @@ describe('native-runtime-package-manifest', () => {
     expect(JSON.stringify(result)).not.toContain('binaryPath')
   })
 
+  test('校验 optional package source manifest 与 publish-ready package.json 形状', () => {
+    const packageSources = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
+        plan.packageName,
+        createOptionalPackageSourceFixture(plan, '0.0.3'),
+      ]),
+    )
+
+    expect(validateNativeSearchOptionalPackageSources({
+      packageVersion: '0.0.3',
+      packageSources,
+    })).toEqual({
+      checked: true,
+      ready: true,
+      packageVersion: '0.0.3',
+      blockers: [],
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      readyPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      missingPackages: [],
+      invalidPackages: [],
+      plannedOptionalPackageManifestsVerified: true,
+    })
+  })
+
+  test('optional package source preflight 拒绝缺失 source、无效 package.json 与 manifest 漂移', () => {
+    const missingPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]
+    const invalidPackageJsonPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[1]
+    const invalidManifestPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[2]
+    const validPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[3]
+    if (!missingPackage || !invalidPackageJsonPackage || !invalidManifestPackage || !validPackage) {
+      throw new Error('native search optional package plan should include packages')
+    }
+
+    const result = validateNativeSearchOptionalPackageSources({
+      packageVersion: '0.0.3',
+      packageSources: {
+        [invalidPackageJsonPackage.packageName]: createOptionalPackageSourceFixture(
+          invalidPackageJsonPackage,
+          '0.0.3',
+          {
+            packageJsonPatch: {
+              private: true,
+              files: ['bin/**/*', 'native-search-package.json'],
+              publishConfig: { access: 'restricted' },
+            },
+          },
+        ),
+        [invalidManifestPackage.packageName]: createOptionalPackageSourceFixture(
+          invalidManifestPackage,
+          '0.0.3',
+          {
+            nativeSearchManifestPatch: {
+              packageVersion: '0.0.4',
+              binaryPath: '/Users/demo/codeinsights-native-search',
+            },
+          },
+        ),
+        [validPackage.packageName]: createOptionalPackageSourceFixture(validPackage, '0.0.3'),
+      },
+    })
+
+    expect(result.ready).toBe(false)
+    expect(result.readyPackages).toEqual([validPackage.packageName])
+    expect(result.missingPackages).toEqual([missingPackage.packageName])
+    expect(result.invalidPackages).toEqual([
+      invalidPackageJsonPackage.packageName,
+      invalidManifestPackage.packageName,
+    ])
+    expect(result.blockers).toEqual([
+      'package_source_manifest_missing',
+      'package_source_package_json_invalid',
+      'package_source_native_manifest_invalid',
+    ])
+    expect(result.plannedOptionalPackageManifestsVerified).toBe(false)
+    expect(JSON.stringify(result)).not.toContain('/Users/')
+    expect(JSON.stringify(result)).not.toContain('binaryPath')
+  })
+
+  test('optional package source preflight 拒绝 lifecycle scripts、运行时依赖和宽泛 files', () => {
+    const scriptPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]
+    const dependencyPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[1]
+    const wildcardFilesPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[2]
+    const publishScriptPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[3]
+    if (!scriptPackage || !dependencyPackage || !wildcardFilesPackage || !publishScriptPackage) {
+      throw new Error('native search optional package plan should include packages')
+    }
+
+    const result = validateNativeSearchOptionalPackageSources({
+      packageVersion: '0.0.3',
+      packageSources: {
+        [scriptPackage.packageName]: createOptionalPackageSourceFixture(scriptPackage, '0.0.3', {
+          packageJsonPatch: {
+            scripts: {
+              install: 'node ./install.js',
+            },
+          },
+        }),
+        [dependencyPackage.packageName]: createOptionalPackageSourceFixture(dependencyPackage, '0.0.3', {
+          packageJsonPatch: {
+            dependencies: {
+              '@demo/installer': '1.0.0',
+            },
+          },
+        }),
+        [wildcardFilesPackage.packageName]: createOptionalPackageSourceFixture(wildcardFilesPackage, '0.0.3', {
+          packageJsonPatch: {
+            files: [
+              'bin/**/*',
+              'native-search-package.json',
+            ],
+          },
+        }),
+        [publishScriptPackage.packageName]: createOptionalPackageSourceFixture(publishScriptPackage, '0.0.3', {
+          packageJsonPatch: {
+            scripts: {
+              prepublishOnly: 'node ./prepublish-only.js',
+              publish: 'node ./publish.js',
+              postpublish: 'node ./postpublish.js',
+            },
+          },
+        }),
+      },
+    })
+
+    expect(result.ready).toBe(false)
+    expect(result.readyPackages).toEqual([])
+    expect(result.invalidPackages).toEqual([
+      scriptPackage.packageName,
+      dependencyPackage.packageName,
+      wildcardFilesPackage.packageName,
+      publishScriptPackage.packageName,
+    ])
+    expect(result.blockers).toEqual(['package_source_package_json_invalid'])
+    expect(result.plannedOptionalPackageManifestsVerified).toBe(false)
+  })
+
+  test('optional package source preflight 要求 release package version', () => {
+    expect(validateNativeSearchOptionalPackageSources({
+      packageVersion: undefined,
+      packageSources: {},
+    })).toEqual(expect.objectContaining({
+      checked: true,
+      ready: false,
+      packageVersion: null,
+      blockers: [
+        'package_source_version_required',
+        'package_source_manifest_missing',
+      ],
+      plannedOptionalPackageManifestsVerified: false,
+    }))
+
+    expect(validateNativeSearchOptionalPackageSources({
+      packageVersion: '0.0.3-dev',
+      packageSources: {},
+    })).toEqual(expect.objectContaining({
+      checked: true,
+      ready: false,
+      packageVersion: '0.0.3-dev',
+      blockers: [
+        'package_source_version_invalid',
+        'package_source_manifest_missing',
+      ],
+      plannedOptionalPackageManifestsVerified: false,
+    }))
+  })
+
   test('缺少 optionalDependencies 对象时返回完整缺失列表且不读取真实 node_modules', () => {
     const result = validateNativeSearchOptionalDependencies({})
 
@@ -802,5 +969,53 @@ function createRegistryPackument(
         ...manifest,
       },
     },
+  }
+}
+
+function createOptionalPackageSourceFixture(
+  plan: (typeof NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS)[number],
+  packageVersion: string,
+  options: {
+    packageJsonPatch?: Record<string, unknown>
+    nativeSearchManifestPatch?: Record<string, unknown>
+  } = {},
+): {
+  packageJson: Record<string, unknown>
+  nativeSearchPackageManifest: Record<string, unknown>
+} {
+  const packageJson = {
+    name: plan.packageName,
+    version: packageVersion,
+    description: `CodeInsights native search sidecar for ${plan.platform} ${plan.arch}`,
+    private: false,
+    license: 'MIT',
+    os: [plan.platform],
+    cpu: [plan.arch],
+    bin: {
+      'codeinsights-native-search': `bin/${plan.binaryName}`,
+    },
+    files: [
+      'package.json',
+      'native-search-package.json',
+      `bin/${plan.binaryName}`,
+    ],
+    publishConfig: {
+      access: 'public',
+    },
+    ...options.packageJsonPatch,
+  }
+
+  const nativeSearchPackageManifest = {
+    ...buildNativeSearchPackageManifest({
+      plan,
+      packageVersion,
+      binarySha256: VALID_SHA256,
+    }),
+    ...options.nativeSearchManifestPatch,
+  }
+
+  return {
+    packageJson,
+    nativeSearchPackageManifest,
   }
 }

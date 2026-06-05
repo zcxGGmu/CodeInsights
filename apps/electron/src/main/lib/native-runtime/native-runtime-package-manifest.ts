@@ -76,6 +76,30 @@ export interface NativeSearchOptionalPackagePublishTargetValidationResult {
   plannedOptionalPackageManifestsVerified: boolean
 }
 
+export type NativeSearchOptionalPackageSourceBlocker =
+  | 'package_source_version_required'
+  | 'package_source_version_invalid'
+  | 'package_source_manifest_missing'
+  | 'package_source_package_json_invalid'
+  | 'package_source_native_manifest_invalid'
+
+export interface NativeSearchOptionalPackageSource {
+  packageJson?: unknown
+  nativeSearchPackageManifest?: unknown
+}
+
+export interface NativeSearchOptionalPackageSourceValidationResult {
+  checked: boolean
+  ready: boolean
+  packageVersion: string | null
+  blockers: NativeSearchOptionalPackageSourceBlocker[]
+  expectedPackages: string[]
+  readyPackages: string[]
+  missingPackages: string[]
+  invalidPackages: string[]
+  plannedOptionalPackageManifestsVerified: boolean
+}
+
 export interface NativeSearchPackagingConfigValidationResult {
   verified: boolean
   expectedPackages: string[]
@@ -104,6 +128,11 @@ interface ValidateNativeSearchOptionalPackagePublishTargetOptions {
   unavailablePackages?: string[]
   cargoVersion?: string | null
   binaryVersion?: string | null
+}
+
+interface ValidateNativeSearchOptionalPackageSourcesOptions {
+  packageVersion?: string
+  packageSources?: Record<string, NativeSearchOptionalPackageSource | unknown>
 }
 
 interface BuildNativeSearchPackageManifestOptions {
@@ -399,6 +428,72 @@ export function validateNativeSearchOptionalPackagePublishTarget(
   }
 }
 
+export function validateNativeSearchOptionalPackageSources(
+  options: ValidateNativeSearchOptionalPackageSourcesOptions,
+): NativeSearchOptionalPackageSourceValidationResult {
+  const expectedPackages = getNativeSearchOptionalDependencyNames()
+  const packageVersion = normalizeOptionalString(options.packageVersion)
+  const releaseVersionValid = packageVersion != null && isReleasePackageVersion(packageVersion)
+  const packageSources = options.packageSources ?? {}
+  const readyPackages: string[] = []
+  const missingPackages: string[] = []
+  const invalidPackages: string[] = []
+  const blockers: NativeSearchOptionalPackageSourceBlocker[] = []
+  let hasInvalidPackageJson = false
+  let hasInvalidNativeManifest = false
+
+  if (packageVersion == null) {
+    blockers.push('package_source_version_required')
+  } else if (!releaseVersionValid) {
+    blockers.push('package_source_version_invalid')
+  }
+
+  for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
+    const source = packageSources[plan.packageName]
+    if (!isNativeSearchOptionalPackageSource(source)) {
+      missingPackages.push(plan.packageName)
+      continue
+    }
+
+    const packageJsonValid = releaseVersionValid
+      && packageVersion != null
+      && isNativeSearchOptionalPackageSourcePackageJson(source.packageJson, plan, packageVersion)
+    const nativeManifestValid = releaseVersionValid
+      && packageVersion != null
+      && isNativeSearchOptionalPackageSourceManifest(source.nativeSearchPackageManifest, plan, packageVersion)
+
+    if (!packageJsonValid || !nativeManifestValid) {
+      invalidPackages.push(plan.packageName)
+      if (!packageJsonValid) hasInvalidPackageJson = true
+      if (!nativeManifestValid) hasInvalidNativeManifest = true
+      continue
+    }
+
+    readyPackages.push(plan.packageName)
+  }
+
+  if (missingPackages.length > 0) blockers.push('package_source_manifest_missing')
+  if (hasInvalidPackageJson) blockers.push('package_source_package_json_invalid')
+  if (hasInvalidNativeManifest) blockers.push('package_source_native_manifest_invalid')
+
+  const plannedOptionalPackageManifestsVerified = releaseVersionValid
+    && readyPackages.length === expectedPackages.length
+    && missingPackages.length === 0
+    && invalidPackages.length === 0
+
+  return {
+    checked: true,
+    ready: blockers.length === 0 && plannedOptionalPackageManifestsVerified,
+    packageVersion: packageVersion ?? null,
+    blockers: uniqueSourceBlockers(blockers),
+    expectedPackages,
+    readyPackages,
+    missingPackages,
+    invalidPackages,
+    plannedOptionalPackageManifestsVerified,
+  }
+}
+
 export function validateNativeSearchPackagingConfig(
   builderConfigText: string,
 ): NativeSearchPackagingConfigValidationResult {
@@ -500,6 +595,85 @@ function packageManifestHasExpectedBinary(value: unknown, binaryName: string): b
   if (!isRecord(value)) return false
   const binaryPath = value['codeinsights-native-search']
   return binaryPath === `bin/${binaryName}`
+}
+
+function isNativeSearchOptionalPackageSource(value: unknown): value is NativeSearchOptionalPackageSource {
+  return isRecord(value)
+    && Object.prototype.hasOwnProperty.call(value, 'packageJson')
+    && Object.prototype.hasOwnProperty.call(value, 'nativeSearchPackageManifest')
+}
+
+function isNativeSearchOptionalPackageSourcePackageJson(
+  value: unknown,
+  plan: NativeSearchOptionalPackagePlan,
+  packageVersion: string,
+): boolean {
+  if (!isRecord(value)) return false
+  if (hasUnsafePathLikeKey(value)) return false
+  if (value.name !== plan.packageName) return false
+  if (value.version !== packageVersion) return false
+  if (value.private !== false) return false
+  if (typeof value.description !== 'string' || value.description.trim().length === 0) return false
+  if (typeof value.license !== 'string' || value.license.trim().length === 0) return false
+  if (!packageManifestTargetsPlatform(value.os, plan.platform)) return false
+  if (!packageManifestTargetsArch(value.cpu, plan.arch)) return false
+  if (!packageManifestHasExpectedBinary(value.bin, plan.binaryName)) return false
+  if (!packageManifestHasExpectedFiles(value.files, plan.binaryName)) return false
+  if (!isRecord(value.publishConfig) || value.publishConfig.access !== 'public') return false
+  if (hasInstallLifecycleScripts(value.scripts)) return false
+  if (hasRuntimeDependencyField(value)) return false
+  return true
+}
+
+function isNativeSearchOptionalPackageSourceManifest(
+  value: unknown,
+  plan: NativeSearchOptionalPackagePlan,
+  packageVersion: string,
+): boolean {
+  return isNativeSearchPackageManifest(value)
+    && value.packageName === plan.packageName
+    && value.packageVersion === packageVersion
+    && value.platform === plan.platform
+    && value.arch === plan.arch
+    && value.binaryName === plan.binaryName
+}
+
+function packageManifestHasExpectedFiles(value: unknown, binaryName: string): boolean {
+  if (!Array.isArray(value)) return false
+  const expectedFiles = [
+    'package.json',
+    'native-search-package.json',
+    `bin/${binaryName}`,
+  ]
+  if (value.length !== expectedFiles.length) return false
+  return expectedFiles.every((expectedFile) => value.includes(expectedFile))
+    && value.every((file) => typeof file === 'string' && expectedFiles.includes(file))
+}
+
+function hasInstallLifecycleScripts(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return [
+    'preinstall',
+    'install',
+    'postinstall',
+    'prepublish',
+    'prepublishOnly',
+    'prepare',
+    'prepack',
+    'postpack',
+    'publish',
+    'postpublish',
+  ].some((scriptName) => Object.prototype.hasOwnProperty.call(value, scriptName))
+}
+
+function hasRuntimeDependencyField(value: Record<string, unknown>): boolean {
+  return [
+    'dependencies',
+    'optionalDependencies',
+    'peerDependencies',
+    'bundledDependencies',
+    'bundleDependencies',
+  ].some((fieldName) => Object.prototype.hasOwnProperty.call(value, fieldName))
 }
 
 function isValidOptionalDependencyVersionSpec(value: unknown, expectedPackageName: string): value is string {
@@ -809,6 +983,12 @@ function normalizeOptionalString(value: string | null | undefined): string | nul
 function uniqueBlockers(
   blockers: NativeSearchOptionalPackagePublishTargetBlocker[],
 ): NativeSearchOptionalPackagePublishTargetBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
+}
+
+function uniqueSourceBlockers(
+  blockers: NativeSearchOptionalPackageSourceBlocker[],
+): NativeSearchOptionalPackageSourceBlocker[] {
   return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 
