@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 packaged bundled binary smoke plan 边界
+
+- `packagedBundledBinarySmokePlan` 只能作为真实 packaged app bundled binary smoke 的执行计划 / preflight 汇总；它不能读取 binary、执行安装、修改 package manifest、修改 builder 配置、创建 packaged app 或输出本地路径。
+- `packagedBundledBinarySmokePlan.status="blocked"` 表示仍有真实 gate 未满足；只要 `blockedBy` 非空或顶层 `bundledBinaryVerified=false`，都不能把真实 packaged bundled binary smoke 视为完成。
+- `packagedBundledBinarySmokePlan.status="ready"` 只表示 publication / optionalDependencies / install-chain / packaging config / prebuilt app root 等前置输入已具备，仍不等于真实 bundled binary 已验证。
+- `packagedBundledBinarySmokePlan.status="verified"` 必须同时要求顶层 `bundledBinaryVerified=true` 且 `blockedBy.length===0`；`realPackagedBinaryVerified=true`、临时 fixture、publication-only、packaging-only 或 install-chain-only 都不能单独把计划置为 verified。
+- plan detail 只能输出 blocker、required inputs、allowed / forbidden actions 和候选命令形状；不能泄露 `app-node-modules-root`、binary path、临时目录、home path、raw fs error 或 packaged app 实际路径。
+
 ## 2026-06-05 Rust / Go Phase 5 optional package publication gate 边界
 
 - optional package publication preflight 只能读取 registry packument metadata；默认 smoke 不联网，只有显式 `--check-registry` 才做只读查询。404 进入 `missingPublishedOptionalPackages`，非 OK / fetch error 进入 `unavailablePublishedOptionalPackages`，metadata 不匹配进入 `invalidPublishedOptionalPackages`，不能安装 package、写 lockfile、写 package.json 或读取 binary。

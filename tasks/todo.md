@@ -25,7 +25,7 @@
 - [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
 - [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
 - [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
-- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
 
 ### Review
 
@@ -35,6 +35,7 @@
 - 版本同步：`@codeinsights/electron` 已递增到 `0.0.153` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
 - 验证通过：新增测试先红灯；实现与审查修复后 `bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（46 pass）；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-manifest --check-registry` 预期 exit 1 no-go；`smoke:native-runtime -- --mode packaged-app-layout`；`smoke:native-runtime -- --mode packaged-app-layout --check-registry` 预期 exit 1 no-go；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
 - 边界保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；`apps/electron/package.json` / `bun.lock` / `apps/electron/electron-builder.yml` 中无真实 native search optionalDependencies；未 push，未创建 PR。
+- 状态同步：已更新 development checklist、sidecar protocol / smoke plan、next-session-prompt、tasks/lessons 和本 Review。最新开发基线推进到 `dedbfed1 feat(rust-go): 补齐 Phase 5 packaged smoke 执行计划预检`；本轮 docs 提交前最新已确认恢复入口为 `d2009562 docs(rust-go): 同步 Phase 5 optional package 发布预检后续状态`。状态同步提交完成后，最终回复给出实际 docs HEAD。
 
 ## 2026-06-05 Rust/Go Phase 5 optional package 发布预检状态同步计划
 
