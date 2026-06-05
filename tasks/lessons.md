@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional / packaged execution plan 边界
+
+- optional / packaged execution plan 只能描述下一步执行顺序：publish-target preflight -> package-source preflight -> optional package publication -> optionalDependencies declaration -> install-chain -> packaging config allowlist -> packaged app bundled binary smoke -> default-enable risk review。它不发布、不安装、不改 builder、不读取 binary，也不能证明真实 packaged binary。
+- `completedPrerequisites` 必须是 `nextStage` 之前的严格顺序前缀；单项独立证据只能放进 `observedEvidenceStages`，不能让后续 evidence 跳过前置 gate。
+- summary 顶层 `optionalPackagePublishTargetReady` / `optionalPackageSourceReady` 必须和对应 `checked` 字段绑定，即 `checked && ready`；否则 exported summary builder 可能出现 `checked=false` 但 `ready=true` 的矛盾状态，和 execution plan 分叉。
+- 即使 `optionalPackagePublishTargetReady=true` 且 `optionalPackageSourceReady=true`，也只能说明进入真实 optional package publication 的前置顺序已满足；仍不能外推为 `optionalPackagesPublished`、`optionalDependenciesDeclared`、`optionalDependenciesInstallChainVerified`、`packagingConfigVerified`、`realPackagedBinaryVerified`、`bundledBinaryVerified` 或 default-enable candidate。
+
 ## 2026-06-05 Rust / Go Phase 5 optional package source 最新恢复入口回填
 
 - `cf17e7da docs(rust-go): 同步 Phase 5 optional package source 后续状态` 已成为 optional package source preflight 后的最新已确认恢复入口；后续给下次启动提示词时，最新开发基线仍指向 `05c393bb`，最新恢复入口应从 `cf17e7da` 或其后的最新 Rust / Go docs 提交继续。
