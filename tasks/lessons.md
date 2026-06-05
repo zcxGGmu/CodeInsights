@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional package source 最新恢复入口回填
+
+- `cf17e7da docs(rust-go): 同步 Phase 5 optional package source 后续状态` 已成为 optional package source preflight 后的最新已确认恢复入口；后续给下次启动提示词时，最新开发基线仍指向 `05c393bb`，最新恢复入口应从 `cf17e7da` 或其后的最新 Rust / Go docs 提交继续。
+- 用户再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，不要只口头说明已有文档；要把当前 `git log` 可确认的最新 docs 提交回填到 checklist 和 next-session prompt，再运行禁改边界验证并单独提交。
+
 ## 2026-06-05 Rust / Go Phase 5 optional package source preflight 边界
 
 - optional package source preflight 只验证 planned in-memory npm package source blueprint：package name / version、`private=false`、license / description、`os` / `cpu`、`bin.codeinsights-native-search`、精确 `files` allowlist、`publishConfig.access=public` 和对应 `native-search-package.json` 计划；它不运行 `npm pack`、不发布、不安装、不读取 binary、不计算真实 binary SHA、不修改 optionalDependencies，也不证明 packaged app bundled binary。
