@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-05 Rust / Go Phase 5 optional package publish-target dry-run 边界
+
+- Publish-target dry-run 只检查计划发布版本、registry 目标版本 collision、planned optional package manifest metadata、Cargo version 与 source `BINARY_VERSION` 一致性；它不能发布 package、安装 package、写 package manifest、修改 builder、读取 binary 或证明 packaged binary。
+- 默认 smoke 不联网时必须保持 `optionalPackagePublishTargetReady=false`；只有显式 `--check-registry` 才能做只读 registry 查询。
+- Registry 404 在 publish-target 语义中表示目标版本当前可发布，不等于 optional package 已发布；不能把 `publishTargetAvailablePackages` 映射成 `optionalPackagesPublished=true`。
+- 当前 `native/search/Cargo.toml=0.0.3` 且 source `BINARY_VERSION=0.0.3-dev` 时，必须用 `native_search_binary_version_not_release_ready` 阻断 release-ready target；这个 blocker 与 publication gate 的 `optional_packages_not_published` 是不同 no-go。
+- Publish-target dry-run 不能改变 `realPackagedBinaryVerified`、`bundledBinaryVerified`、`packagedBundledBinarySmokePlan.status` 或 native default-enable 结论；真实 optional publication、install-chain、packaging config、packaged evidence、identity 和真实 binary verification 仍必须分别通过。
+
 ## 2026-06-05 阶段完成后自动同步文档与提示词
 
 - 用户再次强调“每个阶段性任务完成后自动去做”时，要视为长期工作习惯：阶段实现提交后立即同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交状态文档。

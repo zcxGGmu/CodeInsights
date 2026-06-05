@@ -26,10 +26,11 @@
 - [x] 运行既有 no-go smoke：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 与 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
 - [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
 - [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
-- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
 
 ### Review
 
+- 实现提交：`9e3e3dff feat(rust-go): 补齐 Phase 5 optional package publish target 预检`。
 - 已新增 `validateNativeSearchOptionalPackagePublishTarget()` 和 `smoke:native-runtime -- --mode optional-package-publish-target`。该 dry-run gate 只读检查计划发布版本、registry 目标版本冲突、planned optional package manifest 元数据、Cargo version 与 source `BINARY_VERSION` 一致性；不发布 npm package、不安装 package、不写 package manifest、不读取 binary、不输出路径。
 - 新增 summary 字段：`optionalPackagePublishTargetChecked`、`optionalPackagePublishTargetReady`、`optionalPackagePublishTargetVersion`、`optionalPackagePublishTargetBlockers`、`publishTargetAvailablePackages`、`publishedVersionCollisionPackages`、`invalidPublishTargetPackages`、`unavailablePublishTargetPackages`、`nativeSearchVersionConsistencyVerified`、`nativeSearchCargoVersion`、`nativeSearchBinaryVersion`、`plannedOptionalPackageManifestsVerified`。
 - 当前默认离线 dry-run 输出 `optionalPackagePublishTargetChecked=false`、`optionalPackagePublishTargetReady=false`，blockers 包含 `registry_check_required` 和 `native_search_binary_version_not_release_ready`，exit 0；显式 `--check-registry` 只读查询 npm 后，4 个 planned packages 目标版本当前可发布，但仍因 `native/search/src/lib.rs` 为 `0.0.3-dev` 输出 `native_search_binary_version_not_release_ready`，exit 1。
@@ -37,6 +38,8 @@
 - 版本同步：`@codeinsights/electron` 已递增到 `0.0.154` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
 - 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（55 pass）；默认 optional publish-target smoke；显式 registry dry-run 预期 exit 1 no-go；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
 - 代码审查子代理未发现 Critical / High 问题；只建议回填本 Review 与 checklist。边界保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。
+- 状态同步已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和 `tasks/lessons.md`：最新开发基线推进到 `9e3e3dff`，最新已确认恢复入口先保留 `a05084cd docs(rust-go): 回填 Phase 5 packaged smoke 最新恢复入口`，本轮 docs 提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 当前 no-go 保持：真实 optional package 尚未发布，真实 optionalDependencies 未声明 / 未安装，builder allowlist 未实际修改，真实 packaged app bundled binary smoke 未执行，publish-target dry-run 仍被 `native_search_binary_version_not_release_ready` 阻断，native 继续 default off / 显式 opt-in。
 
 ## 2026-06-05 Rust/Go Phase 5 packaged smoke 恢复入口回填计划
 
