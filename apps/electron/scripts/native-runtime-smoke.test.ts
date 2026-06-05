@@ -224,6 +224,187 @@ describe('native-runtime-smoke', () => {
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
   })
 
+  test('summary 输出真实 packaged bundled binary smoke 执行计划并保持当前 no-go 为 blocked', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      verification: {
+        requiresPrebuiltPackagedApp: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: false,
+        optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: false,
+        packagingConfigVerified: false,
+        missingPackagingConfigPackages: ['@codeinsights/native-search-darwin-arm64'],
+        blockingPackagingConfigExcludes: ['!node_modules/@codeinsights/**'],
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'skipped',
+        detail: 'requiresPrebuiltPackagedApp=true',
+      }],
+    })
+
+    expect(summary.packagedBundledBinarySmokePlan).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      blockedBy: [
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
+        'prebuilt_packaged_app_required',
+      ],
+      requiredInputs: [
+        'published_optional_packages',
+        'native_search_optional_dependencies',
+        'optional_dependency_install_chain',
+        'electron_builder_native_search_allowlist',
+        'prebuilt_packaged_app_node_modules_root',
+        'packaged_app_identity',
+        'bundled_native_search_binary',
+      ],
+      nextAllowedActions: [
+        'publish_optional_packages_after_release_approval',
+        'declare_optional_dependencies_after_packages_are_published',
+        'run_install_chain_after_optional_dependencies_are_declared',
+        'prepare_builder_allowlist_change_for_review',
+        'run_candidate_command_against_real_packaged_app',
+      ],
+      forbiddenActions: [
+        'do_not_enable_native_by_default_before_verified',
+        'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+        'do_not_use_system_path_for_native_binary',
+        'do_not_output_binary_path_or_packaged_root',
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+      ],
+      candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+    })
+    expect(JSON.stringify(summary.packagedBundledBinarySmokePlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.packagedBundledBinarySmokePlan)).not.toContain('binaryPath')
+  })
+
+  test('packaged bundled binary smoke plan 仅在前置输入满足但尚未真实验证时进入 ready', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        realPackagedBinaryVerified: false,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'realPackagedBinaryVerified=false',
+      }],
+    })
+
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('ready')
+    expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual([])
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+  })
+
+  test('packaged bundled binary smoke plan 只有真实 binary gate 通过才进入 verified', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        bundledBinaryVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'realPackagedBinaryVerified=true',
+      }],
+    })
+
+    expect(summary.realPackagedBinaryVerified).toBe(true)
+    expect(summary.bundledBinaryVerified).toBe(true)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('verified')
+    expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual([])
+  })
+
+  test('packaged bundled binary smoke plan verified 必须绑定 bundledBinaryVerified', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      verification: {
+        bundledBinaryVerified: false,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'realPackagedBinaryVerified=true; bundledBinaryVerified=false',
+      }],
+    })
+
+    expect(summary.realPackagedBinaryVerified).toBe(true)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).not.toBe('verified')
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('ready')
+  })
+
+  test('packaged bundled binary smoke plan verified 仍必须没有其他 blocker', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      verification: {
+        bundledBinaryVerified: true,
+        packagedAppLayoutVerified: false,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        realPackagedBinaryVerified: true,
+      },
+      cases: [{
+        name: 'packaged-app-layout',
+        status: 'passed',
+        detail: 'bundledBinaryVerified=true; appNodeModulesRootProvided=false',
+      }],
+    })
+
+    expect(summary.bundledBinaryVerified).toBe(true)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual(['prebuilt_packaged_app_required'])
+  })
+
   test('smoke exit code 在任意 case failed 时返回 1', () => {
     const passedSummary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',

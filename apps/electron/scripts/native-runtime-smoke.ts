@@ -58,6 +58,29 @@ export interface NativeRuntimeSmokeCase {
   detail?: string
 }
 
+export type PackagedBundledBinarySmokePlanStatus = 'blocked' | 'ready' | 'verified'
+
+export type PackagedBundledBinarySmokePlanBlocker =
+  | 'optional_packages_not_published'
+  | 'optional_dependencies_not_declared'
+  | 'optional_package_install_chain_not_verified'
+  | 'packaging_config_not_verified'
+  | 'prebuilt_packaged_app_required'
+  | 'packaged_app_layout_not_verified'
+  | 'packaged_app_evidence_not_verified'
+  | 'packaged_app_identity_not_verified'
+  | 'temporary_fixture_not_allowed'
+
+export interface PackagedBundledBinarySmokePlan {
+  schemaVersion: 1
+  status: PackagedBundledBinarySmokePlanStatus
+  blockedBy: PackagedBundledBinarySmokePlanBlocker[]
+  requiredInputs: string[]
+  nextAllowedActions: string[]
+  forbiddenActions: string[]
+  candidateCommand: string
+}
+
 export interface NativeRuntimeSmokeSummary {
   schemaVersion: number
   generatedAt: string
@@ -89,6 +112,7 @@ export interface NativeRuntimeSmokeSummary {
   blockingPackagingConfigExcludes: string[]
   tooBroadPackagingConfigIncludes: string[]
   realPackagedBinaryVerified: boolean
+  packagedBundledBinarySmokePlan: PackagedBundledBinarySmokePlan
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
@@ -191,6 +215,19 @@ export function buildNativeRuntimeSmokeSummary(input: {
     && Boolean(verification.realPackagedBinaryVerified)
   const bundledBinaryVerified = realPackagedBinaryVerified
     && Boolean(verification.bundledBinaryVerified)
+  const packagedBundledBinarySmokePlan = buildPackagedBundledBinarySmokePlan({
+    appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
+    optionalPackagesPublished,
+    optionalDependenciesDeclared,
+    optionalDependenciesInstallChainVerified,
+    packagingConfigVerified,
+    packagedAppLayoutVerified: Boolean(verification.packagedAppLayoutVerified),
+    packagedAppEvidenceVerified,
+    packagedAppIdentityVerified,
+    usesTemporaryFixture,
+    realPackagedBinaryVerified,
+    bundledBinaryVerified,
+  })
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -224,6 +261,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     blockingPackagingConfigExcludes: verification.blockingPackagingConfigExcludes ?? [],
     tooBroadPackagingConfigIncludes: verification.tooBroadPackagingConfigIncludes ?? [],
     realPackagedBinaryVerified,
+    packagedBundledBinarySmokePlan,
     nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
       benchmarkEvaluated: false,
       benchmarkGatePassed: false,
@@ -243,6 +281,69 @@ export function buildNativeRuntimeSmokeSummary(input: {
       ...smokeCase,
       detail: smokeCase.detail ? redactNativeRuntimeText(smokeCase.detail) : undefined,
     })),
+  }
+}
+
+function buildPackagedBundledBinarySmokePlan(input: {
+  appNodeModulesRootProvided: boolean
+  optionalPackagesPublished: boolean
+  optionalDependenciesDeclared: boolean
+  optionalDependenciesInstallChainVerified: boolean
+  packagingConfigVerified: boolean
+  packagedAppLayoutVerified: boolean
+  packagedAppEvidenceVerified: boolean
+  packagedAppIdentityVerified: boolean
+  usesTemporaryFixture: boolean
+  realPackagedBinaryVerified: boolean
+  bundledBinaryVerified: boolean
+}): PackagedBundledBinarySmokePlan {
+  const blockedBy: PackagedBundledBinarySmokePlanBlocker[] = []
+
+  if (!input.optionalPackagesPublished) blockedBy.push('optional_packages_not_published')
+  if (!input.optionalDependenciesDeclared) blockedBy.push('optional_dependencies_not_declared')
+  if (!input.optionalDependenciesInstallChainVerified) blockedBy.push('optional_package_install_chain_not_verified')
+  if (!input.packagingConfigVerified) blockedBy.push('packaging_config_not_verified')
+
+  if (!input.appNodeModulesRootProvided) {
+    blockedBy.push('prebuilt_packaged_app_required')
+  } else {
+    if (!input.packagedAppLayoutVerified) blockedBy.push('packaged_app_layout_not_verified')
+    if (!input.packagedAppEvidenceVerified) blockedBy.push('packaged_app_evidence_not_verified')
+    if (!input.packagedAppIdentityVerified) blockedBy.push('packaged_app_identity_not_verified')
+    if (input.usesTemporaryFixture) blockedBy.push('temporary_fixture_not_allowed')
+  }
+
+  return {
+    schemaVersion: 1,
+    status: input.bundledBinaryVerified && blockedBy.length === 0
+      ? 'verified'
+      : blockedBy.length === 0 ? 'ready' : 'blocked',
+    blockedBy,
+    requiredInputs: [
+      'published_optional_packages',
+      'native_search_optional_dependencies',
+      'optional_dependency_install_chain',
+      'electron_builder_native_search_allowlist',
+      'prebuilt_packaged_app_node_modules_root',
+      'packaged_app_identity',
+      'bundled_native_search_binary',
+    ],
+    nextAllowedActions: [
+      'publish_optional_packages_after_release_approval',
+      'declare_optional_dependencies_after_packages_are_published',
+      'run_install_chain_after_optional_dependencies_are_declared',
+      'prepare_builder_allowlist_change_for_review',
+      'run_candidate_command_against_real_packaged_app',
+    ],
+    forbiddenActions: [
+      'do_not_enable_native_by_default_before_verified',
+      'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+      'do_not_use_system_path_for_native_binary',
+      'do_not_output_binary_path_or_packaged_root',
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_add_native_search_optional_dependencies_before_publication',
+    ],
+    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
   }
 }
 
