@@ -1599,6 +1599,10 @@ describe('native-runtime-smoke', () => {
     )
     expect(summary.optionalPackagePublishTargetBlockers).toContain('publish_target_version_already_exists')
     expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublicationChangePlan.publishedPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackagePublicationChangePlan.candidatePublicationCommands).toEqual([])
     expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
   })
 

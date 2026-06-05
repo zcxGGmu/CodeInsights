@@ -526,6 +526,10 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
     && options.packageSource.ready
     && packageSourceVersionMatches
   const optionalPackagesPublished = options.publication.published
+  const publishedPackagesForPlan = uniqueStrings([
+    ...options.publication.publishedPackages,
+    ...options.publishTarget.publishedVersionCollisionPackages,
+  ])
   const blockers: NativeSearchOptionalPackagePublicationChangePlanBlocker[] = []
 
   if (packageVersion == null) {
@@ -544,7 +548,11 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
     }
   }
 
-  if (options.publication.publishedPackages.length > 0 && !optionalPackagesPublished) {
+  if (
+    publishedPackagesForPlan.length > 0
+    && publishedPackagesForPlan.length < options.publication.expectedPackages.length
+    && !optionalPackagesPublished
+  ) {
     blockers.push('optional_package_publication_partial')
   }
   if (options.publication.invalidPackages.length > 0) {
@@ -568,8 +576,10 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
         packageVersion,
       }))
       : [],
-    publishedPackages: options.publication.publishedPackages,
-    missingPublishedPackages: options.publication.missingPackages,
+    publishedPackages: publishedPackagesForPlan,
+    missingPublishedPackages: options.publication.missingPackages.filter((packageName) => (
+      !publishedPackagesForPlan.includes(packageName)
+    )),
     invalidPublishedPackages: options.publication.invalidPackages,
     unavailablePublishedPackages: options.publication.unavailablePackages,
     blockedBy: uniquePublicationChangePlanBlockers(blockers),
@@ -588,7 +598,7 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
     candidatePublicationCommands: blockers.includes('optional_packages_already_published')
       ? []
       : NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
-        .filter((plan) => !options.publication.publishedPackages.includes(plan.packageName))
+        .filter((plan) => !publishedPackagesForPlan.includes(plan.packageName))
         .map((plan) => (
           `npm publish <native-search-package-source:${plan.packageName}> --access public`
         )),
