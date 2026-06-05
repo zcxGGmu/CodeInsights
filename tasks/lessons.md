@@ -1,22 +1,30 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 optionalDependencies install-chain dry-run plan 边界
+
+- `7726a008 feat(rust-go): 补齐 Phase 5 optionalDependencies install-chain dry-run plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `7726a008`，最新恢复入口应从本轮 docs 状态同步提交继续。
+- `optionalDependenciesInstallChainChangePlan` 只生成真实 optionalDependencies 声明与安装执行前的人工 review 输入：4 个 planned exact optionalDependency spec、publication / declaration / install-chain / lockfile / installed package blockers、candidate verification commands 和 forbidden actions。它不发布 package、不写 `apps/electron/package.json`、不写 `bun.lock`、不运行安装、不读取 installed package root / binary path、不修改 builder，也不证明 packaged app bundled binary。
+- 当前 4 个 planned exact spec 必须绑定 source `BINARY_VERSION=0.0.3` / planned package version `0.0.3`；如果没有读取到当前 manifest / lockfile / installed package 证据，plan 必须保守列出缺失 expected packages 和未验证 blockers，不能把 planned spec 当成已声明或已安装。
+- `packaged-manifest` / `packaged-app-layout` 的 publication registry 检查必须绑定 planned source version 对应的 exact expected version，不能只看 registry `latest`。否则可能出现 publication 检查证明 `latest`，install-chain 却计划另一个版本的漂移。
+- 即使 plan 未来进入 `ready_for_review`，也只能表示可提交人工审核；不能外推为 `optionalPackagesPublished=true`、`optionalDependenciesDeclared=true`、`optionalDependenciesInstallChainVerified=true`、`optionalDependenciesLockfileVerified=true`、`optionalDependenciesInstalledPackagesVerified=true`、`packagingConfigVerified=true`、`realPackagedBinaryVerified=true`、`bundledBinaryVerified=true` 或 default-enable candidate。
+
 ## 2026-06-06 Rust / Go Phase 5 最新恢复入口回填习惯
 
-- `95c9bf12 docs(rust-go): 同步 Phase 5 builder allowlist dry-run 后续状态` 已成为当前最新已确认 Rust / Go docs 恢复入口；最新开发基线仍保持 `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan`。
+- `95c9bf12 docs(rust-go): 同步 Phase 5 builder allowlist dry-run 后续状态` 曾是 builder allowlist dry-run 后的最新已确认 Rust / Go docs 恢复入口；本条已被上方 optionalDependencies install-chain dry-run plan lesson 覆盖，后续最新开发基线应指向 `7726a008`，不再停留在 `a3f98673`。
 - 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”或再次强调“记住每阶段完成后自动做”时，必须把当前 `git log` 中真实最新 docs 同步提交回填进 checklist 和 next-session prompt，不能继续保留上一轮占位恢复入口。
 - 每个阶段完成后的自动收尾固定为：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行禁改边界验证，并单独提交状态同步。
 - 仓库文档无法预写本轮未来提交 hash 时，先写当前已存在的 docs 恢复入口；最终回复必须再给出本轮新提交后的实际 HEAD 和可复制启动提示词。
 
 ## 2026-06-05 Rust / Go Phase 5 builder allowlist dry-run plan 边界
 
-- `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `a3f98673`，最新恢复入口应从 `95c9bf12` 或其后的最新 Rust / Go docs 同步提交继续。
+- `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan` 曾是 builder allowlist dry-run 后的最新开发基线；本条已被上方 optionalDependencies install-chain dry-run plan lesson 覆盖，后续最新开发基线应指向 `7726a008`，不再停留在 `a3f98673`。
 - builder allowlist dry-run plan 只生成 `packagingConfigAllowlistChangePlan` 作为人工 review 输入：required includes、missing includes、blocking excludes、too-broad includes、removal candidates、candidate verification commands 和 forbidden actions。它不修改 `apps/electron/electron-builder.yml`，不新增 optionalDependencies，不安装、不发布、不读取 binary，也不证明 packaged app bundled binary。
 - 当前 required includes 必须保持精确 per-package 形态：`node_modules/@codeinsights/native-search-darwin-arm64/**/*`、`node_modules/@codeinsights/native-search-darwin-x64/**/*`、`node_modules/@codeinsights/native-search-win32-x64/**/*`、`node_modules/@codeinsights/native-search-linux-x64/**/*`；当前 blocker `!node_modules/@codeinsights/**` 仍表示真实 builder allowlist 未通过。
 - 后续即使 dry-run plan 进入 `ready_for_review`，也只能表示可提交人工审核；不能外推为 `packagingConfigVerified=true`、`optionalDependenciesInstallChainVerified=true`、`bundledBinaryVerified=true` 或 default-enable candidate。
 
 ## 2026-06-05 Rust / Go Phase 5 optional packaged 最新恢复入口回填
 
-- `3d82125e docs(rust-go): 同步 Phase 5 optional packaged 执行顺序后续状态` 曾是 optional / packaged execution plan 后的最新已确认恢复入口；本条已被上方 builder allowlist dry-run plan lesson 覆盖，后续最新开发基线应指向 `a3f98673`，不再停留在 `ce89f490`。
+- `3d82125e docs(rust-go): 同步 Phase 5 optional packaged 执行顺序后续状态` 曾是 optional / packaged execution plan 后的最新已确认恢复入口；本条已被上方后续 dry-run plan lessons 覆盖，后续最新开发基线应指向 `7726a008`，不再停留在 `ce89f490` 或 `a3f98673`。
 - 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，必须同时检查 development checklist 顶部状态和底部可复制提示词；只更新顶部会留下可恢复入口不一致。
 - 用户再次强调“每个阶段性任务完成后自动去做”时，把它作为当前项目默认收尾动作：阶段实现提交后自动同步 checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交；如果当前 HEAD 已经是 docs 状态同步提交，也要回填该 docs 提交为下一轮恢复入口。
 
@@ -29,7 +37,7 @@
 
 ## 2026-06-05 Rust / Go Phase 5 optional package source 最新恢复入口回填
 
-- `cf17e7da docs(rust-go): 同步 Phase 5 optional package source 后续状态` 已成为 optional package source preflight 后的最新已确认恢复入口；后续给下次启动提示词时，最新开发基线仍指向 `05c393bb`，最新恢复入口应从 `cf17e7da` 或其后的最新 Rust / Go docs 提交继续。
+- `cf17e7da docs(rust-go): 同步 Phase 5 optional package source 后续状态` 曾是 optional package source preflight 后的最新已确认恢复入口；本条已被上方后续 dry-run plan lessons 覆盖，后续最新开发基线应指向 `7726a008`，不再停留在 `05c393bb`。
 - 用户再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，不要只口头说明已有文档；要把当前 `git log` 可确认的最新 docs 提交回填到 checklist 和 next-session prompt，再运行禁改边界验证并单独提交。
 
 ## 2026-06-05 Rust / Go Phase 5 optional package source preflight 边界
