@@ -109,6 +109,45 @@ export interface NativeSearchPackagingConfigValidationResult {
   tooBroadIncludes: string[]
 }
 
+export type NativeSearchOptionalPackageExecutionStage =
+  | 'publish_target_preflight'
+  | 'package_source_preflight'
+  | 'optional_package_publication'
+  | 'optional_dependencies_declaration'
+  | 'optional_package_install_chain'
+  | 'packaging_config_allowlist'
+  | 'packaged_app_bundled_binary_smoke'
+  | 'default_enable_risk_review'
+  | 'complete'
+
+export type NativeSearchOptionalPackageExecutionBlocker =
+  | 'optional_package_publish_target_not_ready'
+  | 'optional_package_source_not_ready'
+  | 'optional_packages_not_published'
+  | 'optional_dependencies_not_declared'
+  | 'optional_package_install_chain_not_verified'
+  | 'packaging_config_not_verified'
+  | 'packaged_app_bundled_binary_not_verified'
+  | 'default_enable_risk_review_not_completed'
+
+export interface NativeSearchOptionalPackageExecutionPlan {
+  schemaVersion: 1
+  nextStage: NativeSearchOptionalPackageExecutionStage
+  completedPrerequisites: NativeSearchOptionalPackageExecutionStage[]
+  observedEvidenceStages: NativeSearchOptionalPackageExecutionStage[]
+  blockedBy: NativeSearchOptionalPackageExecutionBlocker[]
+  readyForPublication: boolean
+  readyForOptionalDependencies: boolean
+  readyForInstallChain: boolean
+  readyForPackagingConfigChange: boolean
+  readyForPackagedBundledBinarySmoke: boolean
+  readyForDefaultEnableRiskReview: boolean
+  verified: boolean
+  nextAllowedActions: string[]
+  candidateCommands: string[]
+  forbiddenActions: string[]
+}
+
 interface ValidateNativeSearchOptionalPackageInstallChainOptions {
   packageJson: unknown
   lockfileText?: string
@@ -133,6 +172,19 @@ interface ValidateNativeSearchOptionalPackagePublishTargetOptions {
 interface ValidateNativeSearchOptionalPackageSourcesOptions {
   packageVersion?: string
   packageSources?: Record<string, NativeSearchOptionalPackageSource | unknown>
+}
+
+interface BuildNativeSearchOptionalPackageExecutionPlanOptions {
+  optionalPackagePublishTargetChecked?: boolean
+  optionalPackagePublishTargetReady?: boolean
+  optionalPackageSourceChecked?: boolean
+  optionalPackageSourceReady?: boolean
+  optionalPackagesPublished?: boolean
+  optionalDependenciesDeclared?: boolean
+  optionalDependenciesInstallChainVerified?: boolean
+  packagingConfigVerified?: boolean
+  bundledBinaryVerified?: boolean
+  defaultEnableRiskReviewCompleted?: boolean
 }
 
 interface BuildNativeSearchPackageManifestOptions {
@@ -523,10 +575,188 @@ export function validateNativeSearchPackagingConfig(
   }
 }
 
+export function buildNativeSearchOptionalPackageExecutionPlan(
+  options: BuildNativeSearchOptionalPackageExecutionPlanOptions,
+): NativeSearchOptionalPackageExecutionPlan {
+  const optionalPackagePublishTargetReady = Boolean(options.optionalPackagePublishTargetChecked)
+    && Boolean(options.optionalPackagePublishTargetReady)
+  const optionalPackageSourceReady = Boolean(options.optionalPackageSourceChecked)
+    && Boolean(options.optionalPackageSourceReady)
+  const optionalPackagesPublished = Boolean(options.optionalPackagesPublished)
+  const optionalDependenciesDeclared = Boolean(options.optionalDependenciesDeclared)
+  const optionalDependenciesInstallChainVerified = Boolean(options.optionalDependenciesInstallChainVerified)
+  const packagingConfigVerified = Boolean(options.packagingConfigVerified)
+  const bundledBinaryVerified = Boolean(options.bundledBinaryVerified)
+  const defaultEnableRiskReviewCompleted = Boolean(options.defaultEnableRiskReviewCompleted)
+
+  const observedEvidenceStages: NativeSearchOptionalPackageExecutionStage[] = []
+  if (optionalPackagePublishTargetReady) observedEvidenceStages.push('publish_target_preflight')
+  if (optionalPackageSourceReady) observedEvidenceStages.push('package_source_preflight')
+  if (optionalPackagesPublished) observedEvidenceStages.push('optional_package_publication')
+  if (optionalDependenciesDeclared) observedEvidenceStages.push('optional_dependencies_declaration')
+  if (optionalDependenciesInstallChainVerified) observedEvidenceStages.push('optional_package_install_chain')
+  if (packagingConfigVerified) observedEvidenceStages.push('packaging_config_allowlist')
+  if (bundledBinaryVerified) observedEvidenceStages.push('packaged_app_bundled_binary_smoke')
+  if (defaultEnableRiskReviewCompleted) observedEvidenceStages.push('default_enable_risk_review')
+
+  const blockedBy: NativeSearchOptionalPackageExecutionBlocker[] = []
+  if (!optionalPackagePublishTargetReady) blockedBy.push('optional_package_publish_target_not_ready')
+  if (!optionalPackageSourceReady) blockedBy.push('optional_package_source_not_ready')
+  if (!optionalPackagesPublished) blockedBy.push('optional_packages_not_published')
+  if (!optionalDependenciesDeclared) blockedBy.push('optional_dependencies_not_declared')
+  if (!optionalDependenciesInstallChainVerified) blockedBy.push('optional_package_install_chain_not_verified')
+  if (!packagingConfigVerified) blockedBy.push('packaging_config_not_verified')
+  if (!bundledBinaryVerified) blockedBy.push('packaged_app_bundled_binary_not_verified')
+  if (!defaultEnableRiskReviewCompleted) blockedBy.push('default_enable_risk_review_not_completed')
+
+  const readyForPublication = optionalPackagePublishTargetReady && optionalPackageSourceReady
+  const readyForOptionalDependencies = readyForPublication && optionalPackagesPublished
+  const readyForInstallChain = readyForOptionalDependencies && optionalDependenciesDeclared
+  const readyForPackagingConfigChange = readyForInstallChain && optionalDependenciesInstallChainVerified
+  const readyForPackagedBundledBinarySmoke = readyForPackagingConfigChange && packagingConfigVerified
+  const readyForDefaultEnableRiskReview = readyForPackagedBundledBinarySmoke && bundledBinaryVerified
+  const verified = readyForDefaultEnableRiskReview && defaultEnableRiskReviewCompleted
+  const nextStage = getNativeSearchOptionalPackageExecutionNextStage({
+    optionalPackagePublishTargetReady,
+    optionalPackageSourceReady,
+    optionalPackagesPublished,
+    optionalDependenciesDeclared,
+    optionalDependenciesInstallChainVerified,
+    packagingConfigVerified,
+    bundledBinaryVerified,
+    defaultEnableRiskReviewCompleted,
+  })
+
+  return {
+    schemaVersion: 1,
+    nextStage,
+    completedPrerequisites: getNativeSearchOptionalPackageCompletedPrerequisites(nextStage),
+    observedEvidenceStages,
+    blockedBy,
+    readyForPublication,
+    readyForOptionalDependencies,
+    readyForInstallChain,
+    readyForPackagingConfigChange,
+    readyForPackagedBundledBinarySmoke,
+    readyForDefaultEnableRiskReview,
+    verified,
+    nextAllowedActions: getNativeSearchOptionalPackageExecutionNextActions(nextStage),
+    candidateCommands: getNativeSearchOptionalPackageExecutionCandidateCommands(nextStage),
+    forbiddenActions: [
+      'do_not_treat_publish_target_ready_as_package_published',
+      'do_not_treat_package_source_ready_as_npm_pack_or_publication',
+      'do_not_declare_optional_dependencies_before_publication',
+      'do_not_run_install_chain_before_optional_dependencies_are_declared',
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+      'do_not_enable_native_by_default_before_verified',
+    ],
+  }
+}
+
 function normalizePackageNameList(values: string[], expectedPackages: string[]): string[] {
   return values.filter((value, index) => (
     expectedPackages.includes(value) && values.indexOf(value) === index
   ))
+}
+
+function getNativeSearchOptionalPackageExecutionNextStage(options: {
+  optionalPackagePublishTargetReady: boolean
+  optionalPackageSourceReady: boolean
+  optionalPackagesPublished: boolean
+  optionalDependenciesDeclared: boolean
+  optionalDependenciesInstallChainVerified: boolean
+  packagingConfigVerified: boolean
+  bundledBinaryVerified: boolean
+  defaultEnableRiskReviewCompleted: boolean
+}): NativeSearchOptionalPackageExecutionStage {
+  if (!options.optionalPackagePublishTargetReady) return 'publish_target_preflight'
+  if (!options.optionalPackageSourceReady) return 'package_source_preflight'
+  if (!options.optionalPackagesPublished) return 'optional_package_publication'
+  if (!options.optionalDependenciesDeclared) return 'optional_dependencies_declaration'
+  if (!options.optionalDependenciesInstallChainVerified) return 'optional_package_install_chain'
+  if (!options.packagingConfigVerified) return 'packaging_config_allowlist'
+  if (!options.bundledBinaryVerified) return 'packaged_app_bundled_binary_smoke'
+  if (!options.defaultEnableRiskReviewCompleted) return 'default_enable_risk_review'
+  return 'complete'
+}
+
+function getNativeSearchOptionalPackageCompletedPrerequisites(
+  stage: NativeSearchOptionalPackageExecutionStage,
+): NativeSearchOptionalPackageExecutionStage[] {
+  const orderedStages: NativeSearchOptionalPackageExecutionStage[] = [
+    'publish_target_preflight',
+    'package_source_preflight',
+    'optional_package_publication',
+    'optional_dependencies_declaration',
+    'optional_package_install_chain',
+    'packaging_config_allowlist',
+    'packaged_app_bundled_binary_smoke',
+    'default_enable_risk_review',
+  ]
+  const stageIndex = orderedStages.indexOf(stage)
+  return stageIndex < 0 ? orderedStages : orderedStages.slice(0, stageIndex)
+}
+
+function getNativeSearchOptionalPackageExecutionNextActions(
+  stage: NativeSearchOptionalPackageExecutionStage,
+): string[] {
+  switch (stage) {
+    case 'publish_target_preflight':
+      return ['run_optional_package_publish_target_dry_run_with_explicit_registry_check']
+    case 'package_source_preflight':
+      return ['run_optional_package_source_preflight']
+    case 'optional_package_publication':
+      return ['publish_optional_packages_after_release_approval']
+    case 'optional_dependencies_declaration':
+      return ['declare_native_search_optional_dependencies_after_publication']
+    case 'optional_package_install_chain':
+      return ['run_install_chain_after_optional_dependencies_are_declared']
+    case 'packaging_config_allowlist':
+      return ['prepare_electron_builder_native_search_allowlist_change_for_review']
+    case 'packaged_app_bundled_binary_smoke':
+      return ['run_packaged_app_bundled_binary_smoke_against_prebuilt_app']
+    case 'default_enable_risk_review':
+      return ['complete_default_enable_risk_review_after_packaged_smoke']
+    case 'complete':
+      return []
+  }
+}
+
+function getNativeSearchOptionalPackageExecutionCandidateCommands(
+  stage: NativeSearchOptionalPackageExecutionStage,
+): string[] {
+  switch (stage) {
+    case 'publish_target_preflight':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version <native-search-package-version> --check-registry",
+      ]
+    case 'package_source_preflight':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version <native-search-package-version>",
+      ]
+    case 'optional_package_publication':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ]
+    case 'optional_dependencies_declaration':
+    case 'optional_package_install_chain':
+    case 'packaging_config_allowlist':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      ]
+    case 'default_enable_risk_review':
+      return [
+        "bun run --filter='@codeinsights/electron' native-runtime:benchmark",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      ]
+    case 'complete':
+      return []
+  }
 }
 
 function isNativeSearchRegistryPackument(

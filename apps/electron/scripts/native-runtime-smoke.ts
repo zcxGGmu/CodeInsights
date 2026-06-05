@@ -23,6 +23,7 @@ import {
   validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
+  buildNativeSearchOptionalPackageExecutionPlan,
   type NativeSearchOptionalPackageSourceBlocker,
   type NativeSearchOptionalPackageSourceValidationResult,
   type NativeSearchOptionalPackagePublishTargetBlocker,
@@ -31,6 +32,7 @@ import {
   type NativeSearchPackagingConfigValidationResult,
   type NativeSearchOptionalPackageInstallChainValidationResult,
   type NativeSearchOptionalDependenciesValidationResult,
+  type NativeSearchOptionalPackageExecutionPlan,
 } from '../src/main/lib/native-runtime/native-runtime-package-manifest'
 import {
   NativeSearchPackageResolutionError,
@@ -141,6 +143,7 @@ export interface NativeRuntimeSmokeSummary {
   blockingPackagingConfigExcludes: string[]
   tooBroadPackagingConfigIncludes: string[]
   realPackagedBinaryVerified: boolean
+  optionalPackageExecutionPlan: NativeSearchOptionalPackageExecutionPlan
   packagedBundledBinarySmokePlan: PackagedBundledBinarySmokePlan
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
@@ -252,6 +255,12 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const optionalPackagePublicationChecked = Boolean(verification.optionalPackagePublicationChecked)
   const optionalPackagesPublished = optionalPackagePublicationChecked
     && Boolean(verification.optionalPackagesPublished)
+  const optionalPackagePublishTargetChecked = Boolean(verification.optionalPackagePublishTargetChecked)
+  const optionalPackagePublishTargetReady = optionalPackagePublishTargetChecked
+    && Boolean(verification.optionalPackagePublishTargetReady)
+  const optionalPackageSourceChecked = Boolean(verification.optionalPackageSourceChecked)
+  const optionalPackageSourceReady = optionalPackageSourceChecked
+    && Boolean(verification.optionalPackageSourceReady)
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
   const packagingConfigVerified = Boolean(verification.packagingConfigVerified)
@@ -267,6 +276,18 @@ export function buildNativeRuntimeSmokeSummary(input: {
     && Boolean(verification.realPackagedBinaryVerified)
   const bundledBinaryVerified = realPackagedBinaryVerified
     && Boolean(verification.bundledBinaryVerified)
+  const optionalPackageExecutionPlan = buildNativeSearchOptionalPackageExecutionPlan({
+    optionalPackagePublishTargetChecked,
+    optionalPackagePublishTargetReady,
+    optionalPackageSourceChecked,
+    optionalPackageSourceReady,
+    optionalPackagesPublished,
+    optionalDependenciesDeclared,
+    optionalDependenciesInstallChainVerified,
+    packagingConfigVerified,
+    bundledBinaryVerified,
+    defaultEnableRiskReviewCompleted: false,
+  })
   const packagedBundledBinarySmokePlan = buildPackagedBundledBinarySmokePlan({
     appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
     optionalPackagesPublished,
@@ -306,12 +327,12 @@ export function buildNativeRuntimeSmokeSummary(input: {
     missingPublishedOptionalPackages: verification.missingPublishedOptionalPackages ?? [],
     invalidPublishedOptionalPackages: verification.invalidPublishedOptionalPackages ?? [],
     unavailablePublishedOptionalPackages: verification.unavailablePublishedOptionalPackages ?? [],
-    optionalPackagePublishTargetChecked: Boolean(verification.optionalPackagePublishTargetChecked),
-    optionalPackagePublishTargetReady: Boolean(verification.optionalPackagePublishTargetReady),
+    optionalPackagePublishTargetChecked,
+    optionalPackagePublishTargetReady,
     optionalPackagePublishTargetVersion: verification.optionalPackagePublishTargetVersion ?? null,
     optionalPackagePublishTargetBlockers: verification.optionalPackagePublishTargetBlockers ?? [],
-    optionalPackageSourceChecked: Boolean(verification.optionalPackageSourceChecked),
-    optionalPackageSourceReady: Boolean(verification.optionalPackageSourceReady),
+    optionalPackageSourceChecked,
+    optionalPackageSourceReady,
     optionalPackageSourceVersion: verification.optionalPackageSourceVersion ?? null,
     optionalPackageSourceBlockers: verification.optionalPackageSourceBlockers ?? [],
     optionalPackageSourceReadyPackages: verification.optionalPackageSourceReadyPackages ?? [],
@@ -333,6 +354,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     blockingPackagingConfigExcludes: verification.blockingPackagingConfigExcludes ?? [],
     tooBroadPackagingConfigIncludes: verification.tooBroadPackagingConfigIncludes ?? [],
     realPackagedBinaryVerified,
+    optionalPackageExecutionPlan,
     packagedBundledBinarySmokePlan,
     nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
       benchmarkEvaluated: false,
@@ -524,12 +546,22 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         options.nativeSearchPackageVersion,
         options.checkRegistry === true,
       )
+      const packageSource = readNativeSearchOptionalPackageSource(options.nativeSearchPackageVersion)
       cases.push(buildOptionalPackagePublishTargetPreflightCase(publishTarget))
+      cases.push(buildOptionalPackageSourcePreflightCase(packageSource))
       verification = {
         optionalPackagePublishTargetChecked: publishTarget.checked,
         optionalPackagePublishTargetReady: publishTarget.ready,
         optionalPackagePublishTargetVersion: publishTarget.packageVersion,
         optionalPackagePublishTargetBlockers: publishTarget.blockers,
+        optionalPackageSourceChecked: packageSource.checked,
+        optionalPackageSourceReady: packageSource.ready,
+        optionalPackageSourceVersion: packageSource.packageVersion,
+        optionalPackageSourceBlockers: packageSource.blockers,
+        optionalPackageSourceReadyPackages: packageSource.readyPackages,
+        missingOptionalPackageSourcePackages: packageSource.missingPackages,
+        invalidOptionalPackageSourcePackages: packageSource.invalidPackages,
+        plannedOptionalPackageSourceManifestsVerified: packageSource.plannedOptionalPackageManifestsVerified,
         publishTargetAvailablePackages: publishTarget.availablePackages,
         publishedVersionCollisionPackages: publishTarget.publishedVersionCollisionPackages,
         invalidPublishTargetPackages: publishTarget.invalidPackages,

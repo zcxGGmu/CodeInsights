@@ -265,10 +265,102 @@ describe('native-runtime-smoke', () => {
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(summary.optionalPackageExecutionPlan.nextStage).toBe('publish_target_preflight')
+    expect(summary.optionalPackageExecutionPlan.readyForPublication).toBe(false)
+    expect(summary.optionalPackageExecutionPlan.readyForOptionalDependencies).toBe(false)
+    expect(summary.optionalPackageExecutionPlan.readyForDefaultEnableRiskReview).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.explicitOptInRequired).toBe(true)
     expect(JSON.stringify(summary)).not.toContain('/Users/')
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
+
+  test('summary 输出 optional package execution plan，ready source 和 publish target 只推进到 publication', () => {
+    const readyPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackagePublishTargetBlockers: [],
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceBlockers: [],
+        optionalPackageSourceReadyPackages: readyPackages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{
+        name: 'optional-package-execution-plan',
+        status: 'passed',
+        detail: 'source and publish target preflight ready',
+      }],
+    })
+
+    expect(summary.optionalPackageExecutionPlan).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      nextStage: 'optional_package_publication',
+      readyForPublication: true,
+      readyForOptionalDependencies: false,
+      readyForInstallChain: false,
+      readyForPackagingConfigChange: false,
+      readyForPackagedBundledBinarySmoke: false,
+      readyForDefaultEnableRiskReview: false,
+      verified: false,
+    }))
+    expect(summary.optionalPackageExecutionPlan.completedPrerequisites).toEqual([
+      'publish_target_preflight',
+      'package_source_preflight',
+    ])
+    expect(summary.optionalPackageExecutionPlan.observedEvidenceStages).toEqual([
+      'publish_target_preflight',
+      'package_source_preflight',
+    ])
+    expect(summary.optionalPackageExecutionPlan.blockedBy).toContain('optional_packages_not_published')
+    expect(summary.optionalPackageExecutionPlan.blockedBy).toContain('optional_dependencies_not_declared')
+    expect(summary.optionalPackageExecutionPlan.nextAllowedActions).toEqual([
+      'publish_optional_packages_after_release_approval',
+    ])
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.optionalPackageExecutionPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.optionalPackageExecutionPlan)).not.toContain('binaryPath')
+  })
+
+  test('summary 顶层 ready 字段必须绑定 checked，避免和 execution plan 分叉', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: true,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: true,
+      },
+      cases: [{
+        name: 'optional-package-ready-normalization',
+        status: 'skipped',
+        detail: 'checked=false; ready=true',
+      }],
+    })
+
+    expect(summary.optionalPackagePublishTargetChecked).toBe(false)
+    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackageSourceChecked).toBe(false)
+    expect(summary.optionalPackageSourceReady).toBe(false)
+    expect(summary.optionalPackageExecutionPlan.nextStage).toBe('publish_target_preflight')
+    expect(summary.optionalPackageExecutionPlan.completedPrerequisites).toEqual([])
+    expect(summary.optionalPackageExecutionPlan.observedEvidenceStages).toEqual([])
+    expect(summary.optionalPackageExecutionPlan.readyForPublication).toBe(false)
+    expect(summary.optionalPackageExecutionPlan.verified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
   })
 
   test('summary builder 不允许临时 fixture 证明真实 packaged binary', () => {

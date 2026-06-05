@@ -10,6 +10,7 @@ import {
   validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchOptionalDependencies,
   validateNativeSearchPackagingConfig,
+  buildNativeSearchOptionalPackageExecutionPlan,
 } from './native-runtime-package-manifest'
 
 const VALID_SHA256 = 'a'.repeat(64)
@@ -950,6 +951,102 @@ files:
       blockingExcludes: [],
       tooBroadIncludes: [],
     })
+  })
+
+  test('optional package execution plan 在 source / publish target ready 后只允许进入真实发布阶段', () => {
+    const plan = buildNativeSearchOptionalPackageExecutionPlan({
+      optionalPackagePublishTargetChecked: true,
+      optionalPackagePublishTargetReady: true,
+      optionalPackageSourceChecked: true,
+      optionalPackageSourceReady: true,
+      optionalPackagesPublished: false,
+      optionalDependenciesDeclared: false,
+      optionalDependenciesInstallChainVerified: false,
+      packagingConfigVerified: false,
+      bundledBinaryVerified: false,
+      defaultEnableRiskReviewCompleted: false,
+    })
+
+    expect(plan).toEqual({
+      schemaVersion: 1,
+      nextStage: 'optional_package_publication',
+      completedPrerequisites: [
+        'publish_target_preflight',
+        'package_source_preflight',
+      ],
+      observedEvidenceStages: [
+        'publish_target_preflight',
+        'package_source_preflight',
+      ],
+      blockedBy: [
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
+        'packaged_app_bundled_binary_not_verified',
+        'default_enable_risk_review_not_completed',
+      ],
+      readyForPublication: true,
+      readyForOptionalDependencies: false,
+      readyForInstallChain: false,
+      readyForPackagingConfigChange: false,
+      readyForPackagedBundledBinarySmoke: false,
+      readyForDefaultEnableRiskReview: false,
+      verified: false,
+      nextAllowedActions: ['publish_optional_packages_after_release_approval'],
+      candidateCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ],
+      forbiddenActions: [
+        'do_not_treat_publish_target_ready_as_package_published',
+        'do_not_treat_package_source_ready_as_npm_pack_or_publication',
+        'do_not_declare_optional_dependencies_before_publication',
+        'do_not_run_install_chain_before_optional_dependencies_are_declared',
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+  })
+
+  test('optional package execution plan 保持顺序 gate，不允许单项 evidence 跳过前置阶段', () => {
+    const plan = buildNativeSearchOptionalPackageExecutionPlan({
+      optionalPackagePublishTargetChecked: false,
+      optionalPackagePublishTargetReady: true,
+      optionalPackageSourceChecked: true,
+      optionalPackageSourceReady: true,
+      optionalPackagesPublished: false,
+      optionalDependenciesDeclared: true,
+      optionalDependenciesInstallChainVerified: true,
+      packagingConfigVerified: true,
+      bundledBinaryVerified: true,
+      defaultEnableRiskReviewCompleted: true,
+    })
+
+    expect(plan.nextStage).toBe('publish_target_preflight')
+    expect(plan.readyForPublication).toBe(false)
+    expect(plan.readyForOptionalDependencies).toBe(false)
+    expect(plan.readyForInstallChain).toBe(false)
+    expect(plan.readyForPackagedBundledBinarySmoke).toBe(false)
+    expect(plan.readyForDefaultEnableRiskReview).toBe(false)
+    expect(plan.verified).toBe(false)
+    expect(plan.completedPrerequisites).toEqual([])
+    expect(plan.observedEvidenceStages).toEqual([
+      'package_source_preflight',
+      'optional_dependencies_declaration',
+      'optional_package_install_chain',
+      'packaging_config_allowlist',
+      'packaged_app_bundled_binary_smoke',
+      'default_enable_risk_review',
+    ])
+    expect(plan.blockedBy).toContain('optional_package_publish_target_not_ready')
+    expect(plan.blockedBy).toContain('optional_packages_not_published')
+    expect(plan.nextAllowedActions).toEqual([
+      'run_optional_package_publish_target_dry_run_with_explicit_registry_check',
+    ])
+    expect(plan.candidateCommands).toEqual([
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version <native-search-package-version> --check-registry",
+    ])
   })
 })
 
