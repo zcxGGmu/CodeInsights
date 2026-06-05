@@ -40,6 +40,45 @@ export interface NativeSearchOptionalPackageInstallChainValidationResult {
   invalidInstalledPackages: string[]
 }
 
+export interface NativeSearchPlannedOptionalDependency {
+  packageName: string
+  versionSpec: string
+}
+
+export type NativeSearchOptionalDependenciesInstallChainChangePlanStatus =
+  | 'blocked'
+  | 'ready_for_review'
+
+export type NativeSearchOptionalDependenciesInstallChainChangePlanBlocker =
+  | 'optional_dependency_plan_version_required'
+  | 'optional_dependency_plan_version_invalid'
+  | 'optional_packages_not_published'
+  | 'optional_dependencies_not_declared'
+  | 'optional_dependencies_invalid'
+  | 'optional_dependency_install_chain_not_verified'
+  | 'optional_dependency_lockfile_not_verified'
+  | 'optional_dependency_installed_packages_not_verified'
+
+export interface NativeSearchOptionalDependenciesInstallChainChangePlan {
+  schemaVersion: 1
+  status: NativeSearchOptionalDependenciesInstallChainChangePlanStatus
+  packageVersion: string | null
+  optionalPackagesPublished: boolean
+  currentDeclarationVerified: boolean
+  currentInstallChainVerified: boolean
+  approvalRequired: boolean
+  plannedOptionalDependencies: NativeSearchPlannedOptionalDependency[]
+  missingOptionalDependencies: string[]
+  invalidOptionalDependencies: string[]
+  missingLockfilePackages: string[]
+  missingInstalledPackages: string[]
+  invalidInstalledPackages: string[]
+  blockedBy: NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[]
+  candidateReviewAction: string
+  candidateVerificationCommands: string[]
+  forbiddenActions: string[]
+}
+
 export interface NativeSearchOptionalPackagePublicationValidationResult {
   published: boolean
   expectedPackages: string[]
@@ -172,6 +211,12 @@ interface ValidateNativeSearchOptionalPackageInstallChainOptions {
   packageJson: unknown
   lockfileText?: string
   installedPackageManifests?: Record<string, unknown>
+}
+
+interface BuildNativeSearchOptionalDependenciesInstallChainChangePlanOptions {
+  packageVersion?: string | null
+  publication: NativeSearchOptionalPackagePublicationValidationResult
+  installChain: NativeSearchOptionalPackageInstallChainValidationResult
 }
 
 interface ValidateNativeSearchOptionalPackagePublicationOptions {
@@ -355,6 +400,68 @@ export function validateNativeSearchOptionalPackageInstallChain(
     missingLockfilePackages,
     missingInstalledPackages,
     invalidInstalledPackages,
+  }
+}
+
+export function buildNativeSearchOptionalDependenciesInstallChainChangePlan(
+  options: BuildNativeSearchOptionalDependenciesInstallChainChangePlanOptions,
+): NativeSearchOptionalDependenciesInstallChainChangePlan {
+  const packageVersion = normalizeOptionalString(options.packageVersion)
+  const packageVersionValid = packageVersion != null && isReleasePackageVersion(packageVersion)
+  const optionalDependencies = options.installChain.optionalDependencies
+  const blockers: NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[] = []
+
+  if (packageVersion == null) {
+    blockers.push('optional_dependency_plan_version_required')
+  } else if (!packageVersionValid) {
+    blockers.push('optional_dependency_plan_version_invalid')
+  }
+
+  if (!options.publication.published) blockers.push('optional_packages_not_published')
+  if (!optionalDependencies.declared) blockers.push('optional_dependencies_not_declared')
+  if (optionalDependencies.invalidPackages.length > 0) blockers.push('optional_dependencies_invalid')
+  if (!options.installChain.verified) blockers.push('optional_dependency_install_chain_not_verified')
+  if (!options.installChain.lockfileVerified) blockers.push('optional_dependency_lockfile_not_verified')
+  if (!options.installChain.installedPackagesVerified) {
+    blockers.push('optional_dependency_installed_packages_not_verified')
+  }
+
+  return {
+    schemaVersion: 1,
+    status: blockers.length === 0 ? 'ready_for_review' : 'blocked',
+    packageVersion,
+    optionalPackagesPublished: options.publication.published,
+    currentDeclarationVerified: optionalDependencies.declared,
+    currentInstallChainVerified: options.installChain.verified,
+    approvalRequired: true,
+    plannedOptionalDependencies: packageVersionValid && packageVersion != null
+      ? NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => ({
+        packageName: plan.packageName,
+        versionSpec: packageVersion,
+      }))
+      : [],
+    missingOptionalDependencies: optionalDependencies.missingPackages,
+    invalidOptionalDependencies: optionalDependencies.invalidPackages,
+    missingLockfilePackages: options.installChain.missingLockfilePackages,
+    missingInstalledPackages: options.installChain.missingInstalledPackages,
+    invalidInstalledPackages: options.installChain.invalidInstalledPackages,
+    blockedBy: uniqueInstallChainPlanBlockers(blockers),
+    candidateReviewAction: 'prepare_optional_dependencies_install_chain_change_for_review',
+    candidateVerificationCommands: [
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      'bun install --frozen-lockfile --dry-run',
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+    ],
+    forbiddenActions: [
+      'do_not_modify_package_json_without_publication_approval',
+      'do_not_modify_bun_lock_without_install_chain_approval',
+      'do_not_run_install_before_optional_packages_are_published',
+      'do_not_add_native_search_optional_dependencies_before_publication',
+      'do_not_treat_change_plan_as_optional_dependencies_declared',
+      'do_not_treat_change_plan_as_install_chain_verified',
+      'do_not_treat_change_plan_as_packaged_binary_verified',
+      'do_not_enable_native_by_default_before_verified',
+    ],
   }
 }
 
@@ -1295,6 +1402,12 @@ function uniqueBlockers(
 function uniqueSourceBlockers(
   blockers: NativeSearchOptionalPackageSourceBlocker[],
 ): NativeSearchOptionalPackageSourceBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
+}
+
+function uniqueInstallChainPlanBlockers(
+  blockers: NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[],
+): NativeSearchOptionalDependenciesInstallChainChangePlanBlocker[] {
   return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 

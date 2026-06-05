@@ -335,6 +335,78 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.optionalPackageExecutionPlan)).not.toContain('binaryPath')
   })
 
+  test('summary 输出 optionalDependencies install-chain dry-run plan 且不证明真实安装链路', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        missingOptionalDependencies: expectedPackages,
+        missingOptionalDependencyLockfilePackages: expectedPackages,
+        missingInstalledOptionalDependencies: expectedPackages,
+      },
+      cases: [{
+        name: 'optional-package-publish-target',
+        status: 'passed',
+        detail: 'optionalPackagePublishTargetReady=true',
+      }],
+    })
+
+    expect(summary.optionalDependenciesInstallChainChangePlan).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      packageVersion: '0.0.3',
+      optionalPackagesPublished: false,
+      currentDeclarationVerified: false,
+      currentInstallChainVerified: false,
+      approvalRequired: true,
+      plannedOptionalDependencies: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => ({
+        packageName: plan.packageName,
+        versionSpec: '0.0.3',
+      })),
+      missingOptionalDependencies: expectedPackages,
+      invalidOptionalDependencies: [],
+      missingLockfilePackages: expectedPackages,
+      missingInstalledPackages: expectedPackages,
+      invalidInstalledPackages: [],
+      blockedBy: [
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_dependency_install_chain_not_verified',
+        'optional_dependency_lockfile_not_verified',
+        'optional_dependency_installed_packages_not_verified',
+      ],
+      candidateReviewAction: 'prepare_optional_dependencies_install_chain_change_for_review',
+      candidateVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+        'bun install --frozen-lockfile --dry-run',
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ],
+      forbiddenActions: [
+        'do_not_modify_package_json_without_publication_approval',
+        'do_not_modify_bun_lock_without_install_chain_approval',
+        'do_not_run_install_before_optional_packages_are_published',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+        'do_not_treat_change_plan_as_optional_dependencies_declared',
+        'do_not_treat_change_plan_as_install_chain_verified',
+        'do_not_treat_change_plan_as_packaged_binary_verified',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.optionalDependenciesInstallChainChangePlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.optionalDependenciesInstallChainChangePlan)).not.toContain('binaryPath')
+  })
+
   test('summary 顶层 ready 字段必须绑定 checked，避免和 execution plan 分叉', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'optional-package-publish-target',
@@ -1213,6 +1285,53 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
   })
 
+  test('packaged manifest registry 检查必须绑定 install-chain plan 目标版本', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input)
+      const plan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((candidate) => (
+        url.includes(encodeURIComponent(candidate.packageName))
+      ))
+      if (!plan) return new Response('{}', { status: 404 })
+
+      return Response.json({
+        name: plan.packageName,
+        'dist-tags': {
+          latest: '0.0.4',
+        },
+        versions: {
+          '0.0.4': {
+            name: plan.packageName,
+            version: '0.0.4',
+            os: [plan.platform],
+            cpu: [plan.arch],
+            bin: {
+              'codeinsights-native-search': `bin/${plan.binaryName}`,
+            },
+          },
+        },
+      })
+    }) as unknown as typeof fetch
+
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'packaged-manifest',
+      query: '关键字',
+      checkRegistry: true,
+    })
+
+    expect(summary.optionalDependenciesInstallChainChangePlan.packageVersion).toBe('0.0.3')
+    expect(summary.optionalPackagePublicationChecked).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.missingPublishedOptionalPackages).toEqual([])
+    expect(summary.invalidPublishedOptionalPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalDependenciesInstallChainChangePlan.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesInstallChainChangePlan.blockedBy).toContain('optional_packages_not_published')
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+  })
+
   test('optional package publish-target 默认离线必须保持 not ready', async () => {
     const summary = await runNativeRuntimeSmoke({
       mode: 'optional-package-publish-target',
@@ -1391,6 +1510,61 @@ describe('native-runtime-smoke', () => {
       expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
       expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
       expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app layout registry 检查必须绑定 install-chain plan 目标版本', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input)
+      const plan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((candidate) => (
+        url.includes(encodeURIComponent(candidate.packageName))
+      ))
+      if (!plan) return new Response('{}', { status: 404 })
+
+      return Response.json({
+        name: plan.packageName,
+        'dist-tags': {
+          latest: '0.0.4',
+        },
+        versions: {
+          '0.0.4': {
+            name: plan.packageName,
+            version: '0.0.4',
+            os: [plan.platform],
+            cpu: [plan.arch],
+            bin: {
+              'codeinsights-native-search': `bin/${plan.binaryName}`,
+            },
+          },
+        },
+      })
+    }) as unknown as typeof fetch
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+        checkRegistry: true,
+      })
+
+      expect(summary.optionalDependenciesInstallChainChangePlan.packageVersion).toBe('0.0.3')
+      expect(summary.optionalPackagePublicationChecked).toBe(true)
+      expect(summary.optionalPackagesPublished).toBe(false)
+      expect(summary.missingPublishedOptionalPackages).toEqual([])
+      expect(summary.invalidPublishedOptionalPackages).toEqual(
+        NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      )
+      expect(summary.optionalDependenciesInstallChainChangePlan.optionalPackagesPublished).toBe(false)
+      expect(summary.optionalDependenciesInstallChainChangePlan.blockedBy).toContain('optional_packages_not_published')
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.bundledBinaryVerified).toBe(false)
+      expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+      expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
+      expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
     } finally {
       rmSync(fixture.rootDir, { recursive: true, force: true })
     }

@@ -14,6 +14,7 @@ import {
 } from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import {
   buildNativeSearchPackagingConfigAllowlistChangePlan,
+  buildNativeSearchOptionalDependenciesInstallChainChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalDependencyExpectedVersions,
   getNativeSearchOptionalPackagePlan,
@@ -26,6 +27,7 @@ import {
   validateNativeSearchOptionalPackageInstallChain,
   buildNativeSearchOptionalPackageExecutionPlan,
   type NativeSearchPackagingConfigAllowlistChangePlan,
+  type NativeSearchOptionalDependenciesInstallChainChangePlan,
   type NativeSearchOptionalPackageSourceBlocker,
   type NativeSearchOptionalPackageSourceValidationResult,
   type NativeSearchOptionalPackagePublishTargetBlocker,
@@ -115,6 +117,7 @@ export interface NativeRuntimeSmokeSummary {
   packagingConfigVerified: boolean
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
+  optionalDependenciesInstallChainChangePlan: NativeSearchOptionalDependenciesInstallChainChangePlan
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
@@ -166,6 +169,7 @@ interface NativeRuntimeSmokeVerification {
   optionalDependenciesInstallChainVerified?: boolean
   optionalDependenciesLockfileVerified?: boolean
   optionalDependenciesInstalledPackagesVerified?: boolean
+  optionalDependenciesInstallChainPlanVersion?: string | null
   packagingConfigVerified?: boolean
   missingOptionalDependencies?: string[]
   invalidOptionalDependencies?: string[]
@@ -266,6 +270,10 @@ export function buildNativeRuntimeSmokeSummary(input: {
     && Boolean(verification.optionalPackageSourceReady)
   const optionalDependenciesInstallChainVerified = optionalDependenciesDeclared
     && Boolean(verification.optionalDependenciesInstallChainVerified)
+  const optionalDependenciesLockfileVerified = optionalDependenciesDeclared
+    && Boolean(verification.optionalDependenciesLockfileVerified)
+  const optionalDependenciesInstalledPackagesVerified = optionalDependenciesDeclared
+    && Boolean(verification.optionalDependenciesInstalledPackagesVerified)
   const packagingConfigVerified = Boolean(verification.packagingConfigVerified)
   const packagedAppEvidenceVerified = Boolean(verification.packagedAppEvidenceVerified)
   const packagedAppIdentityVerified = Boolean(verification.packagedAppIdentityVerified)
@@ -274,6 +282,53 @@ export function buildNativeRuntimeSmokeSummary(input: {
     ?? (packagingConfigVerified ? [] : NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName))
   const blockingPackagingConfigExcludes = verification.blockingPackagingConfigExcludes ?? []
   const tooBroadPackagingConfigIncludes = verification.tooBroadPackagingConfigIncludes ?? []
+  const expectedOptionalDependencyPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+  const missingOptionalDependencies = verification.missingOptionalDependencies ?? []
+  const invalidOptionalDependencies = verification.invalidOptionalDependencies ?? []
+  const missingOptionalDependencyLockfilePackages = verification.missingOptionalDependencyLockfilePackages ?? []
+  const missingInstalledOptionalDependencies = verification.missingInstalledOptionalDependencies ?? []
+  const invalidInstalledOptionalDependencies = verification.invalidInstalledOptionalDependencies ?? []
+  const missingPublishedOptionalPackages = verification.missingPublishedOptionalPackages ?? []
+  const invalidPublishedOptionalPackages = verification.invalidPublishedOptionalPackages ?? []
+  const unavailablePublishedOptionalPackages = verification.unavailablePublishedOptionalPackages ?? []
+  const optionalDependenciesInstallChainPlanVersion = verification.optionalDependenciesInstallChainPlanVersion
+    ?? verification.optionalPackagePublishTargetVersion
+    ?? verification.optionalPackageSourceVersion
+    ?? null
+  const planMissingOptionalDependencies = verification.missingOptionalDependencies
+    ?? (optionalDependenciesDeclared ? [] : expectedOptionalDependencyPackages)
+  const planMissingLockfilePackages = verification.missingOptionalDependencyLockfilePackages
+    ?? (optionalDependenciesLockfileVerified ? [] : expectedOptionalDependencyPackages)
+  const planMissingInstalledPackages = verification.missingInstalledOptionalDependencies
+    ?? (optionalDependenciesInstalledPackagesVerified ? [] : expectedOptionalDependencyPackages)
+  const optionalDependenciesInstallChainChangePlan = buildNativeSearchOptionalDependenciesInstallChainChangePlan({
+    packageVersion: optionalDependenciesInstallChainPlanVersion,
+    publication: {
+      published: optionalPackagesPublished,
+      expectedPackages: expectedOptionalDependencyPackages,
+      publishedPackages: optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
+      missingPackages: missingPublishedOptionalPackages,
+      invalidPackages: invalidPublishedOptionalPackages,
+      unavailablePackages: unavailablePublishedOptionalPackages,
+    },
+    installChain: {
+      verified: optionalDependenciesInstallChainVerified,
+      optionalDependencies: {
+        declared: optionalDependenciesDeclared,
+        expectedPackages: expectedOptionalDependencyPackages,
+        presentPackages: expectedOptionalDependencyPackages.filter((packageName) => (
+          !planMissingOptionalDependencies.includes(packageName)
+        )),
+        missingPackages: planMissingOptionalDependencies,
+        invalidPackages: invalidOptionalDependencies,
+      },
+      lockfileVerified: optionalDependenciesLockfileVerified,
+      installedPackagesVerified: optionalDependenciesInstalledPackagesVerified,
+      missingLockfilePackages: planMissingLockfilePackages,
+      missingInstalledPackages: planMissingInstalledPackages,
+      invalidInstalledPackages: invalidInstalledOptionalDependencies,
+    },
+  })
   const packagingConfigAllowlistChangePlan = buildNativeSearchPackagingConfigAllowlistChangePlan({
     verified: packagingConfigVerified,
     expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
@@ -332,16 +387,15 @@ export function buildNativeRuntimeSmokeSummary(input: {
     optionalPackagePublicationChecked,
     optionalPackagesPublished,
     optionalDependenciesInstallChainVerified,
-    optionalDependenciesLockfileVerified: optionalDependenciesDeclared
-      && Boolean(verification.optionalDependenciesLockfileVerified),
-    optionalDependenciesInstalledPackagesVerified: optionalDependenciesDeclared
-      && Boolean(verification.optionalDependenciesInstalledPackagesVerified),
+    optionalDependenciesLockfileVerified,
+    optionalDependenciesInstalledPackagesVerified,
     packagingConfigVerified,
-    missingOptionalDependencies: verification.missingOptionalDependencies ?? [],
-    invalidOptionalDependencies: verification.invalidOptionalDependencies ?? [],
-    missingPublishedOptionalPackages: verification.missingPublishedOptionalPackages ?? [],
-    invalidPublishedOptionalPackages: verification.invalidPublishedOptionalPackages ?? [],
-    unavailablePublishedOptionalPackages: verification.unavailablePublishedOptionalPackages ?? [],
+    missingOptionalDependencies,
+    invalidOptionalDependencies,
+    optionalDependenciesInstallChainChangePlan,
+    missingPublishedOptionalPackages,
+    invalidPublishedOptionalPackages,
+    unavailablePublishedOptionalPackages,
     optionalPackagePublishTargetChecked,
     optionalPackagePublishTargetReady,
     optionalPackagePublishTargetVersion: verification.optionalPackagePublishTargetVersion ?? null,
@@ -362,9 +416,9 @@ export function buildNativeRuntimeSmokeSummary(input: {
     nativeSearchCargoVersion: verification.nativeSearchCargoVersion ?? null,
     nativeSearchBinaryVersion: verification.nativeSearchBinaryVersion ?? null,
     plannedOptionalPackageManifestsVerified: Boolean(verification.plannedOptionalPackageManifestsVerified),
-    missingOptionalDependencyLockfilePackages: verification.missingOptionalDependencyLockfilePackages ?? [],
-    missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
-    invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
+    missingOptionalDependencyLockfilePackages,
+    missingInstalledOptionalDependencies,
+    invalidInstalledOptionalDependencies,
     missingPackagingConfigPackages,
     blockingPackagingConfigExcludes,
     tooBroadPackagingConfigIncludes,
@@ -512,9 +566,13 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       cases.push(await runCacheCorruptionCase())
     } else if (options.mode === 'packaged-manifest') {
       cases.push(runPackagedManifestPreflightCase())
+      const optionalDependenciesInstallChainPlanVersion = readNativeSearchSourceBinaryVersion()
       const optionalDependenciesInstallChain = readCurrentNativeSearchOptionalPackageInstallChain()
       const optionalDependenciesResult = optionalDependenciesInstallChain.optionalDependencies
-      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(options.checkRegistry === true)
+      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(
+        options.checkRegistry === true,
+        buildNativeSearchOptionalDependencyExpectedVersions(optionalDependenciesInstallChainPlanVersion),
+      )
       const packagingConfig = readCurrentNativeSearchPackagingConfig()
       cases.push(buildPackagedOptionalPackagePublicationPreflightCase(
         optionalPackagePublication,
@@ -556,6 +614,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
         tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
         realPackagedBinaryVerified: false,
+        optionalDependenciesInstallChainPlanVersion,
       }
     } else if (options.mode === 'optional-package-publish-target') {
       const publishTarget = await readNativeSearchOptionalPackagePublishTarget(
@@ -603,7 +662,11 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         realPackagedBinaryVerified: false,
       }
     } else if (options.mode === 'packaged-app-layout') {
-      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(options.checkRegistry === true)
+      const optionalDependenciesInstallChainPlanVersion = readNativeSearchSourceBinaryVersion()
+      const optionalPackagePublication = await readNativeSearchOptionalPackagePublication(
+        options.checkRegistry === true,
+        buildNativeSearchOptionalDependencyExpectedVersions(optionalDependenciesInstallChainPlanVersion),
+      )
       const packagedAppResult = runPackagedAppLayoutCase(
         options.appNodeModulesRoot,
         options.checkRegistry === true,
@@ -641,6 +704,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         tooBroadPackagingConfigIncludes: packagedAppResult.tooBroadPackagingConfigIncludes,
         realPackagedBinaryVerified: packagedAppResult.realPackagedBinaryVerified,
         requiresPrebuiltPackagedApp: true,
+        optionalDependenciesInstallChainPlanVersion,
       }
     } else {
       cases.push({
@@ -1266,6 +1330,7 @@ function readCurrentNativeSearchOptionalPackageInstallChain(): NativeSearchOptio
 
 async function readNativeSearchOptionalPackagePublication(
   checkRegistry: boolean,
+  expectedPackageVersions?: Record<string, string>,
 ): Promise<NativeSearchOptionalPackagePublicationValidationResult> {
   if (!checkRegistry) {
     return validateNativeSearchOptionalPackagePublication({})
@@ -1293,7 +1358,7 @@ async function readNativeSearchOptionalPackagePublication(
 
   return validateNativeSearchOptionalPackagePublication({
     registryMetadata,
-    expectedPackageVersions: readCurrentNativeSearchOptionalDependencyExpectedVersions(),
+    expectedPackageVersions: expectedPackageVersions ?? readCurrentNativeSearchOptionalDependencyExpectedVersions(),
     unavailablePackages,
   })
 }
@@ -1400,6 +1465,15 @@ function readCurrentNativeSearchOptionalDependencyExpectedVersions(): Record<str
   } catch {
     return {}
   }
+}
+
+function buildNativeSearchOptionalDependencyExpectedVersions(packageVersion: string | null): Record<string, string> {
+  const exactVersion = typeof packageVersion === 'string' ? packageVersion.trim() : ''
+  if (exactVersion.length === 0) return readCurrentNativeSearchOptionalDependencyExpectedVersions()
+
+  return Object.fromEntries(
+    NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [plan.packageName, exactVersion]),
+  )
 }
 
 function readNativeSearchCargoVersion(): string | null {

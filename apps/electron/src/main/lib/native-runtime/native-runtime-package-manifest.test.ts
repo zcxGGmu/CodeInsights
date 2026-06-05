@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildNativeSearchPackagingConfigAllowlistChangePlan,
+  buildNativeSearchOptionalDependenciesInstallChainChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
@@ -1063,6 +1064,144 @@ files:
     expect(plan.removalCandidates).toEqual(['node_modules/@codeinsights/native-search-*/**/*'])
     expect(plan.forbiddenIncludes).toContain('node_modules/@codeinsights/native-search-*/**/*')
     expect(plan.currentConfigVerified).toBe(false)
+  })
+
+  test('optionalDependencies install-chain change plan 只输出声明与安装链路审查输入', () => {
+    const publication = validateNativeSearchOptionalPackagePublication({})
+    const installChain = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: {},
+      lockfileText: '',
+      installedPackageManifests: {},
+    })
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const plannedOptionalDependencies = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => ({
+      packageName: plan.packageName,
+      versionSpec: '0.0.3',
+    }))
+
+    expect(buildNativeSearchOptionalDependenciesInstallChainChangePlan({
+      packageVersion: '0.0.3',
+      publication,
+      installChain,
+    })).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      packageVersion: '0.0.3',
+      optionalPackagesPublished: false,
+      currentDeclarationVerified: false,
+      currentInstallChainVerified: false,
+      approvalRequired: true,
+      plannedOptionalDependencies,
+      missingOptionalDependencies: expectedPackages,
+      invalidOptionalDependencies: [],
+      missingLockfilePackages: expectedPackages,
+      missingInstalledPackages: expectedPackages,
+      invalidInstalledPackages: [],
+      blockedBy: [
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_dependency_install_chain_not_verified',
+        'optional_dependency_lockfile_not_verified',
+        'optional_dependency_installed_packages_not_verified',
+      ],
+      candidateReviewAction: 'prepare_optional_dependencies_install_chain_change_for_review',
+      candidateVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+        'bun install --frozen-lockfile --dry-run',
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ],
+      forbiddenActions: [
+        'do_not_modify_package_json_without_publication_approval',
+        'do_not_modify_bun_lock_without_install_chain_approval',
+        'do_not_run_install_before_optional_packages_are_published',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+        'do_not_treat_change_plan_as_optional_dependencies_declared',
+        'do_not_treat_change_plan_as_install_chain_verified',
+        'do_not_treat_change_plan_as_packaged_binary_verified',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+  })
+
+  test('optionalDependencies install-chain change plan 拒绝缺失或非 release 版本', () => {
+    const publication = validateNativeSearchOptionalPackagePublication({})
+    const installChain = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: {},
+      lockfileText: '',
+      installedPackageManifests: {},
+    })
+
+    expect(buildNativeSearchOptionalDependenciesInstallChainChangePlan({
+      packageVersion: null,
+      publication,
+      installChain,
+    })).toEqual(expect.objectContaining({
+      status: 'blocked',
+      packageVersion: null,
+      plannedOptionalDependencies: [],
+      blockedBy: expect.arrayContaining(['optional_dependency_plan_version_required']),
+    }))
+
+    expect(buildNativeSearchOptionalDependenciesInstallChainChangePlan({
+      packageVersion: '0.0.3-dev',
+      publication,
+      installChain,
+    })).toEqual(expect.objectContaining({
+      status: 'blocked',
+      packageVersion: '0.0.3-dev',
+      plannedOptionalDependencies: [],
+      blockedBy: expect.arrayContaining(['optional_dependency_plan_version_invalid']),
+    }))
+  })
+
+  test('optionalDependencies install-chain change plan 不允许绕过 verified gate', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const expectedVersions = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [plan.packageName, '0.0.3']),
+    )
+    const registryMetadata = Object.fromEntries(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
+        plan.packageName,
+        createRegistryPackument(plan.packageName, {
+          version: '0.0.3',
+          os: [plan.platform],
+          cpu: [plan.arch],
+          bin: {
+            'codeinsights-native-search': `bin/${plan.binaryName}`,
+          },
+        }),
+      ]),
+    )
+    const publication = validateNativeSearchOptionalPackagePublication({
+      registryMetadata,
+      expectedPackageVersions: expectedVersions,
+    })
+
+    const plan = buildNativeSearchOptionalDependenciesInstallChainChangePlan({
+      packageVersion: '0.0.3',
+      publication,
+      installChain: {
+        verified: false,
+        optionalDependencies: {
+          declared: true,
+          expectedPackages,
+          presentPackages: expectedPackages,
+          missingPackages: [],
+          invalidPackages: [],
+        },
+        lockfileVerified: true,
+        installedPackagesVerified: true,
+        missingLockfilePackages: [],
+        missingInstalledPackages: [],
+        invalidInstalledPackages: [],
+      },
+    })
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.optionalPackagesPublished).toBe(true)
+    expect(plan.currentDeclarationVerified).toBe(true)
+    expect(plan.currentInstallChainVerified).toBe(false)
+    expect(plan.blockedBy).toEqual(['optional_dependency_install_chain_not_verified'])
   })
 
   test('optional package execution plan 在 source / publish target ready 后只允许进入真实发布阶段', () => {
