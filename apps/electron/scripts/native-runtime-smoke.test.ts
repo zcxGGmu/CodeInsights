@@ -498,6 +498,132 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.packagedBundledBinarySmokePlan)).not.toContain('binaryPath')
   })
 
+  test('summary 输出 builder allowlist dry-run plan 且不改变真实 packaged gate', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        packagingConfigVerified: false,
+        missingPackagingConfigPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+        blockingPackagingConfigExcludes: ['!node_modules/@codeinsights/**'],
+        tooBroadPackagingConfigIncludes: [],
+      },
+      cases: [{
+        name: 'packaged-packaging-config-preflight',
+        status: 'skipped',
+        detail: 'packagingConfigVerified=false',
+      }],
+    })
+
+    expect(summary.packagingConfigAllowlistChangePlan).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      currentConfigVerified: false,
+      approvalRequired: true,
+      requiredIncludes: [
+        'node_modules/@codeinsights/native-search-darwin-arm64/**/*',
+        'node_modules/@codeinsights/native-search-darwin-x64/**/*',
+        'node_modules/@codeinsights/native-search-win32-x64/**/*',
+        'node_modules/@codeinsights/native-search-linux-x64/**/*',
+      ],
+      missingIncludes: [
+        'node_modules/@codeinsights/native-search-darwin-arm64/**/*',
+        'node_modules/@codeinsights/native-search-darwin-x64/**/*',
+        'node_modules/@codeinsights/native-search-win32-x64/**/*',
+        'node_modules/@codeinsights/native-search-linux-x64/**/*',
+      ],
+      blockingExcludes: ['!node_modules/@codeinsights/**'],
+      tooBroadIncludes: [],
+      removalCandidates: ['!node_modules/@codeinsights/**'],
+      forbiddenIncludes: [
+        'node_modules/**',
+        'node_modules/**/*',
+        'node_modules/@codeinsights/*',
+        'node_modules/@codeinsights/**',
+        'node_modules/@codeinsights/**/*',
+        'node_modules/@codeinsights/native-search-*',
+        'node_modules/@codeinsights/native-search-*/**/*',
+      ],
+      candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
+      candidateVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      ],
+      forbiddenActions: [
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_use_broad_node_modules_include',
+        'do_not_run_electron_builder_until_publication_and_install_chain_pass',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+        'do_not_treat_allowlist_plan_as_packaging_config_verified',
+        'do_not_treat_allowlist_plan_as_packaged_binary_verified',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.packagingConfigAllowlistChangePlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.packagingConfigAllowlistChangePlan)).not.toContain('binaryPath')
+  })
+
+  test('builder allowlist dry-run plan 没有真实 packaging config 细节时保守 blocked', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-source',
+      verification: {
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+      },
+      cases: [{
+        name: 'optional-package-source',
+        status: 'passed',
+        detail: 'optionalPackageSourceReady=true',
+      }],
+    })
+
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.packagingConfigAllowlistChangePlan.status).toBe('blocked')
+    expect(summary.packagingConfigAllowlistChangePlan.missingIncludes.length).toBe(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.length,
+    )
+    expect(summary.packagingConfigAllowlistChangePlan.currentConfigVerified).toBe(false)
+    expect(summary.packagingConfigAllowlistChangePlan.approvalRequired).toBe(true)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+  })
+
+  test('builder allowlist dry-run plan ready_for_review 也不等于 packaged verified', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        packagingConfigVerified: true,
+        missingPackagingConfigPackages: [],
+        blockingPackagingConfigExcludes: [],
+        tooBroadPackagingConfigIncludes: [],
+      },
+      cases: [{
+        name: 'packaged-packaging-config-preflight',
+        status: 'passed',
+        detail: 'packagingConfigVerified=true',
+      }],
+    })
+
+    expect(summary.packagingConfigAllowlistChangePlan.status).toBe('ready_for_review')
+    expect(summary.packagingConfigAllowlistChangePlan.currentConfigVerified).toBe(true)
+    expect(summary.packagingConfigAllowlistChangePlan.approvalRequired).toBe(true)
+    expect(summary.packagingConfigAllowlistChangePlan.missingIncludes).toEqual([])
+    expect(summary.packagingConfigAllowlistChangePlan.removalCandidates).toEqual([])
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+  })
+
   test('packaged bundled binary smoke plan 仅在前置输入满足但尚未真实验证时进入 ready', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',

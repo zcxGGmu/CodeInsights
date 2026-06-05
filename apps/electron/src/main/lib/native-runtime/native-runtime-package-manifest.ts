@@ -109,6 +109,26 @@ export interface NativeSearchPackagingConfigValidationResult {
   tooBroadIncludes: string[]
 }
 
+export type NativeSearchPackagingConfigAllowlistChangePlanStatus =
+  | 'blocked'
+  | 'ready_for_review'
+
+export interface NativeSearchPackagingConfigAllowlistChangePlan {
+  schemaVersion: 1
+  status: NativeSearchPackagingConfigAllowlistChangePlanStatus
+  currentConfigVerified: boolean
+  approvalRequired: boolean
+  requiredIncludes: string[]
+  missingIncludes: string[]
+  blockingExcludes: string[]
+  tooBroadIncludes: string[]
+  removalCandidates: string[]
+  forbiddenIncludes: string[]
+  candidateReviewAction: string
+  candidateVerificationCommands: string[]
+  forbiddenActions: string[]
+}
+
 export type NativeSearchOptionalPackageExecutionStage =
   | 'publish_target_preflight'
   | 'package_source_preflight'
@@ -572,6 +592,58 @@ export function validateNativeSearchPackagingConfig(
     missingPackages,
     blockingExcludes,
     tooBroadIncludes,
+  }
+}
+
+export function buildNativeSearchPackagingConfigAllowlistChangePlan(
+  validation: NativeSearchPackagingConfigValidationResult,
+): NativeSearchPackagingConfigAllowlistChangePlan {
+  const requiredIncludes = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => getNativeSearchPackageIncludeRule(plan))
+  const missingIncludes = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
+    .filter((plan) => validation.missingPackages.includes(plan.packageName))
+    .map((plan) => getNativeSearchPackageIncludeRule(plan))
+  const removalCandidates = uniqueStrings([
+    ...validation.blockingExcludes,
+    ...validation.tooBroadIncludes,
+  ])
+  const blocked = !validation.verified
+    || validation.missingPackages.length > 0
+    || validation.blockingExcludes.length > 0
+    || validation.tooBroadIncludes.length > 0
+
+  return {
+    schemaVersion: 1,
+    status: blocked ? 'blocked' : 'ready_for_review',
+    currentConfigVerified: validation.verified,
+    approvalRequired: true,
+    requiredIncludes,
+    missingIncludes,
+    blockingExcludes: validation.blockingExcludes,
+    tooBroadIncludes: validation.tooBroadIncludes,
+    removalCandidates,
+    forbiddenIncludes: [
+      'node_modules/**',
+      'node_modules/**/*',
+      'node_modules/@codeinsights/*',
+      'node_modules/@codeinsights/**',
+      'node_modules/@codeinsights/**/*',
+      'node_modules/@codeinsights/native-search-*',
+      'node_modules/@codeinsights/native-search-*/**/*',
+    ],
+    candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
+    candidateVerificationCommands: [
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+    ],
+    forbiddenActions: [
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_use_broad_node_modules_include',
+      'do_not_run_electron_builder_until_publication_and_install_chain_pass',
+      'do_not_add_native_search_optional_dependencies_before_publication',
+      'do_not_treat_allowlist_plan_as_packaging_config_verified',
+      'do_not_treat_allowlist_plan_as_packaged_binary_verified',
+      'do_not_enable_native_by_default_before_verified',
+    ],
   }
 }
 
@@ -1116,6 +1188,10 @@ function getNativeSearchPackageRoot(plan: NativeSearchOptionalPackagePlan): stri
   return `node_modules/${plan.packageName}`
 }
 
+function getNativeSearchPackageIncludeRule(plan: NativeSearchOptionalPackagePlan): string {
+  return `${getNativeSearchPackageRoot(plan)}/**/*`
+}
+
 function globRuleMatchesPathOrAncestor(rule: string, requiredPath: string): boolean {
   const pathSegments = requiredPath.split('/')
   for (let length = pathSegments.length; length >= 1; length -= 1) {
@@ -1220,6 +1296,10 @@ function uniqueSourceBlockers(
   blockers: NativeSearchOptionalPackageSourceBlocker[],
 ): NativeSearchOptionalPackageSourceBlocker[] {
   return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return values.filter((value, index) => values.indexOf(value) === index)
 }
 
 function hasOnlyNativeSearchPackageManifestKeys(value: Record<string, unknown>): boolean {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  buildNativeSearchPackagingConfigAllowlistChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalPackagePlan,
   isNativeSearchPackageManifest,
@@ -951,6 +952,117 @@ files:
       blockingExcludes: [],
       tooBroadIncludes: [],
     })
+  })
+
+  test('builder allowlist change plan 只输出审查输入，不证明 packaged binary', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const requiredIncludes = [
+      'node_modules/@codeinsights/native-search-darwin-arm64/**/*',
+      'node_modules/@codeinsights/native-search-darwin-x64/**/*',
+      'node_modules/@codeinsights/native-search-win32-x64/**/*',
+      'node_modules/@codeinsights/native-search-linux-x64/**/*',
+    ]
+    const validation = validateNativeSearchPackagingConfig(`
+files:
+  - dist/**/*
+  - package.json
+  - "!node_modules/@codeinsights/**"
+`)
+
+    expect(buildNativeSearchPackagingConfigAllowlistChangePlan(validation)).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      currentConfigVerified: false,
+      approvalRequired: true,
+      requiredIncludes,
+      missingIncludes: requiredIncludes,
+      blockingExcludes: ['!node_modules/@codeinsights/**'],
+      tooBroadIncludes: [],
+      removalCandidates: ['!node_modules/@codeinsights/**'],
+      forbiddenIncludes: [
+        'node_modules/**',
+        'node_modules/**/*',
+        'node_modules/@codeinsights/*',
+        'node_modules/@codeinsights/**',
+        'node_modules/@codeinsights/**/*',
+        'node_modules/@codeinsights/native-search-*',
+        'node_modules/@codeinsights/native-search-*/**/*',
+      ],
+      candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
+      candidateVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      ],
+      forbiddenActions: [
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_use_broad_node_modules_include',
+        'do_not_run_electron_builder_until_publication_and_install_chain_pass',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+        'do_not_treat_allowlist_plan_as_packaging_config_verified',
+        'do_not_treat_allowlist_plan_as_packaged_binary_verified',
+        'do_not_enable_native_by_default_before_verified',
+      ],
+    })
+    expect(validation.missingPackages).toEqual(expectedPackages)
+  })
+
+  test('builder allowlist change plan 对精确 per-package include 只进入 ready_for_review', () => {
+    const allowedConfig = `
+files:
+  - dist/**/*
+  - package.json
+  - node_modules/@codeinsights/native-search-darwin-arm64/**/*
+  - node_modules/@codeinsights/native-search-darwin-x64/**/*
+  - node_modules/@codeinsights/native-search-win32-x64/**/*
+  - node_modules/@codeinsights/native-search-linux-x64/**/*
+`
+
+    const validation = validateNativeSearchPackagingConfig(allowedConfig)
+    const plan = buildNativeSearchPackagingConfigAllowlistChangePlan(validation)
+
+    expect(validation.verified).toBe(true)
+    expect(plan.status).toBe('ready_for_review')
+    expect(plan.currentConfigVerified).toBe(true)
+    expect(plan.approvalRequired).toBe(true)
+    expect(plan.missingIncludes).toEqual([])
+    expect(plan.blockingExcludes).toEqual([])
+    expect(plan.tooBroadIncludes).toEqual([])
+    expect(plan.removalCandidates).toEqual([])
+    expect(plan.forbiddenActions).toContain('do_not_treat_allowlist_plan_as_packaged_binary_verified')
+    expect(JSON.stringify(plan)).not.toContain('/Users/')
+    expect(JSON.stringify(plan)).not.toContain('binaryPath')
+  })
+
+  test('builder allowlist change plan 对矛盾 validation 输入保持 blocked', () => {
+    const expectedPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const plan = buildNativeSearchPackagingConfigAllowlistChangePlan({
+      verified: false,
+      expectedPackages,
+      includedPackages: expectedPackages,
+      missingPackages: [],
+      blockingExcludes: [],
+      tooBroadIncludes: [],
+    })
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.currentConfigVerified).toBe(false)
+    expect(plan.missingIncludes).toEqual([])
+    expect(plan.removalCandidates).toEqual([])
+    expect(plan.forbiddenActions).toContain('do_not_treat_allowlist_plan_as_packaging_config_verified')
+  })
+
+  test('builder allowlist change plan 保守拒绝宽泛 include', () => {
+    const validation = validateNativeSearchPackagingConfig(`
+files:
+  - node_modules/@codeinsights/native-search-*/**/*
+`)
+    const plan = buildNativeSearchPackagingConfigAllowlistChangePlan(validation)
+
+    expect(plan.status).toBe('blocked')
+    expect(plan.tooBroadIncludes).toEqual(['node_modules/@codeinsights/native-search-*/**/*'])
+    expect(plan.removalCandidates).toEqual(['node_modules/@codeinsights/native-search-*/**/*'])
+    expect(plan.forbiddenIncludes).toContain('node_modules/@codeinsights/native-search-*/**/*')
+    expect(plan.currentConfigVerified).toBe(false)
   })
 
   test('optional package execution plan 在 source / publish target ready 后只允许进入真实发布阶段', () => {

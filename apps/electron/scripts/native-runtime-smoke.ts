@@ -13,6 +13,7 @@ import {
   type NativeSearchDefaultEnableReadiness,
 } from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import {
+  buildNativeSearchPackagingConfigAllowlistChangePlan,
   buildNativeSearchPackageManifest,
   getNativeSearchOptionalDependencyExpectedVersions,
   getNativeSearchOptionalPackagePlan,
@@ -24,6 +25,7 @@ import {
   validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
   buildNativeSearchOptionalPackageExecutionPlan,
+  type NativeSearchPackagingConfigAllowlistChangePlan,
   type NativeSearchOptionalPackageSourceBlocker,
   type NativeSearchOptionalPackageSourceValidationResult,
   type NativeSearchOptionalPackagePublishTargetBlocker,
@@ -143,6 +145,7 @@ export interface NativeRuntimeSmokeSummary {
   blockingPackagingConfigExcludes: string[]
   tooBroadPackagingConfigIncludes: string[]
   realPackagedBinaryVerified: boolean
+  packagingConfigAllowlistChangePlan: NativeSearchPackagingConfigAllowlistChangePlan
   optionalPackageExecutionPlan: NativeSearchOptionalPackageExecutionPlan
   packagedBundledBinarySmokePlan: PackagedBundledBinarySmokePlan
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
@@ -267,6 +270,18 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const packagedAppEvidenceVerified = Boolean(verification.packagedAppEvidenceVerified)
   const packagedAppIdentityVerified = Boolean(verification.packagedAppIdentityVerified)
   const usesTemporaryFixture = Boolean(verification.usesTemporaryFixture)
+  const missingPackagingConfigPackages = verification.missingPackagingConfigPackages
+    ?? (packagingConfigVerified ? [] : NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName))
+  const blockingPackagingConfigExcludes = verification.blockingPackagingConfigExcludes ?? []
+  const tooBroadPackagingConfigIncludes = verification.tooBroadPackagingConfigIncludes ?? []
+  const packagingConfigAllowlistChangePlan = buildNativeSearchPackagingConfigAllowlistChangePlan({
+    verified: packagingConfigVerified,
+    expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    includedPackages: [],
+    missingPackages: missingPackagingConfigPackages,
+    blockingExcludes: blockingPackagingConfigExcludes,
+    tooBroadIncludes: tooBroadPackagingConfigIncludes,
+  })
   const realPackagedBinaryVerified = !usesTemporaryFixture
     && optionalDependenciesInstallChainVerified
     && optionalPackagesPublished
@@ -350,10 +365,11 @@ export function buildNativeRuntimeSmokeSummary(input: {
     missingOptionalDependencyLockfilePackages: verification.missingOptionalDependencyLockfilePackages ?? [],
     missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
     invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
-    missingPackagingConfigPackages: verification.missingPackagingConfigPackages ?? [],
-    blockingPackagingConfigExcludes: verification.blockingPackagingConfigExcludes ?? [],
-    tooBroadPackagingConfigIncludes: verification.tooBroadPackagingConfigIncludes ?? [],
+    missingPackagingConfigPackages,
+    blockingPackagingConfigExcludes,
+    tooBroadPackagingConfigIncludes,
     realPackagedBinaryVerified,
+    packagingConfigAllowlistChangePlan,
     optionalPackageExecutionPlan,
     packagedBundledBinarySmokePlan,
     nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
