@@ -25,7 +25,7 @@
 - [x] 运行 no-go smoke：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 与 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
 - [x] 运行 `cargo test --manifest-path native/search/Cargo.toml`、`bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
 - [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
-- [ ] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
 
 ### Review
 
@@ -36,6 +36,7 @@
 - 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（55 pass）；`cargo test --manifest-path native/search/Cargo.toml`（13 pass）；默认 optional publish-target smoke；显式 registry publish-target dry-run；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
 - 代码审查子代理未发现阻塞问题；残余风险是本机 `native/search/target/` 测试构建产物不能作为 packaged evidence，本轮未纳入提交。
 - 边界保持：native 继续 default off / 显式 opt-in；未发布 npm package；未执行真实 optionalDependencies 安装链路；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。
+- 状态同步完成：已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review，把最新开发基线推进到 `dc75f380`，并明确 publish-target ready 只表示目标版本可尝试发布，不等于 publication / install-chain / packaging config / packaged binary / default-enable verified。
 
 ## 2026-06-05 Rust/Go Phase 5 publish-target 最新恢复入口回填计划
 
