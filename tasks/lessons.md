@@ -1,8 +1,15 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 最新恢复入口回填习惯
+
+- `95c9bf12 docs(rust-go): 同步 Phase 5 builder allowlist dry-run 后续状态` 已成为当前最新已确认 Rust / Go docs 恢复入口；最新开发基线仍保持 `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan`。
+- 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”或再次强调“记住每阶段完成后自动做”时，必须把当前 `git log` 中真实最新 docs 同步提交回填进 checklist 和 next-session prompt，不能继续保留上一轮占位恢复入口。
+- 每个阶段完成后的自动收尾固定为：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行禁改边界验证，并单独提交状态同步。
+- 仓库文档无法预写本轮未来提交 hash 时，先写当前已存在的 docs 恢复入口；最终回复必须再给出本轮新提交后的实际 HEAD 和可复制启动提示词。
+
 ## 2026-06-05 Rust / Go Phase 5 builder allowlist dry-run plan 边界
 
-- `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `a3f98673`，最新恢复入口应从 `c43b64f2` 或其后的最新 Rust / Go docs 同步提交继续。
+- `a3f98673 feat(rust-go): 补齐 Phase 5 builder allowlist dry-run plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `a3f98673`，最新恢复入口应从 `95c9bf12` 或其后的最新 Rust / Go docs 同步提交继续。
 - builder allowlist dry-run plan 只生成 `packagingConfigAllowlistChangePlan` 作为人工 review 输入：required includes、missing includes、blocking excludes、too-broad includes、removal candidates、candidate verification commands 和 forbidden actions。它不修改 `apps/electron/electron-builder.yml`，不新增 optionalDependencies，不安装、不发布、不读取 binary，也不证明 packaged app bundled binary。
 - 当前 required includes 必须保持精确 per-package 形态：`node_modules/@codeinsights/native-search-darwin-arm64/**/*`、`node_modules/@codeinsights/native-search-darwin-x64/**/*`、`node_modules/@codeinsights/native-search-win32-x64/**/*`、`node_modules/@codeinsights/native-search-linux-x64/**/*`；当前 blocker `!node_modules/@codeinsights/**` 仍表示真实 builder allowlist 未通过。
 - 后续即使 dry-run plan 进入 `ready_for_review`，也只能表示可提交人工审核；不能外推为 `packagingConfigVerified=true`、`optionalDependenciesInstallChainVerified=true`、`bundledBinaryVerified=true` 或 default-enable candidate。
