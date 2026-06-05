@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 const PROTOCOL_VERSION: u32 = 1;
 const CACHE_SCHEMA_VERSION: u32 = 1;
-const BINARY_VERSION: &str = "0.0.3-dev";
+const BINARY_VERSION: &str = "0.0.3";
 const MAX_LIMIT: usize = 100;
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_SNIPPET_CHARS: usize = 160;

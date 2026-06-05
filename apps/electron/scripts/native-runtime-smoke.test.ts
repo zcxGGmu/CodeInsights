@@ -166,40 +166,40 @@ describe('native-runtime-smoke', () => {
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
   })
 
-  test('summary 输出 publish-target dry-run 字段且不改变真实 packaged gate', () => {
+  test('summary 输出 release-ready publish-target dry-run 字段且不改变真实 packaged gate', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'optional-package-publish-target',
       verification: {
         optionalPackagePublishTargetChecked: true,
-        optionalPackagePublishTargetReady: false,
+        optionalPackagePublishTargetReady: true,
         optionalPackagePublishTargetVersion: '0.0.3',
-        optionalPackagePublishTargetBlockers: ['native_search_binary_version_not_release_ready'],
+        optionalPackagePublishTargetBlockers: [],
         publishTargetAvailablePackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
         publishedVersionCollisionPackages: [],
         invalidPublishTargetPackages: [],
         unavailablePublishTargetPackages: [],
-        nativeSearchVersionConsistencyVerified: false,
+        nativeSearchVersionConsistencyVerified: true,
         nativeSearchCargoVersion: '0.0.3',
-        nativeSearchBinaryVersion: '0.0.3-dev',
+        nativeSearchBinaryVersion: '0.0.3',
         plannedOptionalPackageManifestsVerified: true,
       },
       cases: [{
         name: 'optional-package-publish-target',
-        status: 'failed',
-        detail: 'native_search_binary_version_not_release_ready',
+        status: 'passed',
+        detail: 'optionalPackagePublishTargetReady=true',
       }],
     })
 
     expect(summary.optionalPackagePublishTargetChecked).toBe(true)
-    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublishTargetReady).toBe(true)
     expect(summary.optionalPackagePublishTargetVersion).toBe('0.0.3')
-    expect(summary.optionalPackagePublishTargetBlockers).toEqual(['native_search_binary_version_not_release_ready'])
+    expect(summary.optionalPackagePublishTargetBlockers).toEqual([])
     expect(summary.publishTargetAvailablePackages).toEqual(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
     )
-    expect(summary.nativeSearchVersionConsistencyVerified).toBe(false)
+    expect(summary.nativeSearchVersionConsistencyVerified).toBe(true)
     expect(summary.nativeSearchCargoVersion).toBe('0.0.3')
-    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3-dev')
+    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3')
     expect(summary.plannedOptionalPackageManifestsVerified).toBe(true)
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesDeclared).toBe(false)
@@ -959,7 +959,7 @@ describe('native-runtime-smoke', () => {
     expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
   })
 
-  test('optional package publish-target 显式 registry 下 404 可发布但 dev binary 仍 no-go', async () => {
+  test('optional package publish-target 显式 registry 下 404 且 release source version 时 ready', async () => {
     globalThis.fetch = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch
 
     const summary = await runNativeRuntimeSmoke({
@@ -970,7 +970,7 @@ describe('native-runtime-smoke', () => {
     })
 
     expect(summary.optionalPackagePublishTargetChecked).toBe(true)
-    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublishTargetReady).toBe(true)
     expect(summary.optionalPackagePublishTargetVersion).toBe('0.0.3')
     expect(summary.publishTargetAvailablePackages).toEqual(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
@@ -979,15 +979,20 @@ describe('native-runtime-smoke', () => {
     expect(summary.invalidPublishTargetPackages).toEqual([])
     expect(summary.unavailablePublishTargetPackages).toEqual([])
     expect(summary.nativeSearchCargoVersion).toBe('0.0.3')
-    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3-dev')
-    expect(summary.optionalPackagePublishTargetBlockers).toEqual(['native_search_binary_version_not_release_ready'])
+    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3')
+    expect(summary.nativeSearchVersionConsistencyVerified).toBe(true)
+    expect(summary.optionalPackagePublishTargetBlockers).toEqual([])
     expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'optional-package-publish-target',
-      status: 'failed',
+      status: 'passed',
     }))
-    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
     expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
     expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
     expect(JSON.stringify(summary)).not.toContain('/Users/')
