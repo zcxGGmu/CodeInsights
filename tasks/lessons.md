@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 optionalDependencies install-chain 最新恢复入口回填
+
+- `bf98779f docs(rust-go): 同步 Phase 5 optionalDependencies install-chain 后续状态` 已成为 optionalDependencies install-chain dry-run plan 后的最新已确认 Rust / Go docs 恢复入口；后续给下次启动提示词时，最新开发基线继续指向 `7726a008`，最新恢复入口应从 `bf98779f` 或其后的最新 Rust / Go docs 提交继续。
+- 用户再次要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”并强调“记住每个阶段性任务完成后自动去做”时，即使上一轮已经完成状态同步，也要新建本轮 `tasks/todo.md` 状态同步计划，回填当前 `git log` 可确认的最新 docs 提交，更新 checklist / next-session prompt / lessons，写 Review，验证后单独提交。
+- 仓库文档无法预写本轮未来提交 hash 时，先把当前已存在的最新 docs 提交写成恢复入口；提交完成后最终回复必须给出本轮实际 HEAD 和可复制提示词，避免恢复入口落后一轮。
+- 这类恢复入口回填不改变 Phase 5 的 no-go 边界：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 声明 / 安装、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成。
+
 ## 2026-06-06 Rust / Go Phase 5 optionalDependencies install-chain dry-run plan 边界
 
 - `7726a008 feat(rust-go): 补齐 Phase 5 optionalDependencies install-chain dry-run plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `7726a008`，最新恢复入口应从本轮 docs 状态同步提交继续。
