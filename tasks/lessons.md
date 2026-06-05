@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-05 Rust / Go 状态同步恢复入口回填习惯
+
+- 用户要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，即使上一轮已经做过状态同步，也要先用 `git status --short --branch` 和 `git log -25 --oneline` 核对真实 HEAD，再把当前最新 Rust / Go docs 提交回填到 checklist 与 next-session prompt。
+- 这类恢复入口回填是阶段收尾默认动作，不需要业务代码变化也要写 `tasks/todo.md` 小计划、更新 Review / lessons、运行禁改边界验证，并单独提交状态同步。
+- 文档内无法写入本轮未来提交 hash 时，可以保留“以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口”；最终回复必须再给出本轮提交后的真实 HEAD 和可复制提示词。
+
 ## 2026-06-05 Rust / Go Phase 5 optional package publish-target dry-run 边界
 
 - Publish-target dry-run 只检查计划发布版本、registry 目标版本 collision、planned optional package manifest metadata、Cargo version 与 source `BINARY_VERSION` 一致性；它不能发布 package、安装 package、写 package manifest、修改 builder、读取 binary 或证明 packaged binary。

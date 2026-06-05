@@ -1,5 +1,24 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-05 Rust/Go Phase 5 publish-target 最新恢复入口回填计划
+
+范围确认：用户要求更新 Rust / Go Phase 5 最新开发状态、标清已完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步文档。本轮只做状态文档回填：最新开发基线保持为 `9e3e3dff feat(rust-go): 补齐 Phase 5 optional package publish target 预检`，把当前 `git log` 已确认的最新 Rust / Go docs 状态同步提交 `92a6f1a6 docs(rust-go): 同步 Phase 5 publish target 后续状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -25 --oneline`，确认当前分支、工作树和最新 docs / feature 基线。
+- [x] 更新 development checklist 顶部状态、完成 / 未完成清单和下一轮启动入口，把最新已确认恢复入口从 `a05084cd` 推进到 `92a6f1a6`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态和可复制提示词，确保下次启动能从 `92a6f1a6` 或本轮后续 docs 提交继续。
+- [x] 更新 `tasks/lessons.md`，把“阶段完成后自动同步文档、Review、lessons 和可复制提示词”作为默认动作再次固化。
+- [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 已把 Rust / Go development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `a05084cd docs(rust-go): 回填 Phase 5 packaged smoke 最新恢复入口` 回填为 `92a6f1a6 docs(rust-go): 同步 Phase 5 publish target 后续状态`；最新开发基线继续保持 `9e3e3dff feat(rust-go): 补齐 Phase 5 optional package publish target 预检`。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 optional package publish-target dry-run 预检；真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 已补充 `tasks/lessons.md`：以后阶段完成或用户要求最新进度 / 下次启动提示词时，默认先核对 `git log`、回填最新 docs 恢复入口、更新 Review / lessons、运行禁改边界验证并单独提交。
+- 验证通过：`git diff --check`；`git diff -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search-|@codeinsights/native-search-' apps/electron/package.json bun.lock apps/electron/electron-builder.yml || true` 无输出；`git status --short --branch` 仅显示本轮 4 个文档 / 任务文件。
+- 边界保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。
+
 ## 2026-06-05 Rust/Go Phase 5 optional package publish-target dry-run 预检计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，最新开发基线为 `dedbfed1 feat(rust-go): 补齐 Phase 5 packaged smoke 执行计划预检`，最新已确认恢复入口为 `a05084cd docs(rust-go): 回填 Phase 5 packaged smoke 最新恢复入口`。本轮只推进真实 optional package 发布前置工作：新增 publish-target dry-run / preflight gate，只读检查计划发布版本、registry 目标版本冲突、planned optional package manifest 元数据和 native source version 一致性。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；显式 `--check-registry` 只读查询 npm；不发布 npm package，不创建 packaged native binary，不执行安装链路，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
