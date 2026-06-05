@@ -1,5 +1,23 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-05 Rust/Go Phase 5 packaged smoke 恢复入口回填计划
+
+范围确认：用户要求更新最新开发状态、标清完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档回填：最新开发基线保持为 `dedbfed1 feat(rust-go): 补齐 Phase 5 packaged smoke 执行计划预检`，把当前已确认 docs 状态同步提交 `33d0990d docs(rust-go): 同步 Phase 5 packaged smoke 执行计划后续状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -10 --oneline`，确认当前分支 `rust-go-refactor` 工作树起始干净，最新 docs 恢复入口为 `33d0990d`，最新开发基线为 `dedbfed1`。
+- [x] 更新 development checklist 顶部状态、完成 / 未完成清单和下一轮启动入口，把最新已确认恢复入口从 `d2009562` 推进到 `33d0990d`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态和可复制提示词，确保下次启动能从 `33d0990d` 或本轮后续 docs 提交继续。
+- [x] 更新 `tasks/lessons.md`，再次固化阶段完成后自动同步文档、Review、lessons 和可复制提示词的习惯。
+- [x] 运行 `git diff --check`、禁改文件扫描和 native optionalDependencies 扫描。
+- [x] 单独提交本轮状态同步。
+
+### Review
+
+- 已把 development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `d2009562 docs(rust-go): 同步 Phase 5 optional package 发布预检后续状态` 回填为 `33d0990d docs(rust-go): 同步 Phase 5 packaged smoke 执行计划后续状态`；最新开发基线继续保持 `dedbfed1 feat(rust-go): 补齐 Phase 5 packaged smoke 执行计划预检`。
+- 完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 packaged bundled binary smoke 执行计划预检，当前 `packagedBundledBinarySmokePlan.status="blocked"`；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成。
+- 边界保持：native 继续 default off / 显式 opt-in；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 `@codeinsights/native-search-*` optionalDependencies；未 push，未创建 PR。
+- 本轮状态同步提交完成后，最终回复给出实际 docs HEAD 和可直接复制的下一次启动提示词。
+
 ## 2026-06-05 Rust/Go Phase 5 packaged bundled binary smoke plan 预检计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，最新开发基线为 `6ae1c896 feat(rust-go): 补齐 Phase 5 optional package 发布状态预检`，最新已确认恢复入口为 `d2009562 docs(rust-go): 同步 Phase 5 optional package 发布预检后续状态`。当前 native 必须继续 default off / 显式 opt-in；本轮只推进真实 packaged app bundled binary smoke 的机器可读执行计划与阻塞项，不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不执行真实安装链路，不 push，不创建 PR。

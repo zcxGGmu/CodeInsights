@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-06-05 阶段完成后自动同步文档与提示词
+
+- 用户再次强调“每个阶段性任务完成后自动去做”时，要视为长期工作习惯：阶段实现提交后立即同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，并单独提交状态文档。
+- 如果状态同步后用户再次要求“更新最新开发状态 / 标注完成未完成 / 给下次启动提示词”，先用 `git log` 回填当前最新 docs 提交为恢复入口，再输出可复制提示词；不要让文档停在上一轮实现提交或旧 docs 提交。
+- 最终回复里的提示词必须使用本轮提交后的实际 HEAD 作为最新恢复入口；仓库文档无法预写自身提交 hash 时，应保留“以下次 `git log -5 --oneline` 最新 docs 提交为准”的说明。
+
 ## 2026-06-05 Rust / Go Phase 5 packaged bundled binary smoke plan 边界
 
 - `packagedBundledBinarySmokePlan` 只能作为真实 packaged app bundled binary smoke 的执行计划 / preflight 汇总；它不能读取 binary、执行安装、修改 package manifest、修改 builder 配置、创建 packaged app 或输出本地路径。
