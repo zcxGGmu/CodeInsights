@@ -488,6 +488,34 @@ describe('native-runtime-package-manifest', () => {
       published: false,
       invalidPackages: [invalidPackage.packageName],
     }))
+
+    expect(validateNativeSearchOptionalPackagePublication({
+      registryMetadata: {
+        ...registryMetadata,
+        [invalidPackage.packageName]: {
+          name: invalidPackage.packageName,
+          'dist-tags': {
+            latest: '0.0.4',
+          },
+          versions: {
+            '0.0.3': {
+              name: invalidPackage.packageName,
+              version: '0.0.3',
+              os: ['linux'],
+              cpu: [invalidPackage.arch],
+              bin: {
+                'codeinsights-native-search': `bin/${invalidPackage.binaryName}`,
+              },
+            },
+          },
+        },
+      },
+      expectedPackageVersions: expectedVersions,
+    })).toEqual(expect.objectContaining({
+      published: false,
+      invalidPackages: [invalidPackage.packageName],
+      existingInvalidPackages: [invalidPackage.packageName],
+    }))
   })
 
   test('registry 发布元数据拒绝 missing latest、path-like bin 与网络不可验证包', () => {
@@ -1316,7 +1344,10 @@ files:
       publishedPackages: [],
       missingPublishedPackages: expectedPackages,
       invalidPublishedPackages: [],
+      existingInvalidPublishedPackages: [],
       unavailablePublishedPackages: [],
+      publishTargetCollisionPackages: [],
+      commandExcludedPackages: [],
       blockedBy: [
         'optional_package_publish_target_not_ready',
         'optional_packages_not_published',
@@ -1550,12 +1581,13 @@ files:
     })
 
     expect(plan.status).toBe('blocked')
-    expect(plan.publishedPackages).toEqual([collisionPackage])
-    expect(plan.missingPublishedPackages).toEqual(remainingPackages)
+    expect(plan.publishedPackages).toEqual([])
+    expect(plan.missingPublishedPackages).toEqual(expectedPackages)
+    expect(plan.publishTargetCollisionPackages).toEqual([collisionPackage])
+    expect(plan.commandExcludedPackages).toEqual([collisionPackage])
     expect(plan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_packages_not_published',
-      'optional_package_publication_partial',
     ])
     expect(plan.candidatePublicationCommands).toEqual(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS

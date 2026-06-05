@@ -85,6 +85,7 @@ export interface NativeSearchOptionalPackagePublicationValidationResult {
   publishedPackages: string[]
   missingPackages: string[]
   invalidPackages: string[]
+  existingInvalidPackages?: string[]
   unavailablePackages: string[]
 }
 
@@ -120,7 +121,10 @@ export interface NativeSearchOptionalPackagePublicationChangePlan {
   publishedPackages: string[]
   missingPublishedPackages: string[]
   invalidPublishedPackages: string[]
+  existingInvalidPublishedPackages: string[]
   unavailablePublishedPackages: string[]
+  publishTargetCollisionPackages: string[]
+  commandExcludedPackages: string[]
   blockedBy: NativeSearchOptionalPackagePublicationChangePlanBlocker[]
   candidateReviewAction: string
   candidatePreflightCommands: string[]
@@ -526,9 +530,12 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
     && options.packageSource.ready
     && packageSourceVersionMatches
   const optionalPackagesPublished = options.publication.published
-  const publishedPackagesForPlan = uniqueStrings([
+  const publishTargetCollisionPackages = options.publishTarget.publishedVersionCollisionPackages
+  const existingInvalidPublishedPackages = options.publication.existingInvalidPackages ?? []
+  const commandExcludedPackages = uniqueStrings([
     ...options.publication.publishedPackages,
-    ...options.publishTarget.publishedVersionCollisionPackages,
+    ...publishTargetCollisionPackages,
+    ...existingInvalidPublishedPackages,
   ])
   const blockers: NativeSearchOptionalPackagePublicationChangePlanBlocker[] = []
 
@@ -549,8 +556,8 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
   }
 
   if (
-    publishedPackagesForPlan.length > 0
-    && publishedPackagesForPlan.length < options.publication.expectedPackages.length
+    options.publication.publishedPackages.length > 0
+    && options.publication.publishedPackages.length < options.publication.expectedPackages.length
     && !optionalPackagesPublished
   ) {
     blockers.push('optional_package_publication_partial')
@@ -576,12 +583,13 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
         packageVersion,
       }))
       : [],
-    publishedPackages: publishedPackagesForPlan,
-    missingPublishedPackages: options.publication.missingPackages.filter((packageName) => (
-      !publishedPackagesForPlan.includes(packageName)
-    )),
+    publishedPackages: options.publication.publishedPackages,
+    missingPublishedPackages: options.publication.missingPackages,
     invalidPublishedPackages: options.publication.invalidPackages,
+    existingInvalidPublishedPackages,
     unavailablePublishedPackages: options.publication.unavailablePackages,
+    publishTargetCollisionPackages,
+    commandExcludedPackages,
     blockedBy: uniquePublicationChangePlanBlockers(blockers),
     candidateReviewAction: 'prepare_optional_package_publication_for_review',
     candidatePreflightCommands: packageVersionValid && packageVersion != null
@@ -598,7 +606,7 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
     candidatePublicationCommands: blockers.includes('optional_packages_already_published')
       ? []
       : NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
-        .filter((plan) => !publishedPackagesForPlan.includes(plan.packageName))
+        .filter((plan) => !commandExcludedPackages.includes(plan.packageName))
         .map((plan) => (
           `npm publish <native-search-package-source:${plan.packageName}> --access public`
         )),
@@ -626,6 +634,7 @@ export function validateNativeSearchOptionalPackagePublication(
   const publishedPackages: string[] = []
   const missingPackages: string[] = []
   const invalidPackages: string[] = []
+  const existingInvalidPackages: string[] = []
 
   for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
     if (unavailablePackages.includes(plan.packageName)) continue
@@ -638,6 +647,12 @@ export function validateNativeSearchOptionalPackagePublication(
 
     if (!isNativeSearchRegistryPackument(metadata, plan, expectedPackageVersions[plan.packageName])) {
       invalidPackages.push(plan.packageName)
+      if (
+        expectedPackageVersions[plan.packageName] != null
+        && nativeSearchRegistryPackumentHasVersion(metadata, plan, expectedPackageVersions[plan.packageName])
+      ) {
+        existingInvalidPackages.push(plan.packageName)
+      }
       continue
     }
 
@@ -653,6 +668,7 @@ export function validateNativeSearchOptionalPackagePublication(
     publishedPackages,
     missingPackages,
     invalidPackages,
+    ...(existingInvalidPackages.length > 0 ? { existingInvalidPackages } : {}),
     unavailablePackages,
   }
 }
@@ -1111,6 +1127,18 @@ function isNativeSearchRegistryPackument(
   const latestManifest = value.versions[latest]
   return isRecord(latestManifest)
     && isNativeSearchRegistryVersionManifest(latestManifest, plan, latest)
+}
+
+function nativeSearchRegistryPackumentHasVersion(
+  value: unknown,
+  plan: NativeSearchOptionalPackagePlan,
+  expectedVersion: string | undefined,
+): boolean {
+  if (expectedVersion == null || !isPackageVersion(expectedVersion)) return false
+  if (!isRecord(value)) return false
+  if (value.name !== plan.packageName) return false
+  if (!isRecord(value.versions)) return false
+  return value.versions[expectedVersion] != null
 }
 
 function getNativeSearchPublishTargetRegistryState(

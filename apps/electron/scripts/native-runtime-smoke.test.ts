@@ -1242,6 +1242,7 @@ describe('native-runtime-smoke', () => {
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.missingPublishedOptionalPackages).toEqual([])
     expect(summary.invalidPublishedOptionalPackages).toEqual([])
+    expect(summary.existingInvalidPublishedOptionalPackages).toEqual([])
     expect(summary.unavailablePublishedOptionalPackages).toEqual([])
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
@@ -1369,6 +1370,7 @@ describe('native-runtime-smoke', () => {
     expect(summary.invalidPublishedOptionalPackages).toEqual(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
     )
+    expect(summary.existingInvalidPublishedOptionalPackages).toEqual([])
     expect(summary.optionalDependenciesInstallChainChangePlan.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesInstallChainChangePlan.blockedBy).toContain('optional_packages_not_published')
     expect(summary.realPackagedBinaryVerified).toBe(false)
@@ -1599,7 +1601,11 @@ describe('native-runtime-smoke', () => {
     )
     expect(summary.optionalPackagePublishTargetBlockers).toContain('publish_target_version_already_exists')
     expect(summary.optionalPackagePublishTargetReady).toBe(false)
-    expect(summary.optionalPackagePublicationChangePlan.publishedPackages).toEqual(
+    expect(summary.optionalPackagePublicationChangePlan.publishedPackages).toEqual([])
+    expect(summary.optionalPackagePublicationChangePlan.publishTargetCollisionPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackagePublicationChangePlan.commandExcludedPackages).toEqual(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
     )
     expect(summary.optionalPackagePublicationChangePlan.candidatePublicationCommands).toEqual([])
@@ -1680,6 +1686,7 @@ describe('native-runtime-smoke', () => {
       expect(summary.invalidPublishedOptionalPackages).toEqual(
         NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
       )
+      expect(summary.existingInvalidPublishedOptionalPackages).toEqual([])
       expect(summary.optionalDependenciesInstallChainChangePlan.optionalPackagesPublished).toBe(false)
       expect(summary.optionalDependenciesInstallChainChangePlan.blockedBy).toContain('optional_packages_not_published')
       expect(summary.realPackagedBinaryVerified).toBe(false)

@@ -124,6 +124,7 @@ export interface NativeRuntimeSmokeSummary {
   publishedOptionalPackages: string[]
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
+  existingInvalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
   optionalPackagePublishTargetChecked: boolean
   optionalPackagePublishTargetReady: boolean
@@ -180,6 +181,7 @@ interface NativeRuntimeSmokeVerification {
   missingPublishedOptionalPackages?: string[]
   publishedOptionalPackages?: string[]
   invalidPublishedOptionalPackages?: string[]
+  existingInvalidPublishedOptionalPackages?: string[]
   unavailablePublishedOptionalPackages?: string[]
   optionalPackagePublishTargetChecked?: boolean
   optionalPackagePublishTargetReady?: boolean
@@ -300,6 +302,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
   const missingPublishedOptionalPackages = verification.missingPublishedOptionalPackages ?? []
   const publishedOptionalPackages = verification.publishedOptionalPackages ?? []
   const invalidPublishedOptionalPackages = verification.invalidPublishedOptionalPackages ?? []
+  const existingInvalidPublishedOptionalPackages = verification.existingInvalidPublishedOptionalPackages ?? []
   const unavailablePublishedOptionalPackages = verification.unavailablePublishedOptionalPackages ?? []
   const optionalDependenciesInstallChainPlanVersion = verification.optionalDependenciesInstallChainPlanVersion
     ?? verification.optionalPackagePublishTargetVersion
@@ -347,6 +350,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
         : optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
       missingPackages: missingPublishedOptionalPackages,
       invalidPackages: invalidPublishedOptionalPackages,
+      existingInvalidPackages: existingInvalidPublishedOptionalPackages,
       unavailablePackages: unavailablePublishedOptionalPackages,
     },
   })
@@ -360,6 +364,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
         : optionalPackagesPublished ? expectedOptionalDependencyPackages : [],
       missingPackages: missingPublishedOptionalPackages,
       invalidPackages: invalidPublishedOptionalPackages,
+      existingInvalidPackages: existingInvalidPublishedOptionalPackages,
       unavailablePackages: unavailablePublishedOptionalPackages,
     },
     installChain: {
@@ -448,6 +453,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     publishedOptionalPackages,
     missingPublishedOptionalPackages,
     invalidPublishedOptionalPackages,
+    existingInvalidPublishedOptionalPackages,
     unavailablePublishedOptionalPackages,
     optionalPackagePublishTargetChecked,
     optionalPackagePublishTargetReady,
@@ -658,6 +664,9 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         invalidPublishedOptionalPackages: options.checkRegistry === true
           ? optionalPackagePublication.invalidPackages
           : [],
+        existingInvalidPublishedOptionalPackages: options.checkRegistry === true
+          ? optionalPackagePublication.existingInvalidPackages ?? []
+          : [],
         unavailablePublishedOptionalPackages: options.checkRegistry === true
           ? optionalPackagePublication.unavailablePackages
           : [],
@@ -750,6 +759,7 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         missingPublishedOptionalPackages: packagedAppResult.missingPublishedOptionalPackages,
         publishedOptionalPackages: packagedAppResult.publishedOptionalPackages,
         invalidPublishedOptionalPackages: packagedAppResult.invalidPublishedOptionalPackages,
+        existingInvalidPublishedOptionalPackages: packagedAppResult.existingInvalidPublishedOptionalPackages,
         unavailablePublishedOptionalPackages: packagedAppResult.unavailablePublishedOptionalPackages,
         missingOptionalDependencies: packagedAppResult.missingOptionalDependencies,
         invalidOptionalDependencies: packagedAppResult.invalidOptionalDependencies,
@@ -1153,6 +1163,7 @@ interface PackagedAppLayoutCaseResult {
   publishedOptionalPackages: string[]
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
+  existingInvalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
   missingOptionalDependencies: string[]
   invalidOptionalDependencies: string[]
@@ -1359,6 +1370,7 @@ function buildPackagedAppPublicationFields(
   | 'publishedOptionalPackages'
   | 'missingPublishedOptionalPackages'
   | 'invalidPublishedOptionalPackages'
+  | 'existingInvalidPublishedOptionalPackages'
   | 'unavailablePublishedOptionalPackages'
 > {
   return {
@@ -1367,6 +1379,9 @@ function buildPackagedAppPublicationFields(
     publishedOptionalPackages: registryChecked ? optionalPackagePublication.publishedPackages : [],
     missingPublishedOptionalPackages: registryChecked ? optionalPackagePublication.missingPackages : [],
     invalidPublishedOptionalPackages: registryChecked ? optionalPackagePublication.invalidPackages : [],
+    existingInvalidPublishedOptionalPackages: registryChecked
+      ? optionalPackagePublication.existingInvalidPackages ?? []
+      : [],
     unavailablePublishedOptionalPackages: registryChecked ? optionalPackagePublication.unavailablePackages : [],
   }
 }
