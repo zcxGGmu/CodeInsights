@@ -49,6 +49,33 @@ export interface NativeSearchOptionalPackagePublicationValidationResult {
   unavailablePackages: string[]
 }
 
+export type NativeSearchOptionalPackagePublishTargetBlocker =
+  | 'publish_target_version_required'
+  | 'publish_target_version_invalid'
+  | 'registry_check_required'
+  | 'registry_unavailable'
+  | 'publish_target_version_already_exists'
+  | 'publish_target_package_metadata_invalid'
+  | 'native_search_cargo_version_mismatch'
+  | 'native_search_binary_version_not_release_ready'
+  | 'native_search_binary_version_mismatch'
+
+export interface NativeSearchOptionalPackagePublishTargetValidationResult {
+  checked: boolean
+  ready: boolean
+  packageVersion: string | null
+  blockers: NativeSearchOptionalPackagePublishTargetBlocker[]
+  expectedPackages: string[]
+  availablePackages: string[]
+  publishedVersionCollisionPackages: string[]
+  invalidPackages: string[]
+  unavailablePackages: string[]
+  nativeSearchVersionConsistencyVerified: boolean
+  nativeSearchCargoVersion: string | null
+  nativeSearchBinaryVersion: string | null
+  plannedOptionalPackageManifestsVerified: boolean
+}
+
 export interface NativeSearchPackagingConfigValidationResult {
   verified: boolean
   expectedPackages: string[]
@@ -68,6 +95,15 @@ interface ValidateNativeSearchOptionalPackagePublicationOptions {
   registryMetadata?: Record<string, unknown>
   expectedPackageVersions?: Record<string, string>
   unavailablePackages?: string[]
+}
+
+interface ValidateNativeSearchOptionalPackagePublishTargetOptions {
+  packageVersion?: string
+  registryChecked?: boolean
+  registryMetadata?: Record<string, unknown>
+  unavailablePackages?: string[]
+  cargoVersion?: string | null
+  binaryVersion?: string | null
 }
 
 interface BuildNativeSearchPackageManifestOptions {
@@ -262,6 +298,107 @@ export function validateNativeSearchOptionalPackagePublication(
   }
 }
 
+export function validateNativeSearchOptionalPackagePublishTarget(
+  options: ValidateNativeSearchOptionalPackagePublishTargetOptions,
+): NativeSearchOptionalPackagePublishTargetValidationResult {
+  const expectedPackages = getNativeSearchOptionalDependencyNames()
+  const packageVersion = normalizeOptionalString(options.packageVersion)
+  const cargoVersion = normalizeOptionalString(options.cargoVersion)
+  const binaryVersion = normalizeOptionalString(options.binaryVersion)
+  const registryChecked = options.registryChecked === true
+  const unavailablePackages = registryChecked
+    ? normalizePackageNameList(options.unavailablePackages ?? [], expectedPackages)
+    : []
+  const availablePackages: string[] = []
+  const publishedVersionCollisionPackages: string[] = []
+  const invalidPackages: string[] = []
+  const blockers: NativeSearchOptionalPackagePublishTargetBlocker[] = []
+
+  const releaseVersionValid = packageVersion != null && isReleasePackageVersion(packageVersion)
+  if (packageVersion == null) {
+    blockers.push('publish_target_version_required')
+  } else if (!releaseVersionValid) {
+    blockers.push('publish_target_version_invalid')
+  }
+
+  if (!registryChecked) {
+    blockers.push('registry_check_required')
+  } else if (releaseVersionValid) {
+    const registryMetadata = options.registryMetadata ?? {}
+    for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
+      if (unavailablePackages.includes(plan.packageName)) continue
+
+      const metadata = registryMetadata[plan.packageName]
+      if (metadata == null) {
+        availablePackages.push(plan.packageName)
+        continue
+      }
+
+      const targetState = getNativeSearchPublishTargetRegistryState(metadata, plan, packageVersion)
+      if (targetState === 'available') {
+        availablePackages.push(plan.packageName)
+      } else if (targetState === 'collision') {
+        publishedVersionCollisionPackages.push(plan.packageName)
+      } else {
+        invalidPackages.push(plan.packageName)
+      }
+    }
+  }
+
+  if (unavailablePackages.length > 0) blockers.push('registry_unavailable')
+  if (publishedVersionCollisionPackages.length > 0) blockers.push('publish_target_version_already_exists')
+  if (invalidPackages.length > 0) blockers.push('publish_target_package_metadata_invalid')
+
+  if (cargoVersion !== packageVersion) {
+    blockers.push('native_search_cargo_version_mismatch')
+  }
+
+  if (binaryVersion !== packageVersion) {
+    if (packageVersion != null && binaryVersion === `${packageVersion}-dev`) {
+      blockers.push('native_search_binary_version_not_release_ready')
+    } else {
+      blockers.push('native_search_binary_version_mismatch')
+    }
+  } else if (binaryVersion != null && !isReleasePackageVersion(binaryVersion)) {
+    blockers.push('native_search_binary_version_not_release_ready')
+  }
+
+  const plannedOptionalPackageManifestsVerified = releaseVersionValid
+    && NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.every((plan) => (
+      isNativeSearchPackageManifest(buildNativeSearchPackageManifest({
+        plan,
+        packageVersion,
+        binarySha256: '0'.repeat(64),
+      }))
+    ))
+  const nativeSearchVersionConsistencyVerified = releaseVersionValid
+    && cargoVersion === packageVersion
+    && binaryVersion === packageVersion
+    && binaryVersion != null
+    && isReleasePackageVersion(binaryVersion)
+
+  return {
+    checked: registryChecked,
+    ready: registryChecked
+      && releaseVersionValid
+      && blockers.length === 0
+      && availablePackages.length === expectedPackages.length
+      && plannedOptionalPackageManifestsVerified
+      && nativeSearchVersionConsistencyVerified,
+    packageVersion: packageVersion ?? null,
+    blockers: uniqueBlockers(blockers),
+    expectedPackages,
+    availablePackages,
+    publishedVersionCollisionPackages,
+    invalidPackages,
+    unavailablePackages,
+    nativeSearchVersionConsistencyVerified,
+    nativeSearchCargoVersion: cargoVersion,
+    nativeSearchBinaryVersion: binaryVersion,
+    plannedOptionalPackageManifestsVerified,
+  }
+}
+
 export function validateNativeSearchPackagingConfig(
   builderConfigText: string,
 ): NativeSearchPackagingConfigValidationResult {
@@ -319,6 +456,20 @@ function isNativeSearchRegistryPackument(
   const latestManifest = value.versions[latest]
   return isRecord(latestManifest)
     && isNativeSearchRegistryVersionManifest(latestManifest, plan, latest)
+}
+
+function getNativeSearchPublishTargetRegistryState(
+  value: unknown,
+  plan: NativeSearchOptionalPackagePlan,
+  packageVersion: string,
+): 'available' | 'collision' | 'invalid' {
+  if (!isRecord(value)) return 'invalid'
+  if (value.name !== plan.packageName) return 'invalid'
+  if (!isRecord(value.versions)) return 'invalid'
+
+  const targetManifest = value.versions[packageVersion]
+  if (targetManifest == null) return 'available'
+  return isRecord(targetManifest) ? 'collision' : 'invalid'
 }
 
 function isNativeSearchRegistryVersionManifest(
@@ -643,6 +794,22 @@ function isSha256(value: string): boolean {
 
 function isPackageVersion(value: string): boolean {
   return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value)
+}
+
+function isReleasePackageVersion(value: string): boolean {
+  return /^\d+\.\d+\.\d+$/.test(value)
+}
+
+function normalizeOptionalString(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function uniqueBlockers(
+  blockers: NativeSearchOptionalPackagePublishTargetBlocker[],
+): NativeSearchOptionalPackagePublishTargetBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 
 function hasOnlyNativeSearchPackageManifestKeys(value: Record<string, unknown>): boolean {

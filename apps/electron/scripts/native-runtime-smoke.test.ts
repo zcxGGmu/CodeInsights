@@ -63,6 +63,23 @@ describe('native-runtime-smoke', () => {
     })
   })
 
+  test('parseNativeRuntimeSmokeArgs 支持 optional package publish target dry-run', () => {
+    const options = parseNativeRuntimeSmokeArgs([
+      '--mode',
+      'optional-package-publish-target',
+      '--native-search-package-version',
+      '0.0.3',
+      '--check-registry',
+    ])
+
+    expect(options).toEqual({
+      mode: 'optional-package-publish-target',
+      nativeSearchPackageVersion: '0.0.3',
+      checkRegistry: true,
+      query: '关键字',
+    })
+  })
+
   test('summary 不泄露 binary path 或 home path', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'native-available',
@@ -147,6 +164,54 @@ describe('native-runtime-smoke', () => {
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('optional_packages_not_published')
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaging_config_not_verified')
     expect(summary.nativeSearchDefaultEnableReadiness.blockers).toContain('packaged_app_bundled_binary_not_verified')
+  })
+
+  test('summary 输出 publish-target dry-run 字段且不改变真实 packaged gate', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: false,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackagePublishTargetBlockers: ['native_search_binary_version_not_release_ready'],
+        publishTargetAvailablePackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+        publishedVersionCollisionPackages: [],
+        invalidPublishTargetPackages: [],
+        unavailablePublishTargetPackages: [],
+        nativeSearchVersionConsistencyVerified: false,
+        nativeSearchCargoVersion: '0.0.3',
+        nativeSearchBinaryVersion: '0.0.3-dev',
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{
+        name: 'optional-package-publish-target',
+        status: 'failed',
+        detail: 'native_search_binary_version_not_release_ready',
+      }],
+    })
+
+    expect(summary.optionalPackagePublishTargetChecked).toBe(true)
+    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublishTargetVersion).toBe('0.0.3')
+    expect(summary.optionalPackagePublishTargetBlockers).toEqual(['native_search_binary_version_not_release_ready'])
+    expect(summary.publishTargetAvailablePackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.nativeSearchVersionConsistencyVerified).toBe(false)
+    expect(summary.nativeSearchCargoVersion).toBe('0.0.3')
+    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3-dev')
+    expect(summary.plannedOptionalPackageManifestsVerified).toBe(true)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.explicitOptInRequired).toBe(true)
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
   })
 
   test('summary builder 不允许临时 fixture 证明真实 packaged binary', () => {
@@ -871,6 +936,99 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
     expect(JSON.stringify(summary)).not.toContain('/Users/')
     expect(JSON.stringify(summary)).not.toContain('binaryPath')
+  })
+
+  test('optional package publish-target 默认离线必须保持 not ready', async () => {
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'optional-package-publish-target',
+      query: '关键字',
+      nativeSearchPackageVersion: '0.0.3',
+    })
+
+    expect(summary.optionalPackagePublishTargetChecked).toBe(false)
+    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublishTargetVersion).toBe('0.0.3')
+    expect(summary.optionalPackagePublishTargetBlockers).toContain('registry_check_required')
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'optional-package-publish-target',
+      status: 'skipped',
+    }))
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
+  })
+
+  test('optional package publish-target 显式 registry 下 404 可发布但 dev binary 仍 no-go', async () => {
+    globalThis.fetch = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch
+
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'optional-package-publish-target',
+      query: '关键字',
+      nativeSearchPackageVersion: '0.0.3',
+      checkRegistry: true,
+    })
+
+    expect(summary.optionalPackagePublishTargetChecked).toBe(true)
+    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(summary.optionalPackagePublishTargetVersion).toBe('0.0.3')
+    expect(summary.publishTargetAvailablePackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.publishedVersionCollisionPackages).toEqual([])
+    expect(summary.invalidPublishTargetPackages).toEqual([])
+    expect(summary.unavailablePublishTargetPackages).toEqual([])
+    expect(summary.nativeSearchCargoVersion).toBe('0.0.3')
+    expect(summary.nativeSearchBinaryVersion).toBe('0.0.3-dev')
+    expect(summary.optionalPackagePublishTargetBlockers).toEqual(['native_search_binary_version_not_release_ready'])
+    expect(summary.cases).toContainEqual(expect.objectContaining({
+      name: 'optional-package-publish-target',
+      status: 'failed',
+    }))
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(JSON.stringify(summary)).not.toContain('registry.npmjs.org')
+    expect(JSON.stringify(summary)).not.toContain('/Users/')
+  })
+
+  test('optional package publish-target 目标版本已存在时 failed', async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input)
+      const plan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((candidate) => (
+        url.includes(encodeURIComponent(candidate.packageName))
+      ))
+      if (!plan) return new Response('{}', { status: 404 })
+      return Response.json({
+        name: plan.packageName,
+        versions: {
+          '0.0.3': {
+            name: plan.packageName,
+            version: '0.0.3',
+            os: [plan.platform],
+            cpu: [plan.arch],
+            bin: {
+              'codeinsights-native-search': `bin/${plan.binaryName}`,
+            },
+          },
+        },
+      })
+    }) as unknown as typeof fetch
+
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'optional-package-publish-target',
+      query: '关键字',
+      nativeSearchPackageVersion: '0.0.3',
+      checkRegistry: true,
+    })
+
+    expect(summary.publishedVersionCollisionPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackagePublishTargetBlockers).toContain('publish_target_version_already_exists')
+    expect(summary.optionalPackagePublishTargetReady).toBe(false)
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
   })
 
   test('packaged app layout 显式 registry 检查会把未发布 optional packages 标记为 failed gate', async () => {

@@ -6,6 +6,7 @@ import {
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
   validateNativeSearchOptionalPackageInstallChain,
   validateNativeSearchOptionalPackagePublication,
+  validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchOptionalDependencies,
   validateNativeSearchPackagingConfig,
 } from './native-runtime-package-manifest'
@@ -521,6 +522,130 @@ describe('native-runtime-package-manifest', () => {
         }),
       },
     }).invalidPackages).toEqual([plan.packageName])
+  })
+
+  test('校验 optional package publish target：404 目标可发布但仍需版本一致', () => {
+    const result = validateNativeSearchOptionalPackagePublishTarget({
+      packageVersion: '0.0.3',
+      registryChecked: true,
+      registryMetadata: {},
+      cargoVersion: '0.0.3',
+      binaryVersion: '0.0.3',
+    })
+
+    expect(result).toEqual({
+      checked: true,
+      ready: true,
+      packageVersion: '0.0.3',
+      blockers: [],
+      expectedPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      availablePackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+      publishedVersionCollisionPackages: [],
+      invalidPackages: [],
+      unavailablePackages: [],
+      nativeSearchVersionConsistencyVerified: true,
+      nativeSearchCargoVersion: '0.0.3',
+      nativeSearchBinaryVersion: '0.0.3',
+      plannedOptionalPackageManifestsVerified: true,
+    })
+  })
+
+  test('校验 optional package publish target 必须显式 registry check 且版本必须合法', () => {
+    expect(validateNativeSearchOptionalPackagePublishTarget({
+      packageVersion: '',
+      registryChecked: false,
+      cargoVersion: '0.0.3',
+      binaryVersion: '0.0.3',
+    })).toEqual(expect.objectContaining({
+      checked: false,
+      ready: false,
+      packageVersion: null,
+      blockers: [
+        'publish_target_version_required',
+        'registry_check_required',
+        'native_search_cargo_version_mismatch',
+        'native_search_binary_version_mismatch',
+      ],
+      plannedOptionalPackageManifestsVerified: false,
+    }))
+
+    expect(validateNativeSearchOptionalPackagePublishTarget({
+      packageVersion: '0.0.3-dev',
+      registryChecked: true,
+      registryMetadata: {},
+      cargoVersion: '0.0.3',
+      binaryVersion: '0.0.3',
+    })).toEqual(expect.objectContaining({
+      ready: false,
+      packageVersion: '0.0.3-dev',
+      blockers: [
+        'publish_target_version_invalid',
+        'native_search_cargo_version_mismatch',
+        'native_search_binary_version_mismatch',
+      ],
+      plannedOptionalPackageManifestsVerified: false,
+    }))
+  })
+
+  test('校验 optional package publish target 拒绝已存在目标版本和无效 registry metadata', () => {
+    const collisionPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]
+    const invalidPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[1]
+    const unavailablePackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[2]
+    const availablePackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[3]
+    if (!collisionPackage || !invalidPackage || !unavailablePackage || !availablePackage) {
+      throw new Error('native search optional package plan should include packages')
+    }
+
+    const result = validateNativeSearchOptionalPackagePublishTarget({
+      packageVersion: '0.0.3',
+      registryChecked: true,
+      registryMetadata: {
+        [collisionPackage.packageName]: createRegistryPackument(collisionPackage.packageName, {
+          version: '0.0.3',
+          os: [collisionPackage.platform],
+          cpu: [collisionPackage.arch],
+          bin: {
+            'codeinsights-native-search': `bin/${collisionPackage.binaryName}`,
+          },
+        }),
+        [invalidPackage.packageName]: {
+          name: invalidPackage.packageName,
+          versions: 'not-a-record',
+        },
+      },
+      unavailablePackages: [unavailablePackage.packageName],
+      cargoVersion: '0.0.3',
+      binaryVersion: '0.0.3',
+    })
+
+    expect(result.ready).toBe(false)
+    expect(result.availablePackages).toEqual([availablePackage.packageName])
+    expect(result.publishedVersionCollisionPackages).toEqual([collisionPackage.packageName])
+    expect(result.invalidPackages).toEqual([invalidPackage.packageName])
+    expect(result.unavailablePackages).toEqual([unavailablePackage.packageName])
+    expect(result.blockers).toEqual([
+      'registry_unavailable',
+      'publish_target_version_already_exists',
+      'publish_target_package_metadata_invalid',
+    ])
+  })
+
+  test('校验 optional package publish target 捕获 native source 版本不一致和 dev binary', () => {
+    const result = validateNativeSearchOptionalPackagePublishTarget({
+      packageVersion: '0.0.3',
+      registryChecked: true,
+      registryMetadata: {},
+      cargoVersion: '0.0.3',
+      binaryVersion: '0.0.3-dev',
+    })
+
+    expect(result.ready).toBe(false)
+    expect(result.nativeSearchVersionConsistencyVerified).toBe(false)
+    expect(result.nativeSearchCargoVersion).toBe('0.0.3')
+    expect(result.nativeSearchBinaryVersion).toBe('0.0.3-dev')
+    expect(result.blockers).toEqual(['native_search_binary_version_not_release_ready'])
+    expect(JSON.stringify(result)).not.toContain('/Users/')
+    expect(JSON.stringify(result)).not.toContain('binaryPath')
   })
 
   test('缺少 optionalDependencies 对象时返回完整缺失列表且不读取真实 node_modules', () => {

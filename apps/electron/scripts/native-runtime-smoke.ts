@@ -19,8 +19,11 @@ import {
   isNativeSearchPackageManifest,
   NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS,
   validateNativeSearchOptionalPackagePublication,
+  validateNativeSearchOptionalPackagePublishTarget,
   validateNativeSearchPackagingConfig,
   validateNativeSearchOptionalPackageInstallChain,
+  type NativeSearchOptionalPackagePublishTargetBlocker,
+  type NativeSearchOptionalPackagePublishTargetValidationResult,
   type NativeSearchOptionalPackagePublicationValidationResult,
   type NativeSearchPackagingConfigValidationResult,
   type NativeSearchOptionalPackageInstallChainValidationResult,
@@ -42,11 +45,13 @@ export type NativeRuntimeSmokeMode =
   | 'cache-corruption'
   | 'packaged-manifest'
   | 'packaged-app-layout'
+  | 'optional-package-publish-target'
 
 export interface NativeRuntimeSmokeOptions {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
   appNodeModulesRoot?: string
+  nativeSearchPackageVersion?: string
   checkRegistry?: boolean
   query: string
   env?: NodeJS.ProcessEnv
@@ -105,6 +110,18 @@ export interface NativeRuntimeSmokeSummary {
   missingPublishedOptionalPackages: string[]
   invalidPublishedOptionalPackages: string[]
   unavailablePublishedOptionalPackages: string[]
+  optionalPackagePublishTargetChecked: boolean
+  optionalPackagePublishTargetReady: boolean
+  optionalPackagePublishTargetVersion: string | null
+  optionalPackagePublishTargetBlockers: NativeSearchOptionalPackagePublishTargetBlocker[]
+  publishTargetAvailablePackages: string[]
+  publishedVersionCollisionPackages: string[]
+  invalidPublishTargetPackages: string[]
+  unavailablePublishTargetPackages: string[]
+  nativeSearchVersionConsistencyVerified: boolean
+  nativeSearchCargoVersion: string | null
+  nativeSearchBinaryVersion: string | null
+  plannedOptionalPackageManifestsVerified: boolean
   missingOptionalDependencyLockfilePackages: string[]
   missingInstalledOptionalDependencies: string[]
   invalidInstalledOptionalDependencies: string[]
@@ -137,6 +154,18 @@ interface NativeRuntimeSmokeVerification {
   missingPublishedOptionalPackages?: string[]
   invalidPublishedOptionalPackages?: string[]
   unavailablePublishedOptionalPackages?: string[]
+  optionalPackagePublishTargetChecked?: boolean
+  optionalPackagePublishTargetReady?: boolean
+  optionalPackagePublishTargetVersion?: string | null
+  optionalPackagePublishTargetBlockers?: NativeSearchOptionalPackagePublishTargetBlocker[]
+  publishTargetAvailablePackages?: string[]
+  publishedVersionCollisionPackages?: string[]
+  invalidPublishTargetPackages?: string[]
+  unavailablePublishTargetPackages?: string[]
+  nativeSearchVersionConsistencyVerified?: boolean
+  nativeSearchCargoVersion?: string | null
+  nativeSearchBinaryVersion?: string | null
+  plannedOptionalPackageManifestsVerified?: boolean
   missingOptionalDependencyLockfilePackages?: string[]
   missingInstalledOptionalDependencies?: string[]
   invalidInstalledOptionalDependencies?: string[]
@@ -173,6 +202,9 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
       index += 1
     } else if (arg === '--app-node-modules-root') {
       options.appNodeModulesRoot = value
+      index += 1
+    } else if (arg === '--native-search-package-version') {
+      options.nativeSearchPackageVersion = value
       index += 1
     } else if (arg === '--query') {
       options.query = value
@@ -254,6 +286,18 @@ export function buildNativeRuntimeSmokeSummary(input: {
     missingPublishedOptionalPackages: verification.missingPublishedOptionalPackages ?? [],
     invalidPublishedOptionalPackages: verification.invalidPublishedOptionalPackages ?? [],
     unavailablePublishedOptionalPackages: verification.unavailablePublishedOptionalPackages ?? [],
+    optionalPackagePublishTargetChecked: Boolean(verification.optionalPackagePublishTargetChecked),
+    optionalPackagePublishTargetReady: Boolean(verification.optionalPackagePublishTargetReady),
+    optionalPackagePublishTargetVersion: verification.optionalPackagePublishTargetVersion ?? null,
+    optionalPackagePublishTargetBlockers: verification.optionalPackagePublishTargetBlockers ?? [],
+    publishTargetAvailablePackages: verification.publishTargetAvailablePackages ?? [],
+    publishedVersionCollisionPackages: verification.publishedVersionCollisionPackages ?? [],
+    invalidPublishTargetPackages: verification.invalidPublishTargetPackages ?? [],
+    unavailablePublishTargetPackages: verification.unavailablePublishTargetPackages ?? [],
+    nativeSearchVersionConsistencyVerified: Boolean(verification.nativeSearchVersionConsistencyVerified),
+    nativeSearchCargoVersion: verification.nativeSearchCargoVersion ?? null,
+    nativeSearchBinaryVersion: verification.nativeSearchBinaryVersion ?? null,
+    plannedOptionalPackageManifestsVerified: Boolean(verification.plannedOptionalPackageManifestsVerified),
     missingOptionalDependencyLockfilePackages: verification.missingOptionalDependencyLockfilePackages ?? [],
     missingInstalledOptionalDependencies: verification.missingInstalledOptionalDependencies ?? [],
     invalidInstalledOptionalDependencies: verification.invalidInstalledOptionalDependencies ?? [],
@@ -445,6 +489,27 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         missingPackagingConfigPackages: packagingConfig.missingPackages,
         blockingPackagingConfigExcludes: packagingConfig.blockingExcludes,
         tooBroadPackagingConfigIncludes: packagingConfig.tooBroadIncludes,
+        realPackagedBinaryVerified: false,
+      }
+    } else if (options.mode === 'optional-package-publish-target') {
+      const publishTarget = await readNativeSearchOptionalPackagePublishTarget(
+        options.nativeSearchPackageVersion,
+        options.checkRegistry === true,
+      )
+      cases.push(buildOptionalPackagePublishTargetPreflightCase(publishTarget))
+      verification = {
+        optionalPackagePublishTargetChecked: publishTarget.checked,
+        optionalPackagePublishTargetReady: publishTarget.ready,
+        optionalPackagePublishTargetVersion: publishTarget.packageVersion,
+        optionalPackagePublishTargetBlockers: publishTarget.blockers,
+        publishTargetAvailablePackages: publishTarget.availablePackages,
+        publishedVersionCollisionPackages: publishTarget.publishedVersionCollisionPackages,
+        invalidPublishTargetPackages: publishTarget.invalidPackages,
+        unavailablePublishTargetPackages: publishTarget.unavailablePackages,
+        nativeSearchVersionConsistencyVerified: publishTarget.nativeSearchVersionConsistencyVerified,
+        nativeSearchCargoVersion: publishTarget.nativeSearchCargoVersion,
+        nativeSearchBinaryVersion: publishTarget.nativeSearchBinaryVersion,
+        plannedOptionalPackageManifestsVerified: publishTarget.plannedOptionalPackageManifestsVerified,
         realPackagedBinaryVerified: false,
       }
     } else if (options.mode === 'packaged-app-layout') {
@@ -716,6 +781,46 @@ function buildPackagedOptionalPackagePublicationPreflightCase(
       `missingPublishedOptionalPackages=${result.missingPackages.join(',') || 'none'}`,
       `invalidPublishedOptionalPackages=${result.invalidPackages.join(',') || 'none'}`,
       `unavailablePublishedOptionalPackages=${result.unavailablePackages.join(',') || 'none'}`,
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
+  }
+}
+
+function buildOptionalPackagePublishTargetPreflightCase(
+  result: NativeSearchOptionalPackagePublishTargetValidationResult,
+): NativeRuntimeSmokeCase {
+  if (!result.checked) {
+    return {
+      name: 'optional-package-publish-target',
+      status: 'skipped',
+      detail: [
+        'optionalPackagePublishTargetChecked=false',
+        'optionalPackagePublishTargetReady=false',
+        `optionalPackagePublishTargetVersion=${result.packageVersion ?? 'none'}`,
+        `optionalPackagePublishTargetBlockers=${result.blockers.join(',') || 'none'}`,
+        'optionalPackagesPublished=false',
+        'realPackagedBinaryVerified=false',
+      ].join('; '),
+    }
+  }
+
+  return {
+    name: 'optional-package-publish-target',
+    status: result.ready ? 'passed' : 'failed',
+    detail: [
+      'optionalPackagePublishTargetChecked=true',
+      `optionalPackagePublishTargetReady=${String(result.ready)}`,
+      `optionalPackagePublishTargetVersion=${result.packageVersion ?? 'none'}`,
+      `optionalPackagePublishTargetBlockers=${result.blockers.join(',') || 'none'}`,
+      `publishTargetAvailablePackages=${result.availablePackages.join(',') || 'none'}`,
+      `publishedVersionCollisionPackages=${result.publishedVersionCollisionPackages.join(',') || 'none'}`,
+      `invalidPublishTargetPackages=${result.invalidPackages.join(',') || 'none'}`,
+      `unavailablePublishTargetPackages=${result.unavailablePackages.join(',') || 'none'}`,
+      `nativeSearchVersionConsistencyVerified=${String(result.nativeSearchVersionConsistencyVerified)}`,
+      `nativeSearchCargoVersion=${result.nativeSearchCargoVersion ?? 'none'}`,
+      `nativeSearchBinaryVersion=${result.nativeSearchBinaryVersion ?? 'none'}`,
+      `plannedOptionalPackageManifestsVerified=${String(result.plannedOptionalPackageManifestsVerified)}`,
+      'optionalPackagesPublished=false',
       'realPackagedBinaryVerified=false',
     ].join('; '),
   }
@@ -1082,12 +1187,75 @@ async function readNativeSearchOptionalPackagePublication(
   })
 }
 
+async function readNativeSearchOptionalPackagePublishTarget(
+  packageVersion: string | undefined,
+  checkRegistry: boolean,
+): Promise<NativeSearchOptionalPackagePublishTargetValidationResult> {
+  const registryResult = checkRegistry
+    ? await readNativeSearchOptionalPackageRegistryMetadata()
+    : { registryMetadata: {}, unavailablePackages: [] }
+
+  return validateNativeSearchOptionalPackagePublishTarget({
+    packageVersion,
+    registryChecked: checkRegistry,
+    registryMetadata: registryResult.registryMetadata,
+    unavailablePackages: registryResult.unavailablePackages,
+    cargoVersion: readNativeSearchCargoVersion(),
+    binaryVersion: readNativeSearchSourceBinaryVersion(),
+  })
+}
+
+async function readNativeSearchOptionalPackageRegistryMetadata(): Promise<{
+  registryMetadata: Record<string, unknown>
+  unavailablePackages: string[]
+}> {
+  const registryMetadata: Record<string, unknown> = {}
+  const unavailablePackages: string[] = []
+  for (const plan of NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS) {
+    try {
+      const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(plan.packageName)}`, {
+        headers: {
+          accept: 'application/vnd.npm.install-v1+json, application/json',
+        },
+      })
+      if (response.status === 404) continue
+      if (!response.ok) {
+        unavailablePackages.push(plan.packageName)
+        continue
+      }
+      registryMetadata[plan.packageName] = await response.json() as unknown
+    } catch {
+      unavailablePackages.push(plan.packageName)
+    }
+  }
+
+  return { registryMetadata, unavailablePackages }
+}
+
 function readCurrentNativeSearchOptionalDependencyExpectedVersions(): Record<string, string> {
   try {
     const packageJson = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8')) as unknown
     return getNativeSearchOptionalDependencyExpectedVersions(packageJson)
   } catch {
     return {}
+  }
+}
+
+function readNativeSearchCargoVersion(): string | null {
+  try {
+    const cargoToml = readFileSync(join(import.meta.dir, '..', '..', '..', 'native', 'search', 'Cargo.toml'), 'utf-8')
+    return cargoToml.match(/^version\s*=\s*"([^"]+)"/m)?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
+function readNativeSearchSourceBinaryVersion(): string | null {
+  try {
+    const libSource = readFileSync(join(import.meta.dir, '..', '..', '..', 'native', 'search', 'src', 'lib.rs'), 'utf-8')
+    return libSource.match(/BINARY_VERSION:\s*&str\s*=\s*"([^"]+)"/)?.[1] ?? null
+  } catch {
+    return null
   }
 }
 
@@ -1374,6 +1542,7 @@ function parseSmokeMode(value: string): NativeRuntimeSmokeMode {
     || value === 'cache-corruption'
     || value === 'packaged-manifest'
     || value === 'packaged-app-layout'
+    || value === 'optional-package-publish-target'
   ) {
     return value
   }
