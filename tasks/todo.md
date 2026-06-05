@@ -1,5 +1,45 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 optional package publication change plan 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `235ea492 docs(rust-go): 回填 Phase 5 optionalDependencies 最新恢复入口`，最新开发基线为 `7726a008 feat(rust-go): 补齐 Phase 5 optionalDependencies install-chain dry-run plan`，最新已确认恢复入口为 `235ea492`。本轮只推进真实 optional package 发布前的人工 review / 发布执行计划收口：在既有 publish-target dry-run、optional package source preflight、publication gate 和 execution plan 之上，新增机器可读 `optionalPackagePublicationChangePlan`，输出 4 个计划发布包、目标版本、publish-target / source / registry publication blockers、候选发布前验证命令、候选发布命令形状和禁止动作。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行 `npm pack`，不安装依赖，不写 `apps/electron/package.json` / `bun.lock`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前分支、工作树和最近提交历史。
+- [x] 尝试通过子代理复核 Phase 5 gate / no-go 与 `native/search` 现状；因 thread agent limit 不可用，改为本地只读复核，本轮主线收敛到 optional package publication change plan，不触碰 no-go 文件。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-package-manifest.test.ts` 和 `native-runtime-smoke.test.ts`，锁住 publication change plan 的 blocked / ready_for_review、planned packages、registry / source / target blockers、默认离线边界、候选命令脱敏和“不证明 published / installed / packaged verified”语义。
+- [x] 在 `native-runtime-package-manifest.ts` 新增只读 optional package publication change plan helper：只消费 publish-target / source / publication preflight 结果，不查询 registry、不运行 pack / publish、不安装、不写 package manifest / lockfile / builder、不读取 binary。
+- [x] 在 `smoke:native-runtime` summary 接入 `optionalPackagePublicationChangePlan`，当前仓库默认必须继续输出 `optionalPackagesPublished=false`、`optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`packagingConfigVerified=false`、`realPackagedBinaryVerified=false`、`bundledBinaryVerified=false` 和 `nativeSearchDefaultEnableReadiness.defaultEnableCandidate=false`。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增真实 native optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3` 和显式 `--check-registry` dry-run，确认 publication change plan 不把 publish-target ready 外推为 published。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`。
+- [x] 运行 no-go smoke：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest` 与 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据`，基于 `8097ed4c` 的 publication change plan 与 `2188e276` 的 collision 过滤修正继续收口。
+- 已新增并收紧 `optionalPackagePublicationChangePlan`：输出 4 个 planned package、目标版本、publish-target / source / publication blocker、candidate preflight commands、candidate publication commands 和 forbidden actions。`ready_for_review` 只代表真实 publication 前的人工 review 输入，不运行 `npm publish` / `npm pack`，不安装、不写 `apps/electron/package.json` / `bun.lock` / builder，不读取 binary。
+- 证据语义已拆分：`publishedPackages` 只表示 registry 中 exact expected version 且 metadata 有效的真实 publication 证据；`publishTargetCollisionPackages` 与 `existingInvalidPublishedPackages` 只会进入 `commandExcludedPackages` 并排除候选发布命令，不能被当作已发布证据。
+- 当前 no-go 仍成立：默认 smoke 不联网；显式 `--check-registry` 的 publish-target dry-run 可进入 `ready_for_review`，但 `optionalPackagesPublished=false`、`optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`packagingConfigVerified=false`、`realPackagedBinaryVerified=false`、`bundledBinaryVerified=false` 和 `nativeSearchDefaultEnableReadiness.defaultEnableCandidate=false` 均保持 false。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.162` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- smoke 验证通过：`smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3`；`smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3 --check-registry`；`smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`。预期 no-go：`smoke:native-runtime -- --mode packaged-manifest --check-registry` 返回 exit 1，因为 4 个计划 optional package 尚未发布。
+- 禁改边界保持：未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。代码审查子代理因 thread agent limit 不可用，已完成本地复核。
+- 状态同步已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review：最新开发基线推进到 `d679eabb`，最新已确认恢复入口先记录为 `235ea492 docs(rust-go): 回填 Phase 5 optionalDependencies 最新恢复入口`，本轮 docs 提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 状态同步验证通过：`git diff --check`；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；真实 native optionalDependencies 扫描无匹配；packaged native binary 产物扫描无输出；`git status --short --branch` 仅显示本轮 docs / tasks 文件。
+
 ## 2026-06-06 Rust/Go Phase 5 optionalDependencies install-chain 最新恢复入口回填计划
 
 范围确认：用户要求更新 Rust / Go Phase 5 最新开发状态、清楚标注完成 / 未完成，并给出下次启动可直接复制的提示词，同时再次强调每个阶段性任务完成后自动同步。本轮只做状态文档回填：最新开发基线保持为 `7726a008 feat(rust-go): 补齐 Phase 5 optionalDependencies install-chain dry-run plan`，把当前 `git log` 已确认的最新 Rust / Go docs 状态同步提交 `bf98779f docs(rust-go): 同步 Phase 5 optionalDependencies install-chain 后续状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。

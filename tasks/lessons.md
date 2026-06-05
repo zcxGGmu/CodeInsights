@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 publication plan 发布证据边界
+
+- `d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `d679eabb`，最新恢复入口应从本轮 docs 状态同步提交继续。
+- optional package publication change plan 只能作为真实 `npm publish` 前的人工 review 输入；`ready_for_review` 不等于 package 已发布，不等于 optionalDependencies 可声明 / 可安装，也不证明 packaged app bundled binary。
+- `publishedPackages` 只能记录 registry 中 exact expected version 且 metadata 有效的真实 publication 证据。publish-target collision、exact-version invalid registry metadata、`existingInvalidPublishedPackages` 或任何 command exclusion 都不能混入 `publishedPackages`。
+- `publishTargetCollisionPackages` 与 `existingInvalidPublishedPackages` 只用于阻断 / 排除候选发布命令，必须进入 `commandExcludedPackages` 这类 exclusion 字段；不能把“目标版本已被占用”解释成“我们已经发布成功”。
+- 后续状态同步必须继续强调：真实 verified 仍必须同时满足 bundledBinaryVerified=true 且无 blocker；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成。
+
 ## 2026-06-06 Rust / Go Phase 5 optionalDependencies install-chain 最新恢复入口回填
 
 - `bf98779f docs(rust-go): 同步 Phase 5 optionalDependencies install-chain 后续状态` 已成为 optionalDependencies install-chain dry-run plan 后的最新已确认 Rust / Go docs 恢复入口；后续给下次启动提示词时，最新开发基线继续指向 `7726a008`，最新恢复入口应从 `bf98779f` 或其后的最新 Rust / Go docs 提交继续。
