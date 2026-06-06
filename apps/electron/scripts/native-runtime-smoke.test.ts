@@ -682,6 +682,56 @@ describe('native-runtime-smoke', () => {
         'do_not_treat_blocked_packet_as_approved',
       ],
     })
+    expect(summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      currentGate: item.currentGate,
+      approvalRequired: item.approvalRequired,
+      candidateCommands: item.candidateCommands,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        candidateCommands: [],
+      },
+    ])
     expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_package_source_not_ready',
@@ -820,6 +870,65 @@ describe('native-runtime-smoke', () => {
         'do_not_modify_electron_builder_yml_without_approval',
       ],
     })
+    expect(summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      currentGate: item.currentGate,
+      approvalRequired: item.approvalRequired,
+      requiredApproval: item.requiredApproval,
+      candidateCommands: item.candidateCommands,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'ready_for_approval',
+        currentGate: true,
+        approvalRequired: true,
+        requiredApproval: 'release_approval',
+        candidateCommands: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+          `npm publish <native-search-package-source:${plan.packageName}> --access public`
+        )),
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        requiredApproval: 'package_json_optional_dependencies_change_approval',
+        candidateCommands: [],
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        requiredApproval: 'install_chain_execution_approval',
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        requiredApproval: 'electron_builder_allowlist_change_approval',
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        requiredApproval: 'packaged_app_smoke_execution_approval',
+        candidateCommands: [],
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        approvalRequired: false,
+        requiredApproval: 'default_enable_risk_review_approval',
+        candidateCommands: [],
+      },
+    ])
     expect(summary.nativeSearchReleaseHandoffPlan.acceptanceEvidence).toContain(
       'registry_packument_contains_exact_expected_versions',
     )
