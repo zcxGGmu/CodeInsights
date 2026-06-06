@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 builder allowlist 修改意图边界
+
+- `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口为 `c1890a04 docs(rust-go): 回填 Phase 5 fail-closed 最新恢复入口`。
+- `packagingConfigAllowlistChangePlan.candidateYamlEditPlan` 只表示后续真实修改 `apps/electron/electron-builder.yml` 的审查输入：目标文件、`modifiesFile=false`、操作顺序、待添加精确 per-package include、待移除阻断规则、禁止宽泛 include 和验收证据。它不修改 builder，不等于 `packagingConfigVerified=true`，也不证明 packaged app bundled binary。
+- 后续即使 `candidateYamlEditPlan.addIncludes` / `removeRules` 形状完整，也必须等用户明确批准后才能实际修改 `apps/electron/electron-builder.yml`；真实 verified 仍要求 publication、optionalDependencies install-chain、builder allowlist 实际通过、真实 packaged app evidence / identity / binary smoke 同时满足。
+- 本轮 no-go 不变：native 必须继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-06 Rust / Go Phase 5 fail-closed 最新恢复入口回填
 
 - `8ed8c1c5 docs(rust-go): 同步 Phase 5 fail-closed 证据状态` 已成为 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `3f5a0783`，最新恢复入口应从 `8ed8c1c5` 或其后的最新 Rust / Go docs 状态同步提交继续。

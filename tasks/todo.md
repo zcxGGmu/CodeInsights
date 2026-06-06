@@ -1,5 +1,42 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 builder allowlist 实际修改前置证据计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。本轮实现前启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `c1890a04 docs(rust-go): 回填 Phase 5 fail-closed 最新恢复入口`，最新开发基线保持 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据`；实现提交后当前开发基线推进到 `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图`。本轮只推进 builder allowlist 实际修改前置工作：在不修改 `apps/electron/electron-builder.yml` 的前提下，把后续真实 builder allowlist 修改的精确 YAML edit intent、操作顺序、验收证据和禁止动作机器可读化，避免后续把 dry-run plan 或宽泛 include 当成 packaging verified。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认最近历史包含 `c1890a04`、`8ed8c1c5`、`3f5a0783`、`6bde0340`、`5bb2cebd` 和 `4fec7fab`。
+- [x] 确认本轮不使用子代理工具：当前工具约束要求只有用户显式要求并行 agent work 时才能 spawn，本轮改由主线本地完成。
+
+实现计划：
+
+- [x] 测试先行扩展 `apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts` 与 `apps/electron/scripts/native-runtime-smoke.test.ts`，锁住 builder allowlist 实际修改前置证据：精确 per-package include、阻断 exclude removal intent、禁止宽泛 include、验收命令和“不修改 builder / 不证明 packaged verified”语义。
+- [x] 在 `apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.ts` 的 `packagingConfigAllowlistChangePlan` 中新增只读 candidate edit intent 字段；只消费当前 validator 结果，不写 `electron-builder.yml`，不发布、不安装、不读取 binary。
+- [x] 在 `apps/electron/scripts/native-runtime-smoke.ts` summary 中透出该字段，当前仓库仍保持 `packagingConfigVerified=false`、`bundledBinaryVerified=false` 和 `nativeSearchDefaultEnableReadiness.defaultEnableCandidate=false`。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增真实 native optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行预期 no-go：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry`，确认 4 个计划 optional package 未发布时仍返回非零。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图`。
+- 已新增 `NativeSearchPackagingConfigAllowlistCandidateYamlEditPlan` 和 `packagingConfigAllowlistChangePlan.candidateYamlEditPlan`，只读输出后续真实 `apps/electron/electron-builder.yml` 修改的目标文件、`modifiesFile=false`、操作顺序、待添加精确 per-package include、需要移除的阻断规则、禁止宽泛 include 和验收证据。
+- 当前 `candidateYamlEditPlan.addIncludes` 仍为 4 个精确 package include，`removeRules` 仍包含 `!node_modules/@codeinsights/**`；这只说明 builder allowlist 实际修改的审查输入已机器可读化，不代表 `electron-builder.yml` 已修改，也不代表 `packagingConfigVerified=true`。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.168` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：`bun test apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/scripts/native-runtime-smoke.test.ts`（99 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；预期 no-go `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry` 返回 exit 1，4 个计划 optional package 仍在 `missingPublishedOptionalPackages`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮未修改 `apps/electron/electron-builder.yml`，未创建 packaged native binary，未执行 `npm publish`，未运行真实 install，未新增真实 native search optionalDependencies，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+- 禁改验证通过：`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+- 本轮状态同步已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和 lessons；提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-06 Rust/Go Phase 5 fail-closed 最新恢复入口回填计划
 
 范围确认：用户要求更新文档最新开发状态，清楚标注已完成 / 未完成，确保下次启动可以继续跟踪进度，并直接给出下次启动提示词；同时要求把“每个阶段性任务完成后自动同步文档状态和提示词”的习惯继续固化。本轮只做状态文档回填：当前分支为 `rust-go-refactor`，当前 `git log` 已确认最新 Rust / Go docs 状态同步提交为 `8ed8c1c5 docs(rust-go): 同步 Phase 5 fail-closed 证据状态`，最新开发基线保持 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据`。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
