@@ -208,6 +208,24 @@ export interface NativeSearchReleaseHandoffGateBinding {
   failClosedOnOutOfOrderEvidence: boolean
 }
 
+export type NativeSearchReleaseHandoffApprovalPacketStatus =
+  | 'blocked'
+  | 'ready_for_approval'
+  | 'verified'
+
+export interface NativeSearchReleaseHandoffApprovalPacket {
+  schemaVersion: 1
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  status: NativeSearchReleaseHandoffApprovalPacketStatus
+  approvalRequired: boolean
+  requiredApproval: string | null
+  requiredEvidenceBeforeExecution: string[]
+  allowedActionsAfterApproval: string[]
+  candidateCommands: string[]
+  doesNotAuthorize: string[]
+  forbiddenActions: string[]
+}
+
 export interface NativeSearchReleaseHandoffPlan {
   schemaVersion: 1
   status: NativeSearchReleaseHandoffPlanStatus
@@ -223,6 +241,7 @@ export interface NativeSearchReleaseHandoffPlan {
   blockedBy: NativeSearchReleaseHandoffPlanBlocker[]
   missingEvidence: NativeSearchReleaseHandoffPlanMissingEvidence[]
   gateBinding: NativeSearchReleaseHandoffGateBinding
+  currentGateApprovalPacket: NativeSearchReleaseHandoffApprovalPacket
   requiredApprovals: string[]
   acceptanceEvidence: string[]
   candidateNextCommands: string[]
@@ -827,6 +846,8 @@ function buildNativeSearchReleaseHandoffPlan(input: {
   const status: NativeSearchReleaseHandoffPlanStatus = verified
     ? 'verified'
     : blockedBy.length === 0 ? 'ready_for_release_handoff' : 'blocked'
+  const missingEvidence = getNativeSearchReleaseHandoffMissingEvidence(input)
+  const candidateNextCommands = getNativeSearchReleaseHandoffCandidateCommands(input)
 
   return {
     schemaVersion: 1,
@@ -841,7 +862,7 @@ function buildNativeSearchReleaseHandoffPlan(input: {
     readyForPackagedSmokeHandoff,
     readyForDefaultEnableRiskReview,
     blockedBy,
-    missingEvidence: getNativeSearchReleaseHandoffMissingEvidence(input),
+    missingEvidence,
     gateBinding: {
       schemaVersion: 1,
       authoritativeNextGate: input.optionalPackageExecutionPlan.nextStage,
@@ -850,6 +871,12 @@ function buildNativeSearchReleaseHandoffPlan(input: {
       verifiedRequiresExecutionPlanVerified: true,
       failClosedOnOutOfOrderEvidence: true,
     },
+    currentGateApprovalPacket: buildNativeSearchReleaseHandoffApprovalPacket({
+      nextGate: input.optionalPackageExecutionPlan.nextStage,
+      status,
+      missingEvidence,
+      candidateNextCommands,
+    }),
     requiredApprovals: [
       'release_approval',
       'npm_registry_publish_access',
@@ -868,7 +895,7 @@ function buildNativeSearchReleaseHandoffPlan(input: {
       'electron_builder_allowlist_includes_exact_native_search_packages',
       'native_search_default_enable_readiness_verified',
     ]),
-    candidateNextCommands: getNativeSearchReleaseHandoffCandidateCommands(input),
+    candidateNextCommands,
     doesNotVerify: [
       'optional_packages_published',
       'optional_dependencies_declared',
@@ -888,6 +915,304 @@ function buildNativeSearchReleaseHandoffPlan(input: {
       'do_not_treat_release_handoff_as_packaged_binary_verified',
       'do_not_enable_native_by_default_before_verified',
     ],
+  }
+}
+
+function buildNativeSearchReleaseHandoffApprovalPacket(input: {
+  nextGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  status: NativeSearchReleaseHandoffPlanStatus
+  missingEvidence: NativeSearchReleaseHandoffPlanMissingEvidence[]
+  candidateNextCommands: string[]
+}): NativeSearchReleaseHandoffApprovalPacket {
+  if (input.status === 'verified') {
+    return {
+      schemaVersion: 1,
+      gate: input.nextGate,
+      status: 'verified',
+      approvalRequired: false,
+      requiredApproval: null,
+      requiredEvidenceBeforeExecution: [],
+      allowedActionsAfterApproval: [],
+      candidateCommands: [],
+      doesNotAuthorize: [],
+      forbiddenActions: [
+        'do_not_treat_approval_packet_as_default_enable_without_risk_review',
+      ],
+    }
+  }
+
+  if (input.status === 'blocked') {
+    return {
+      schemaVersion: 1,
+      gate: input.nextGate,
+      status: 'blocked',
+      approvalRequired: false,
+      requiredApproval: null,
+      requiredEvidenceBeforeExecution: input.missingEvidence,
+      allowedActionsAfterApproval: [],
+      candidateCommands: [],
+      doesNotAuthorize: [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ],
+      forbiddenActions: [
+        'do_not_execute_candidate_commands_without_required_approval',
+        'do_not_skip_authoritative_next_gate',
+        'do_not_treat_approval_packet_as_completed_evidence',
+        'do_not_treat_blocked_packet_as_approved',
+      ],
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    gate: input.nextGate,
+    status: 'ready_for_approval',
+    approvalRequired: true,
+    requiredApproval: getNativeSearchReleaseHandoffRequiredApproval(input.nextGate),
+    requiredEvidenceBeforeExecution: getNativeSearchReleaseHandoffApprovalEvidence(input.nextGate),
+    allowedActionsAfterApproval: getNativeSearchReleaseHandoffAllowedActions(input.nextGate),
+    candidateCommands: input.candidateNextCommands,
+    doesNotAuthorize: getNativeSearchReleaseHandoffUnauthorizedActions(input.nextGate),
+    forbiddenActions: getNativeSearchReleaseHandoffApprovalForbiddenActions(input.nextGate),
+  }
+}
+
+function getNativeSearchReleaseHandoffRequiredApproval(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string | null {
+  switch (gate) {
+    case 'optional_package_publication':
+      return 'release_approval'
+    case 'optional_dependencies_declaration':
+      return 'package_json_optional_dependencies_change_approval'
+    case 'optional_package_install_chain':
+      return 'install_chain_execution_approval'
+    case 'packaging_config_allowlist':
+      return 'electron_builder_allowlist_change_approval'
+    case 'packaged_app_bundled_binary_smoke':
+      return 'packaged_app_smoke_execution_approval'
+    case 'default_enable_risk_review':
+      return 'default_enable_risk_review_approval'
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return null
+  }
+}
+
+function getNativeSearchReleaseHandoffApprovalEvidence(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        'release_approval_recorded',
+        'npm_registry_auth_with_publish_access',
+        'optional_package_publish_target_ready',
+        'optional_package_source_ready',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        'optional_packages_published_for_expected_version',
+        'package_json_optional_dependencies_change_approval',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        'optional_dependencies_declared_in_package_json',
+        'install_chain_execution_approval',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        'optional_dependency_lockfile_resolved_entries_present',
+        'optional_dependency_installed_package_manifests_valid',
+        'electron_builder_allowlist_change_approval',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        'optional_packages_published_for_expected_version',
+        'optional_dependencies_install_chain_verified',
+        'builder_allowlist_includes_native_search_packages',
+        'prebuilt_packaged_app_root',
+        'packaged_app_identity',
+        'packaged_app_smoke_execution_approval',
+      ]
+    case 'default_enable_risk_review':
+      return [
+        'summary_bundledBinaryVerified_true',
+        'native_search_default_enable_readiness_verified',
+        'default_enable_risk_review_approval',
+      ]
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return []
+  }
+}
+
+function getNativeSearchReleaseHandoffAllowedActions(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        'run_candidate_npm_publish_commands',
+        'run_packaged_manifest_registry_check_after_publish',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        'edit_apps_electron_package_json_optional_dependencies',
+        'review_native_search_optional_dependency_specs',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        'run_bun_install_for_native_search_optional_dependencies',
+        'verify_bun_lock_resolved_entries',
+        'verify_installed_package_manifests',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        'edit_apps_electron_electron_builder_yml_allowlist',
+        'run_packaging_config_preflight',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        'run_packaged_app_layout_smoke_with_packaged_app_root',
+        'verify_summary_bundledBinaryVerified_true',
+      ]
+    case 'default_enable_risk_review':
+      return [
+        'perform_default_enable_risk_review',
+      ]
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return []
+  }
+}
+
+function getNativeSearchReleaseHandoffUnauthorizedActions(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        'npm_publish',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+    case 'default_enable_risk_review':
+      return [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+      ]
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ]
+  }
+}
+
+function getNativeSearchReleaseHandoffApprovalForbiddenActions(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] {
+  const base = [
+    'do_not_execute_candidate_commands_without_required_approval',
+    'do_not_skip_authoritative_next_gate',
+    'do_not_treat_approval_packet_as_completed_evidence',
+  ]
+
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        ...base,
+        'do_not_modify_package_json_before_publication_verified',
+        'do_not_modify_bun_lock_before_publication_verified',
+        'do_not_modify_electron_builder_yml_without_approval',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        ...base,
+        'do_not_modify_package_json_before_publication_verified',
+        'do_not_run_install_chain_before_optional_dependencies_approval',
+        'do_not_modify_electron_builder_yml_without_approval',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        ...base,
+        'do_not_run_install_chain_before_install_chain_approval',
+        'do_not_modify_electron_builder_yml_without_approval',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        ...base,
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_use_broad_node_modules_include',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        ...base,
+        'do_not_create_packaged_native_binary_from_approval_packet',
+        'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+      ]
+    case 'default_enable_risk_review':
+      return [
+        ...base,
+        'do_not_enable_native_by_default_before_verified',
+      ]
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return base
   }
 }
 

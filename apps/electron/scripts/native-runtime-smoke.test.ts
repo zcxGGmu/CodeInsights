@@ -648,6 +648,40 @@ describe('native-runtime-smoke', () => {
       verifiedRequiresExecutionPlanVerified: true,
       failClosedOnOutOfOrderEvidence: true,
     })
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket).toEqual({
+      schemaVersion: 1,
+      gate: 'publish_target_preflight',
+      status: 'blocked',
+      approvalRequired: false,
+      requiredApproval: null,
+      requiredEvidenceBeforeExecution: [
+        'optional_package_publish_target_registry_check',
+        'optional_package_source_preflight',
+        'optional_package_publication_registry_evidence',
+        'optional_dependencies_declared_in_package_json',
+        'optional_dependency_lockfile_resolved_entries',
+        'optional_dependency_installed_package_manifests',
+        'electron_builder_native_search_allowlist_verified',
+        'real_packaged_app_bundled_binary_smoke',
+        'default_enable_risk_review',
+      ],
+      allowedActionsAfterApproval: [],
+      candidateCommands: [],
+      doesNotAuthorize: [
+        'npm_publish',
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ],
+      forbiddenActions: [
+        'do_not_execute_candidate_commands_without_required_approval',
+        'do_not_skip_authoritative_next_gate',
+        'do_not_treat_approval_packet_as_completed_evidence',
+        'do_not_treat_blocked_packet_as_approved',
+      ],
+    })
     expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_package_source_not_ready',
@@ -751,6 +785,41 @@ describe('native-runtime-smoke', () => {
       'packaged_app_smoke_execution_approval',
       'default_enable_risk_review_approval',
     ])
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket).toEqual({
+      schemaVersion: 1,
+      gate: 'optional_package_publication',
+      status: 'ready_for_approval',
+      approvalRequired: true,
+      requiredApproval: 'release_approval',
+      requiredEvidenceBeforeExecution: [
+        'release_approval_recorded',
+        'npm_registry_auth_with_publish_access',
+        'optional_package_publish_target_ready',
+        'optional_package_source_ready',
+      ],
+      allowedActionsAfterApproval: [
+        'run_candidate_npm_publish_commands',
+        'run_packaged_manifest_registry_check_after_publish',
+      ],
+      candidateCommands: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      )),
+      doesNotAuthorize: [
+        'package_json_optional_dependencies_change',
+        'bun_lock_or_install_chain_change',
+        'electron_builder_yml_change',
+        'packaged_app_creation_or_packaged_binary_creation',
+        'default_enable_native',
+      ],
+      forbiddenActions: [
+        'do_not_execute_candidate_commands_without_required_approval',
+        'do_not_skip_authoritative_next_gate',
+        'do_not_treat_approval_packet_as_completed_evidence',
+        'do_not_modify_package_json_before_publication_verified',
+        'do_not_modify_bun_lock_before_publication_verified',
+        'do_not_modify_electron_builder_yml_without_approval',
+      ],
+    })
     expect(summary.nativeSearchReleaseHandoffPlan.acceptanceEvidence).toContain(
       'registry_packument_contains_exact_expected_versions',
     )
