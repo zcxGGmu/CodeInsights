@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-07 Rust / Go 状态同步恢复入口习惯
+
+- `bd0e61d3 docs(rust-go): 同步 Phase 5 release handoff 批准包状态` 已成为 `99d76b0c feat(rust-go): 补齐 Phase 5 release handoff 批准包` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `99d76b0c`，最新恢复入口应从 `bd0e61d3` 或其后的最新 Rust / Go docs 状态同步提交继续。
+- 用户再次明确要求把“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”作为每个阶段性任务完成后的固定习惯。以后阶段完成并验证通过后，不等待用户提醒，自动同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons。
+- 状态同步必须清楚拆分“真实完成项”和“未完成项 / no-go”：ready、handoff、invocation、dry-run、edit intent、approval packet 都不能写成真实 publication、install-chain、builder verified、packaged binary verified 或 default-enable evidence。
+- 状态同步后继续单独提交 docs / tasks 文件，并在最终回复给出实际 docs HEAD 与可直接复制的下次启动提示词。
+
 ## 2026-06-06 Rust / Go Phase 5 release handoff 批准包边界
 
 - `99d76b0c feat(rust-go): 补齐 Phase 5 release handoff 批准包` 已成为当前最新开发基线；最新实际恢复入口在本轮状态同步提交前为 `3089b768 docs(rust-go): 回填 Phase 5 最新状态和启动提示词`。

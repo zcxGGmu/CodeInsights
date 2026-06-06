@@ -1,5 +1,28 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 最新状态回填与启动提示词同步计划
+
+范围确认：用户要求更新文档最新开发状态，清楚标注完成 / 未完成，确保下次启动能继续开发，并要求把该习惯固定为每个阶段性任务完成后的自动动作。本轮只做 docs / tasks 状态回填：当前分支为 `rust-go-refactor`，工作树起始干净，当前 HEAD 为 `bd0e61d3 docs(rust-go): 同步 Phase 5 release handoff 批准包状态`，最新开发基线为 `99d76b0c feat(rust-go): 补齐 Phase 5 release handoff 批准包`。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`，并运行 `git status --short --branch` 与 `git log -25 --oneline`。
+- [x] 确认本轮不使用子代理工具：当前工具约束要求只有用户显式要求并行 agent work 时才能 spawn；本轮改由主线本地完成。
+- [x] 更新 development checklist 顶部状态、当前完成 / 未完成清单和底部可复制提示词，把最新已确认恢复入口推进到 `bd0e61d3`，并明确真实 optional / packaged / default-enable gates 仍未完成。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，标注 Phase 0-4 已完成、Phase 5 已完成到 release handoff 批准包状态同步，真实 optional package 发布 / install-chain / builder / packaged smoke / default enable 仍未完成。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，把最新状态同步推进到 `bd0e61d3`，并继续说明 approval packet 不等于真实 publication / install-chain / builder / packaged evidence。
+- [x] 更新 `tasks/lessons.md`，固化阶段完成后自动状态同步和最终回复给出可复制下次启动提示词的习惯。
+- [x] 更新本 Review，记录完成项、未完成项、验证命令和禁改边界。
+- [x] 运行 `git diff --check`、禁改文件 diff 检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 的最新已确认恢复入口推进到 `bd0e61d3 docs(rust-go): 同步 Phase 5 release handoff 批准包状态`，并保留“本轮再次提交后以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为准”的恢复规则。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 release handoff 批准包和对应状态同步。真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 习惯固化：已补 `tasks/lessons.md`，把“每个阶段性任务完成并验证通过后，自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复给出实际 docs HEAD 和可复制下次启动提示词”作为默认动作。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / 任务状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；`git status --short --branch` 仅显示本轮 5 个 docs / tasks 文件。
+- 提交状态：本轮状态同步文档已单独提交；提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-06 Rust/Go Phase 5 release handoff 批准包前置计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `3089b768 docs(rust-go): 回填 Phase 5 最新状态和启动提示词`，最新开发基线为 `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图`，最新实际恢复入口为 `3089b768`。本轮只推进真实 optional package 发布、optionalDependencies 声明 / 安装、builder allowlist 实际修改和 packaged app bundled binary smoke 之前的批准准备：在 `nativeSearchReleaseHandoffPlan` 中新增机器可读 current gate approval packet，明确当前 next gate 的批准项、前置证据、候选命令、授权边界和禁止动作。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
