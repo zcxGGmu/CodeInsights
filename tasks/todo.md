@@ -1,5 +1,45 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 packaged bundled binary smoke invocation plan 计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `eb02f806 docs(rust-go): 回填 Phase 5 publication plan 最新恢复入口`，最新开发基线为 `d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据`，最新已确认恢复入口为 `eb02f806`。本轮只推进真实 packaged app bundled binary smoke 的执行设计前置：新增只读 `packagedBundledBinarySmokeInvocationPlan`，把真实 packaged smoke 的前置 gate、候选命令、验收证据、失败边界和禁止动作机器可读化。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前 HEAD 为 `eb02f806`，最新开发基线 `d679eabb` 在最近历史中。
+- [x] 启动两个只读子代理分别复核 packaged smoke 现状与 optional publication / install-chain blocker；主线先在不触碰 no-go 文件的前提下推进 packaged smoke invocation plan。
+
+实现计划：
+
+- [x] 测试先行扩展 `native-runtime-smoke.test.ts` 与必要的 package manifest 测试，锁住 `packagedBundledBinarySmokeInvocationPlan` 的 blocked / ready / verified、候选命令脱敏、验收证据、默认离线边界和“不证明 bundledBinaryVerified”语义。
+- [x] 在 `smoke:native-runtime` summary 新增只读 `packagedBundledBinarySmokeInvocationPlan`：只消费现有 publication / optionalDependencies / install-chain / packaging config / packaged app layout / identity / real binary gate，不读取 binary path、不输出 packaged root、不创建 packaged app、不修改 builder、不安装、不发布。
+- [x] 保持当前仓库默认输出 `optionalPackagesPublished=false`、`optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`packagingConfigVerified=false`、`realPackagedBinaryVerified=false`、`bundledBinaryVerified=false` 和 `nativeSearchDefaultEnableReadiness.defaultEnableCandidate=false`。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增真实 native optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout`。
+- [x] 运行显式 registry no-go smoke：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry`，预期 exit 1 且不把 missing publication 当作 published。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan`。
+- 已新增 `--packaged-app-root` packaged smoke 调用入口和 `packagedBundledBinarySmokeInvocationPlan`。真实 packaged smoke 候选命令优先使用 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry`，同时保留 legacy `--app-node-modules-root <packaged-app-node_modules>` 兼容命令。
+- packaged app root resolver 已覆盖 `.app/Contents/Resources/app/node_modules`、`.app/Contents/Resources/app.asar.unpacked/node_modules`、直接 `Resources`、直接 `Resources/app` 和直接 `app.asar.unpacked`；summary 只输出 evidence code，不输出 packaged root、node_modules root、binary path 或 home path。
+- 已修复 legacy `--app-node-modules-root` 缺失路径边界：缺失路径会进入 `app_node_modules_root_unresolved` blocker，不能把 `appNodeModulesRootResolved` 误标为 true。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.163` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts`（58 pass）；`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（98 pass）；`smoke:native-runtime -- --mode packaged-manifest`；`smoke:native-runtime -- --mode packaged-app-layout`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 预期 no-go 验证：`smoke:native-runtime -- --mode packaged-manifest --check-registry` 返回 exit 1，因为 4 个计划 optional package 尚未发布；这是 publication blocker 生效，不是可忽略失败。
+- 边界保持：native 继续 default off / 显式 opt-in；未发布 npm package；未声明 / 安装真实 optionalDependencies；未创建 packaged native binary；未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；未新增真实 native search optionalDependencies；未 push，未创建 PR。
+- 状态同步已更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review：最新开发基线推进到 `edeba827`，最新已确认恢复入口先记录为 `eb02f806 docs(rust-go): 回填 Phase 5 publication plan 最新恢复入口`，本轮 docs 提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 状态同步验证通过：旧“最新开发基线 / 恢复入口”主动口径残留扫描无匹配；`git diff --check` 通过；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；真实 native optionalDependencies 扫描无匹配；packaged native binary 产物扫描无输出；只读子代理复核未发现把真实 optional package 发布、真实 optionalDependencies 声明 / 安装、builder allowlist 实际修改、真实 packaged app bundled binary smoke 或 default-enable 误写成已完成。
+
 ## 2026-06-06 Rust/Go Phase 5 publication plan 最新恢复入口回填计划
 
 范围确认：用户要求再次更新 Rust / Go Phase 5 最新开发状态、清楚标注完成 / 未完成，给出下次启动可直接复制的提示词，并把“每个阶段性任务完成后自动同步文档状态”的习惯继续固化。本轮只做状态文档回填：最新开发基线保持为 `d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据`，把当前 `git log` 已确认的最新 Rust / Go docs 状态同步提交 `c4000bc9 docs(rust-go): 同步 Phase 5 publication plan 证据拆分状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
