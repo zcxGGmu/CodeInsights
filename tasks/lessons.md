@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 packaged smoke invocation 最新恢复入口回填
+
+- `076f25c6 docs(rust-go): 同步 Phase 5 packaged smoke invocation 状态` 是 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `edeba827`，最新恢复入口应从 `076f25c6` 或其后的最新 Rust / Go docs 提交继续。
+- 当用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，必须同时更新 development checklist 顶部状态、底部可复制提示词和 `next-session-prompt.md`；不能只改一处，避免下次启动恢复入口分叉。
+- 阶段完成后的默认收尾固定为：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复里的提示词再补上本轮提交后的实际 HEAD。
+- 本轮只是恢复入口回填，不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+
 ## 2026-06-06 Rust / Go Phase 5 packaged smoke invocation plan 边界
 
 - `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan` 已成为当前最新开发基线；后续给 Rust / Go 下次启动提示词时，最新开发基线应指向 `edeba827`，最新恢复入口应从本轮 docs 状态同步提交继续。

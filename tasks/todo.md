@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 packaged smoke invocation 最新恢复入口回填计划
+
+范围确认：用户要求再次更新 Rust / Go Phase 5 最新开发状态、清楚标注完成 / 未完成，给出下次启动可直接复制的提示词，并把“每个阶段性任务完成后自动同步文档状态”的习惯继续固化。本轮只做状态文档回填：最新开发基线保持为 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan`，把当前 `git log` 已确认的最新 Rust / Go docs 状态同步提交 `076f25c6 docs(rust-go): 同步 Phase 5 packaged smoke invocation 状态` 写入 development checklist 和 next-session prompt。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -25 --oneline`，确认当前工作树起始干净且最新 docs 提交为 `076f25c6`。
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和 `native/search/`。
+- [x] 更新 development checklist 顶部状态、编号启动步骤和底部可复制提示词，把最新已确认恢复入口从 `eb02f806` 推进到 `076f25c6`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态和可复制提示词，把最新已确认恢复入口推进到 `076f25c6`。
+- [x] 更新 `tasks/lessons.md`，再次固化阶段完成后自动同步 development checklist、next-session prompt、`tasks/todo.md` Review、必要 lessons，并单独提交状态同步的习惯。
+- [x] 更新本 `tasks/todo.md` Review，记录完成项、未完成项、验证命令和禁改边界。
+- [x] 运行 `git diff --check`、禁改边界检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `eb02f806 docs(rust-go): 回填 Phase 5 publication plan 最新恢复入口` 推进到 `076f25c6 docs(rust-go): 同步 Phase 5 packaged smoke invocation 状态`；最新开发基线保持 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan`。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 packaged bundled binary smoke invocation plan。真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 语义边界继续明确：`packagedBundledBinarySmokeInvocationPlan` 只表示真实 packaged smoke 的调用输入、候选命令、验收证据和禁止动作；`optionalPackagePublicationChangePlan`、`optionalDependenciesInstallChainChangePlan` 和 `packagingConfigAllowlistChangePlan` 都只是实际发布 / 修改 / 安装前 review 输入；`publishedPackages` 只表示真实 registry publication evidence，collision / invalid metadata 不能当作已发布。
+- 已补 `tasks/lessons.md`：每个阶段性任务完成并通过验证后，默认更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / 任务状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check`；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；真实 native optionalDependencies diff 扫描无匹配；packaged native binary 产物扫描无输出。本轮状态同步提交完成后，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口，最终回复给出本轮实际 HEAD。
+
 ## 2026-06-06 Rust/Go Phase 5 packaged bundled binary smoke invocation plan 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `eb02f806 docs(rust-go): 回填 Phase 5 publication plan 最新恢复入口`，最新开发基线为 `d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据`，最新已确认恢复入口为 `eb02f806`。本轮只推进真实 packaged app bundled binary smoke 的执行设计前置：新增只读 `packagedBundledBinarySmokeInvocationPlan`，把真实 packaged smoke 的前置 gate、候选命令、验收证据、失败边界和禁止动作机器可读化。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
