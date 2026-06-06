@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 最新恢复入口回填习惯
+
+- `9d8520fa docs(rust-go): 同步 Phase 5 release handoff 批准队列状态` 已成为 `197569d5 feat(rust-go): 补齐 Phase 5 release handoff 批准队列` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `197569d5`，最新恢复入口应从 `9d8520fa` 或其后的最新 Rust / Go docs 状态同步提交继续。
+- 用户再次要求把“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”固定为每个阶段性任务完成后的自动动作。以后每个阶段实现、验证、提交完成后，默认立即同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，并单独提交状态同步文档。
+- 最终回复必须给出本轮实际 docs HEAD 和可直接复制的下次启动提示词；仓库文档无法预写自身未来提交 hash 时，文档内先写当前已存在的最新 docs 提交，并保留“以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为准”的规则。
+- 这种状态同步不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-07 Rust / Go Phase 5 release handoff 全 gate 批准队列边界
 
 - `197569d5 feat(rust-go): 补齐 Phase 5 release handoff 批准队列` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口为 `f78c44d6 docs(rust-go): 回填 Phase 5 最新恢复入口`，提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准。
