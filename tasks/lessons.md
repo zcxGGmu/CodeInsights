@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 release handoff 全 gate 批准队列边界
+
+- `197569d5 feat(rust-go): 补齐 Phase 5 release handoff 批准队列` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口为 `f78c44d6 docs(rust-go): 回填 Phase 5 最新恢复入口`，提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为准。
+- `nativeSearchReleaseHandoffPlan.gateApprovalQueue` 只表示真实 optional / packaged / default-enable gate 的顺序批准矩阵：当前 ready gate 才能输出候选命令；未来 gate 必须保持 `blocked_until_prior_gate_verified` 且 `candidateCommands=[]`；已完成 gate 只能标为 `verified`，不能授权重复执行。
+- approval queue 不发布 optional package、不写 `apps/electron/package.json` / `bun.lock`、不运行 install、不修改 `apps/electron/electron-builder.yml`、不创建 packaged app、不读取 binary，也不证明 `optionalPackagesPublished`、`optionalDependenciesDeclared`、`optionalDependenciesInstallChainVerified`、`packagingConfigVerified`、`realPackagedBinaryVerified`、`bundledBinaryVerified` 或 default-enable candidate。
+- 后续必须继续按真实 gate 顺序推进：真实 optional package publication verified 后才能进入 optionalDependencies 声明 / install-chain；builder allowlist 实际修改仍需用户批准；真实 packaged app bundled binary smoke verified 必须同时满足 `bundledBinaryVerified=true` 且无 blocker，之后才允许做最终 default-enable 风险决策。
+
 ## 2026-06-07 Rust / Go 状态同步恢复入口习惯
 
 - `bd0e61d3 docs(rust-go): 同步 Phase 5 release handoff 批准包状态` 已成为 `99d76b0c feat(rust-go): 补齐 Phase 5 release handoff 批准包` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `99d76b0c`，最新恢复入口应从 `bd0e61d3` 或其后的最新 Rust / Go docs 状态同步提交继续。
