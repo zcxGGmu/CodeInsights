@@ -607,6 +607,168 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.optionalDependenciesInstallChainChangePlan)).not.toContain('binaryPath')
   })
 
+  test('summary 默认输出 release handoff plan blocked 且不证明真实执行', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublicationChecked: false,
+        optionalPackagesPublished: false,
+        optionalDependenciesDeclared: false,
+        optionalDependenciesInstallChainVerified: false,
+        packagingConfigVerified: false,
+        missingPackagingConfigPackages: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+        blockingPackagingConfigExcludes: ['!node_modules/@codeinsights/**'],
+      },
+      cases: [{
+        name: 'release-handoff',
+        status: 'skipped',
+        detail: 'default offline no-go',
+      }],
+    })
+
+    expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      status: 'blocked',
+      nextGate: 'publish_target_preflight',
+      releaseApprovalRequired: true,
+      defaultOffRequired: true,
+      verified: false,
+      readyForPublicationInvocation: false,
+      readyForOptionalDependenciesHandoff: false,
+      readyForPackagingConfigHandoff: false,
+      readyForPackagedSmokeHandoff: false,
+      readyForDefaultEnableRiskReview: false,
+      candidateNextCommands: [],
+    }))
+    expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
+      'optional_package_publish_target_not_ready',
+      'optional_package_source_not_ready',
+      'optional_package_publication_invocation_not_ready',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.missingEvidence).toEqual([
+      'optional_package_publish_target_registry_check',
+      'optional_package_source_preflight',
+      'optional_package_publication_registry_evidence',
+      'optional_dependencies_declared_in_package_json',
+      'optional_dependency_lockfile_resolved_entries',
+      'optional_dependency_installed_package_manifests',
+      'electron_builder_native_search_allowlist_verified',
+      'real_packaged_app_bundled_binary_smoke',
+      'default_enable_risk_review',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.doesNotVerify).toEqual([
+      'optional_packages_published',
+      'optional_dependencies_declared',
+      'optional_dependencies_installed',
+      'packaging_config_verified',
+      'packaged_binary_verified',
+      'default_enable_candidate',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.forbiddenActions).toContain(
+      'do_not_treat_release_handoff_as_package_published',
+    )
+    expect(summary.nativeSearchReleaseHandoffPlan.forbiddenActions).toContain(
+      'do_not_enable_native_by_default_before_verified',
+    )
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
+  })
+
+  test('summary 在 publication invocation ready 时只把 handoff 标成可交接，不证明已发布', () => {
+    const readyPackages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackagePublishTargetBlockers: [],
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceBlockers: [],
+        optionalPackageSourceReadyPackages: readyPackages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{
+        name: 'release-handoff',
+        status: 'passed',
+        detail: 'publication invocation ready',
+      }],
+    })
+
+    expect(summary.optionalPackagePublicationInvocationPlan.status).toBe('ready_for_invocation')
+    expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      status: 'ready_for_release_handoff',
+      nextGate: 'optional_package_publication',
+      releaseApprovalRequired: true,
+      defaultOffRequired: true,
+      verified: false,
+      readyForPublicationInvocation: true,
+      readyForOptionalDependenciesHandoff: false,
+      readyForPackagingConfigHandoff: false,
+      readyForPackagedSmokeHandoff: false,
+      readyForDefaultEnableRiskReview: false,
+      blockedBy: [],
+      candidateNextCommands: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      )),
+    }))
+    expect(summary.nativeSearchReleaseHandoffPlan.missingEvidence).toEqual([
+      'optional_package_publication_registry_evidence',
+      'optional_dependencies_declared_in_package_json',
+      'optional_dependency_lockfile_resolved_entries',
+      'optional_dependency_installed_package_manifests',
+      'electron_builder_native_search_allowlist_verified',
+      'real_packaged_app_bundled_binary_smoke',
+      'default_enable_risk_review',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.requiredApprovals).toEqual([
+      'release_approval',
+      'npm_registry_publish_access',
+      'package_json_optional_dependencies_change_approval',
+      'install_chain_execution_approval',
+      'electron_builder_allowlist_change_approval',
+      'packaged_app_smoke_execution_approval',
+      'default_enable_risk_review_approval',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.acceptanceEvidence).toContain(
+      'registry_packument_contains_exact_expected_versions',
+    )
+    expect(summary.nativeSearchReleaseHandoffPlan.doesNotVerify).toEqual([
+      'optional_packages_published',
+      'optional_dependencies_declared',
+      'optional_dependencies_installed',
+      'packaging_config_verified',
+      'packaged_binary_verified',
+      'default_enable_candidate',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.forbiddenActions).toContain(
+      'do_not_treat_ready_handoff_as_remote_write_completed',
+    )
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
+  })
+
   test('summary 顶层 ready 字段必须绑定 checked，避免和 execution plan 分叉', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'optional-package-publish-target',
@@ -982,6 +1144,36 @@ describe('native-runtime-smoke', () => {
     expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([])
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
+      status: 'blocked',
+      nextGate: 'publish_target_preflight',
+      defaultOffRequired: true,
+      verified: false,
+      readyForPublicationInvocation: false,
+      readyForOptionalDependenciesHandoff: false,
+      readyForPackagingConfigHandoff: false,
+      readyForPackagedSmokeHandoff: false,
+      readyForDefaultEnableRiskReview: false,
+      blockedBy: [
+        'optional_package_publish_target_not_ready',
+        'optional_package_source_not_ready',
+        'optional_package_publication_invocation_not_ready',
+      ],
+      candidateNextCommands: [],
+    }))
+    expect(summary.nativeSearchReleaseHandoffPlan.missingEvidence).toEqual([
+      'optional_package_publish_target_registry_check',
+      'optional_package_source_preflight',
+      'optional_package_publication_registry_evidence',
+      'optional_dependencies_declared_in_package_json',
+      'optional_dependency_lockfile_resolved_entries',
+      'optional_dependency_installed_package_manifests',
+      'electron_builder_native_search_allowlist_verified',
+      'real_packaged_app_bundled_binary_smoke',
+      'default_enable_risk_review',
+    ])
+    expect(summary.nativeSearchReleaseHandoffPlan.doesNotVerify).toContain('packaged_binary_verified')
+    expect(summary.nativeSearchReleaseHandoffPlan.doesNotVerify).toContain('default_enable_candidate')
   })
 
   test('packaged bundled binary smoke plan 只有真实 binary gate 通过才进入 verified', () => {
@@ -1017,6 +1209,35 @@ describe('native-runtime-smoke', () => {
     expect(summary.packagedBundledBinarySmokeInvocationPlan.status).toBe('verified')
     expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootResolved).toBe(true)
     expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([])
+    expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
+      status: 'blocked',
+      nextGate: 'publish_target_preflight',
+      defaultOffRequired: true,
+      verified: false,
+      readyForPublicationInvocation: false,
+      readyForOptionalDependenciesHandoff: false,
+      readyForPackagingConfigHandoff: false,
+      readyForPackagedSmokeHandoff: false,
+      readyForDefaultEnableRiskReview: false,
+      blockedBy: [
+        'optional_package_publish_target_not_ready',
+        'optional_package_source_not_ready',
+        'optional_package_publication_invocation_not_ready',
+      ],
+      candidateNextCommands: [],
+    }))
+    expect(summary.nativeSearchReleaseHandoffPlan.missingEvidence).toEqual([
+      'optional_package_publish_target_registry_check',
+      'optional_package_source_preflight',
+      'optional_package_publication_registry_evidence',
+      'optional_dependencies_declared_in_package_json',
+      'optional_dependency_lockfile_resolved_entries',
+      'optional_dependency_installed_package_manifests',
+      'electron_builder_native_search_allowlist_verified',
+      'real_packaged_app_bundled_binary_smoke',
+      'default_enable_risk_review',
+    ])
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
   })
 
   test('packaged bundled binary smoke plan verified 必须绑定 bundledBinaryVerified', () => {
