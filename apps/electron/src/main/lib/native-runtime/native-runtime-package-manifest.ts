@@ -697,6 +697,9 @@ export function buildNativeSearchOptionalPackagePublicationInvocationPlan(
   const readyPackages = packages
     .filter((item) => item.status === 'ready_for_invocation')
     .map((item) => item.packageName)
+  const publishedPackages = packages
+    .filter((item) => item.status === 'published')
+    .map((item) => item.packageName)
   const optionalPackagesFullyPublished = isNativeSearchOptionalPackagePublicationFullyVerified(changePlan)
   const status: NativeSearchOptionalPackagePublicationInvocationPlanStatus = optionalPackagesFullyPublished
     ? 'not_required_already_published'
@@ -715,7 +718,7 @@ export function buildNativeSearchOptionalPackagePublicationInvocationPlan(
         .filter((item) => item.status === 'excluded')
         .map((item) => item.packageName),
     ]),
-    publishedPackages: changePlan.publishedPackages,
+    publishedPackages,
     packages,
     blockedBy,
     requiredInputs: [
@@ -1172,8 +1175,15 @@ function getNativeSearchPublicationInvocationBlockers(
 function isNativeSearchOptionalPackagePublicationFullyVerified(
   changePlan: NativeSearchOptionalPackagePublicationChangePlan,
 ): boolean {
+  const plannedPackageNames = changePlan.plannedPackages.map((plannedPackage) => plannedPackage.packageName)
+  const uniquePlannedPackageNames = uniqueStrings(plannedPackageNames)
+  const uniquePublishedPackages = uniqueStrings(changePlan.publishedPackages)
+
   return changePlan.optionalPackagesPublished
-    && changePlan.publishedPackages.length === changePlan.plannedPackages.length
+    && plannedPackageNames.length === uniquePlannedPackageNames.length
+    && changePlan.publishedPackages.length === uniquePublishedPackages.length
+    && uniquePublishedPackages.length === uniquePlannedPackageNames.length
+    && uniquePublishedPackages.every((packageName) => uniquePlannedPackageNames.includes(packageName))
     && changePlan.missingPublishedPackages.length === 0
     && changePlan.invalidPublishedPackages.length === 0
     && changePlan.existingInvalidPublishedPackages.length === 0
@@ -1187,6 +1197,22 @@ function buildNativeSearchPublicationInvocationPackage(
   planBlockers: NativeSearchOptionalPackagePublicationInvocationPlanBlocker[],
 ): NativeSearchOptionalPackagePublicationInvocationPackage {
   const candidatePublicationCommand = `npm publish <native-search-package-source:${plannedPackage.packageName}> --access public`
+  const duplicatePublishedPackages = getDuplicateStrings(changePlan.publishedPackages)
+  const hasInvalidPublicationEvidence = changePlan.invalidPublishedPackages.includes(plannedPackage.packageName)
+    || changePlan.existingInvalidPublishedPackages.includes(plannedPackage.packageName)
+    || changePlan.unavailablePublishedPackages.includes(plannedPackage.packageName)
+    || duplicatePublishedPackages.includes(plannedPackage.packageName)
+
+  if (hasInvalidPublicationEvidence) {
+    return {
+      packageName: plannedPackage.packageName,
+      packageVersion: plannedPackage.packageVersion,
+      status: 'blocked',
+      blockedBy: ['optional_package_publication_plan_not_ready'],
+      candidatePublicationCommand: null,
+    }
+  }
+
   if (changePlan.publishedPackages.includes(plannedPackage.packageName)) {
     return {
       packageName: plannedPackage.packageName,
@@ -1834,6 +1860,10 @@ function uniquePublicationChangePlanBlockers(
 
 function uniqueStrings(values: string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) === index)
+}
+
+function getDuplicateStrings(values: string[]): string[] {
+  return uniqueStrings(values.filter((value, index) => values.indexOf(value) !== index))
 }
 
 function hasOnlyNativeSearchPackageManifestKeys(value: Record<string, unknown>): boolean {
