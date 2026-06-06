@@ -13,6 +13,7 @@ import {
   buildNativeRuntimeSmokeSummary,
   getNativeRuntimeSmokeExitCode,
   parseNativeRuntimeSmokeArgs,
+  resolvePackagedAppNodeModulesRoot,
   runNativeRuntimeSmoke,
 } from './native-runtime-smoke'
 
@@ -61,6 +62,147 @@ describe('native-runtime-smoke', () => {
       checkRegistry: true,
       query: '关键字',
     })
+  })
+
+  test('parseNativeRuntimeSmokeArgs 支持 packaged app root', () => {
+    const options = parseNativeRuntimeSmokeArgs([
+      '--mode',
+      'packaged-app-layout',
+      '--packaged-app-root',
+      '/Applications/CodeInsights.app',
+      '--check-registry',
+    ])
+
+    expect(options).toEqual({
+      mode: 'packaged-app-layout',
+      packagedAppRoot: '/Applications/CodeInsights.app',
+      checkRegistry: true,
+      query: '关键字',
+    })
+  })
+
+  test('packaged app root resolver 支持 macOS .app 的 asar false 布局', () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    try {
+      const resolution = resolvePackagedAppNodeModulesRoot({
+        packagedAppRoot: fixture.appRoot,
+      })
+
+      expect(resolution).toEqual({
+        resolved: true,
+        source: 'packaged_app_root',
+        evidence: 'macos_app_resources_app',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app root resolver 支持 macOS .app 的 asar.unpacked 布局', () => {
+    const fixture = createPackagedAppLayoutFixture('macos-asar-unpacked')
+    try {
+      const resolution = resolvePackagedAppNodeModulesRoot({
+        packagedAppRoot: fixture.appRoot,
+      })
+
+      expect(resolution).toEqual({
+        resolved: true,
+        source: 'packaged_app_root',
+        evidence: 'macos_app_asar_unpacked',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app root resolver 支持直接传 Resources/app', () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    try {
+      const resolution = resolvePackagedAppNodeModulesRoot({
+        packagedAppRoot: fixture.resourcesAppRoot,
+      })
+
+      expect(resolution).toEqual({
+        resolved: true,
+        source: 'packaged_app_root',
+        evidence: 'direct_app_root',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app root resolver 支持直接传 Resources 目录', () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    try {
+      const resolution = resolvePackagedAppNodeModulesRoot({
+        packagedAppRoot: dirname(fixture.resourcesAppRoot),
+      })
+
+      expect(resolution).toEqual({
+        resolved: true,
+        source: 'packaged_app_root',
+        evidence: 'resources_app',
+        appNodeModulesRoot: fixture.nodeModulesRoot,
+      })
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app root resolver 旧显式 node_modules 参数优先', () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    const explicitRoot = join(fixture.rootDir, 'explicit-node-modules')
+    mkdirSync(explicitRoot, { recursive: true })
+
+    try {
+      const resolution = resolvePackagedAppNodeModulesRoot({
+        packagedAppRoot: fixture.appRoot,
+        appNodeModulesRoot: explicitRoot,
+      })
+
+      expect(resolution).toEqual({
+        resolved: true,
+        source: 'explicit_app_node_modules_root',
+        evidence: 'explicit_app_node_modules_root',
+        appNodeModulesRoot: explicitRoot,
+      })
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app root resolver 不把缺失的旧显式 node_modules 参数标成 resolved', () => {
+    const missingRoot = join(tmpdir(), 'codeinsights-native-missing-node-modules')
+    const resolution = resolvePackagedAppNodeModulesRoot({
+      appNodeModulesRoot: missingRoot,
+    })
+
+    expect(resolution).toEqual({
+      resolved: false,
+      source: 'explicit_app_node_modules_root',
+      evidence: 'explicit_app_node_modules_root',
+      failureReason: 'app_node_modules_root_not_found',
+    })
+    expect(JSON.stringify(resolution)).not.toContain(missingRoot)
+  })
+
+  test('packaged app root resolver 失败时只给 reason code', () => {
+    const missingRoot = join(tmpdir(), 'codeinsights-native-missing.app')
+    const resolution = resolvePackagedAppNodeModulesRoot({
+      packagedAppRoot: missingRoot,
+    })
+
+    expect(resolution).toEqual({
+      resolved: false,
+      source: 'packaged_app_root',
+      evidence: 'none',
+      failureReason: 'packaged_app_root_not_found',
+    })
+    expect(JSON.stringify(resolution)).not.toContain(missingRoot)
   })
 
   test('parseNativeRuntimeSmokeArgs 支持 optional package publish target dry-run', () => {
@@ -153,6 +295,7 @@ describe('native-runtime-smoke', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         bundledBinaryVerified: true,
         packagedAppLayoutVerified: true,
@@ -464,6 +607,7 @@ describe('native-runtime-smoke', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         bundledBinaryVerified: true,
         usesTemporaryFixture: true,
@@ -501,6 +645,7 @@ describe('native-runtime-smoke', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         bundledBinaryVerified: true,
         packagedAppLayoutVerified: true,
@@ -589,10 +734,61 @@ describe('native-runtime-smoke', () => {
         'do_not_modify_electron_builder_yml_without_approval',
         'do_not_add_native_search_optional_dependencies_before_publication',
       ],
-      candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+    })
+    expect(summary.packagedBundledBinarySmokeInvocationPlan).toEqual({
+      schemaVersion: 1,
+      status: 'blocked',
+      inputMode: 'none',
+      packagedAppRootProvided: false,
+      appNodeModulesRootProvided: false,
+      appNodeModulesRootResolved: false,
+      resolutionEvidence: 'none',
+      blockedBy: [
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
+        'prebuilt_packaged_app_required',
+        'packaged_app_root_required',
+      ],
+      requiredInputs: [
+        'published_optional_packages',
+        'native_search_optional_dependencies',
+        'optional_dependency_install_chain',
+        'electron_builder_native_search_allowlist',
+        'prebuilt_packaged_app_root',
+        'packaged_app_identity',
+        'bundled_native_search_binary',
+      ],
+      acceptanceEvidence: [
+        'packaged_app_root_resolves_to_app_node_modules',
+        'packaged_app_evidence_is_unpacked_app_or_asar_unpacked',
+        'packaged_app_identity_matches_codeinsights_electron',
+        'native_search_optional_package_manifest_valid',
+        'native_search_binary_is_executable',
+        'native_search_binary_sha256_matches_manifest',
+        'optional_packages_published_for_expected_version',
+        'optional_dependencies_install_chain_verified',
+        'builder_allowlist_includes_native_search_packages',
+        'summary_bundledBinaryVerified_true',
+      ],
+      candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+      legacyCandidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      forbiddenActions: [
+        'do_not_enable_native_by_default_before_verified',
+        'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+        'do_not_use_system_path_for_native_binary',
+        'do_not_output_binary_path_packaged_root_or_node_modules_root',
+        'do_not_modify_electron_builder_yml_without_approval',
+        'do_not_add_native_search_optional_dependencies_before_publication',
+        'do_not_treat_invocation_plan_as_packaged_binary_verified',
+      ],
     })
     expect(JSON.stringify(summary.packagedBundledBinarySmokePlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.packagedBundledBinarySmokePlan)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary.packagedBundledBinarySmokeInvocationPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.packagedBundledBinarySmokeInvocationPlan)).not.toContain('binaryPath')
   })
 
   test('summary 输出 builder allowlist dry-run plan 且不改变真实 packaged gate', () => {
@@ -643,7 +839,7 @@ describe('native-runtime-smoke', () => {
       candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
       candidateVerificationCommands: [
         "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
       ],
       forbiddenActions: [
         'do_not_modify_electron_builder_yml_without_approval',
@@ -725,6 +921,7 @@ describe('native-runtime-smoke', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         packagedAppLayoutVerified: true,
         packagedAppEvidenceVerified: true,
@@ -747,6 +944,10 @@ describe('native-runtime-smoke', () => {
 
     expect(summary.packagedBundledBinarySmokePlan.status).toBe('ready')
     expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual([])
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.status).toBe('ready_for_execution')
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootProvided).toBe(true)
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootResolved).toBe(true)
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([])
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
   })
@@ -755,6 +956,7 @@ describe('native-runtime-smoke', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         bundledBinaryVerified: true,
         packagedAppLayoutVerified: true,
@@ -780,12 +982,16 @@ describe('native-runtime-smoke', () => {
     expect(summary.bundledBinaryVerified).toBe(true)
     expect(summary.packagedBundledBinarySmokePlan.status).toBe('verified')
     expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual([])
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.status).toBe('verified')
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootResolved).toBe(true)
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([])
   })
 
   test('packaged bundled binary smoke plan verified 必须绑定 bundledBinaryVerified', () => {
     const summary = buildNativeRuntimeSmokeSummary({
       mode: 'packaged-app-layout',
       appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
       verification: {
         bundledBinaryVerified: false,
         packagedAppLayoutVerified: true,
@@ -811,6 +1017,7 @@ describe('native-runtime-smoke', () => {
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.packagedBundledBinarySmokePlan.status).not.toBe('verified')
     expect(summary.packagedBundledBinarySmokePlan.status).toBe('ready')
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.status).toBe('ready_for_execution')
   })
 
   test('packaged bundled binary smoke plan verified 仍必须没有其他 blocker', () => {
@@ -1064,6 +1271,136 @@ describe('native-runtime-smoke', () => {
     } finally {
       rmSync(fixture.rootDir, { recursive: true, force: true })
     }
+  })
+
+  test('packaged app layout smoke 支持 packaged app root 并推导 node_modules', async () => {
+    const fixture = createPackagedAppLayoutFixture('unpacked-app')
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        packagedAppRoot: fixture.appRoot,
+      })
+
+      expect(summary.mode).toBe('packaged-app-layout')
+      expect(summary.packagedAppRootProvided).toBe(true)
+      expect(summary.appNodeModulesRootProvided).toBe(false)
+      expect(summary.packagedAppNodeModulesRootDerived).toBe(true)
+      expect(summary.packagedAppRootResolutionEvidence).toBe('macos_app_resources_app')
+      expect(summary.packagedAppLayoutVerified).toBe(true)
+      expect(summary.packagedAppEvidenceVerified).toBe(true)
+      expect(summary.packagedAppIdentityVerified).toBe(true)
+      expect(summary.usesTemporaryFixture).toBe(true)
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.bundledBinaryVerified).toBe(false)
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-app-root-resolution',
+        status: 'passed',
+      }))
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-app-layout',
+        status: 'passed',
+      }))
+      expect(summary.packagedBundledBinarySmokePlan.blockedBy).toEqual([
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
+        'temporary_fixture_not_allowed',
+      ])
+      expect(summary.packagedBundledBinarySmokeInvocationPlan).toMatchObject({
+        status: 'blocked',
+        inputMode: 'packaged_app_root',
+        packagedAppRootProvided: true,
+        appNodeModulesRootProvided: false,
+        appNodeModulesRootResolved: true,
+        resolutionEvidence: 'macos_app_resources_app',
+        candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+      })
+      expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([
+        'optional_packages_not_published',
+        'optional_dependencies_not_declared',
+        'optional_package_install_chain_not_verified',
+        'packaging_config_not_verified',
+        'temporary_fixture_not_allowed',
+      ])
+      expect(JSON.stringify(summary)).toContain('packagedAppRootResolutionEvidence=macos_app_resources_app')
+      expect(JSON.stringify(summary)).not.toContain(fixture.rootDir)
+      expect(JSON.stringify(summary)).not.toContain(fixture.nodeModulesRoot)
+      expect(JSON.stringify(summary)).not.toContain('CodeInsights.app')
+      expect(JSON.stringify(summary)).not.toContain('Resources/app')
+      expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(fixture.rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app layout smoke 遇到无法解析的 packaged app root 时失败且不泄露路径', async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-packaged-root-invalid-'))
+    try {
+      const summary = await runNativeRuntimeSmoke({
+        mode: 'packaged-app-layout',
+        query: '关键字',
+        packagedAppRoot: rootDir,
+      })
+
+      expect(summary.packagedAppRootProvided).toBe(true)
+      expect(summary.appNodeModulesRootProvided).toBe(false)
+      expect(summary.packagedAppNodeModulesRootDerived).toBe(false)
+      expect(summary.packagedAppRootResolutionEvidence).toBe('none')
+      expect(summary.packagedAppLayoutVerified).toBe(false)
+      expect(summary.realPackagedBinaryVerified).toBe(false)
+      expect(summary.bundledBinaryVerified).toBe(false)
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-app-root-resolution',
+        status: 'failed',
+      }))
+      expect(summary.cases).toContainEqual(expect.objectContaining({
+        name: 'packaged-app-layout',
+        status: 'skipped',
+      }))
+      expect(summary.packagedBundledBinarySmokeInvocationPlan).toMatchObject({
+        status: 'blocked',
+        inputMode: 'packaged_app_root',
+        packagedAppRootProvided: true,
+        appNodeModulesRootResolved: false,
+        resolutionEvidence: 'none',
+      })
+      expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toContain('packaged_app_root_unresolved')
+      expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+      expect(JSON.stringify(summary)).toContain('reason=packaged_app_root_unrecognized')
+      expect(JSON.stringify(summary)).not.toContain(rootDir)
+      expect(JSON.stringify(summary)).not.toContain('binaryPath')
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true })
+    }
+  })
+
+  test('packaged app layout smoke 不把缺失的旧 node_modules 参数标成 resolved', async () => {
+    const missingRoot = join(tmpdir(), 'codeinsights-native-missing-node-modules')
+    const summary = await runNativeRuntimeSmoke({
+      mode: 'packaged-app-layout',
+      query: '关键字',
+      appNodeModulesRoot: missingRoot,
+    })
+
+    expect(summary.packagedAppRootProvided).toBe(false)
+    expect(summary.appNodeModulesRootProvided).toBe(true)
+    expect(summary.packagedAppNodeModulesRootDerived).toBe(false)
+    expect(summary.packagedAppRootResolutionEvidence).toBe('explicit_app_node_modules_root')
+    expect(summary.packagedAppLayoutVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.packagedBundledBinarySmokeInvocationPlan).toMatchObject({
+      status: 'blocked',
+      inputMode: 'app_node_modules_root',
+      appNodeModulesRootProvided: true,
+      appNodeModulesRootResolved: false,
+      resolutionEvidence: 'explicit_app_node_modules_root',
+    })
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toContain('app_node_modules_root_unresolved')
+    expect(JSON.stringify(summary)).not.toContain(missingRoot)
+    expect(JSON.stringify(summary)).not.toContain('binaryPath')
   })
 
   test('packaged app layout smoke 不把缺失 CodeInsights identity 的 app/node_modules 标成真实 packaged binary', async () => {
@@ -1701,22 +2038,28 @@ describe('native-runtime-smoke', () => {
 })
 
 function createPackagedAppLayoutFixture(
-  layout: 'asar-unpacked' | 'unpacked-app',
+  layout: 'asar-unpacked' | 'macos-asar-unpacked' | 'unpacked-app',
   options: {
     appPackagePatch?: Record<string, unknown>
   } = {},
 ): {
   rootDir: string
+  appRoot: string
+  resourcesAppRoot: string
   nodeModulesRoot: string
 } {
   const plan = getNativeSearchOptionalPackagePlan()
   if (!plan) throw new Error('当前平台缺少 native search optional package plan')
 
   const rootDir = mkdtempSync(join(tmpdir(), 'codeinsights-native-packaged-layout-test-'))
-  const appRoot = layout === 'asar-unpacked'
+  const macosAppRoot = join(rootDir, 'CodeInsights.app')
+  const resourcesRoot = join(macosAppRoot, 'Contents', 'Resources')
+  const resourcesAppRoot = join(resourcesRoot, 'app')
+  const asarUnpackedRoot = layout === 'asar-unpacked'
     ? join(rootDir, 'app.asar.unpacked')
-    : join(rootDir, 'CodeInsights.app', 'Contents', 'Resources', 'app')
-  const nodeModulesRoot = join(appRoot, 'node_modules')
+    : join(resourcesRoot, 'app.asar.unpacked')
+  const packageRootForLayout = layout === 'unpacked-app' ? resourcesAppRoot : asarUnpackedRoot
+  const nodeModulesRoot = join(packageRootForLayout, 'node_modules')
   const packageRoot = join(nodeModulesRoot, ...plan.packageName.split('/'))
   const binaryPath = join(packageRoot, 'bin', plan.binaryName)
   const binaryContent = '#!/bin/sh\necho codeinsights native packaged layout\n'
@@ -1730,8 +2073,11 @@ function createPackagedAppLayoutFixture(
   mkdirSync(dirname(binaryPath), { recursive: true })
   if (layout === 'asar-unpacked') {
     writeFileSync(join(rootDir, 'app.asar'), 'asar placeholder\n', 'utf-8')
+  } else if (layout === 'macos-asar-unpacked') {
+    mkdirSync(resourcesRoot, { recursive: true })
+    writeFileSync(join(resourcesRoot, 'app.asar'), 'asar placeholder\n', 'utf-8')
   } else {
-    writeFileSync(join(appRoot, 'package.json'), `${JSON.stringify({
+    writeFileSync(join(resourcesAppRoot, 'package.json'), `${JSON.stringify({
       name: '@codeinsights/electron',
       version: '0.0.144',
       main: 'dist/main.cjs',
@@ -1746,5 +2092,24 @@ function createPackagedAppLayoutFixture(
   writeFileSync(binaryPath, binaryContent, 'utf-8')
   chmodSync(binaryPath, 0o755)
 
-  return { rootDir, nodeModulesRoot }
+  return {
+    rootDir,
+    appRoot: macosAppRoot,
+    resourcesAppRoot,
+    nodeModulesRoot,
+  }
+}
+
+function createResolvedExplicitAppNodeModulesRoot(): {
+  resolved: true
+  source: 'explicit_app_node_modules_root'
+  evidence: 'explicit_app_node_modules_root'
+  appNodeModulesRoot: string
+} {
+  return {
+    resolved: true,
+    source: 'explicit_app_node_modules_root',
+    evidence: 'explicit_app_node_modules_root',
+    appNodeModulesRoot: '/Applications/CodeInsights.app/Contents/Resources/app/node_modules',
+  }
 }

@@ -907,7 +907,7 @@ export function buildNativeSearchPackagingConfigAllowlistChangePlan(
     candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
     candidateVerificationCommands: [
       "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
-      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+      "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
     ],
     forbiddenActions: [
       'do_not_modify_electron_builder_yml_without_approval',
@@ -1093,12 +1093,12 @@ function getNativeSearchOptionalPackageExecutionCandidateCommands(
       ]
     case 'packaged_app_bundled_binary_smoke':
       return [
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
       ]
     case 'default_enable_risk_review':
       return [
         "bun run --filter='@codeinsights/electron' native-runtime:benchmark",
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
       ]
     case 'complete':
       return []

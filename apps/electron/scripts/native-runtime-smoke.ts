@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { redactNativeRuntimeText } from '../src/main/lib/native-runtime/native-runtime-diagnostics'
 import {
   getNativeRuntimeCacheDir,
@@ -62,6 +62,7 @@ export type NativeRuntimeSmokeMode =
 export interface NativeRuntimeSmokeOptions {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
+  packagedAppRoot?: string
   appNodeModulesRoot?: string
   nativeSearchPackageVersion?: string
   checkRegistry?: boolean
@@ -98,12 +99,70 @@ export interface PackagedBundledBinarySmokePlan {
   candidateCommand: string
 }
 
+export type PackagedAppNodeModulesResolutionSource =
+  | 'none'
+  | 'explicit_app_node_modules_root'
+  | 'packaged_app_root'
+
+export type PackagedAppNodeModulesResolutionEvidence =
+  | 'none'
+  | 'explicit_app_node_modules_root'
+  | 'macos_app_resources_app'
+  | 'macos_app_asar_unpacked'
+  | 'resources_app'
+  | 'resources_app_asar_unpacked'
+  | 'direct_app_root'
+  | 'direct_asar_unpacked_root'
+
+export type PackagedAppNodeModulesResolutionFailure =
+  | 'app_node_modules_root_not_found'
+  | 'packaged_app_root_not_found'
+  | 'packaged_app_root_unrecognized'
+
+export interface PackagedAppNodeModulesResolution {
+  resolved: boolean
+  source: PackagedAppNodeModulesResolutionSource
+  evidence: PackagedAppNodeModulesResolutionEvidence
+  appNodeModulesRoot?: string
+  failureReason?: PackagedAppNodeModulesResolutionFailure
+}
+
+export type PackagedBundledBinarySmokeInvocationPlanStatus =
+  | 'blocked'
+  | 'ready_for_execution'
+  | 'verified'
+
+export type PackagedBundledBinarySmokeInvocationPlanBlocker =
+  | PackagedBundledBinarySmokePlanBlocker
+  | 'app_node_modules_root_unresolved'
+  | 'packaged_app_root_required'
+  | 'packaged_app_root_unresolved'
+
+export interface PackagedBundledBinarySmokeInvocationPlan {
+  schemaVersion: 1
+  status: PackagedBundledBinarySmokeInvocationPlanStatus
+  inputMode: 'packaged_app_root' | 'app_node_modules_root' | 'none'
+  packagedAppRootProvided: boolean
+  appNodeModulesRootProvided: boolean
+  appNodeModulesRootResolved: boolean
+  resolutionEvidence: PackagedAppNodeModulesResolutionEvidence
+  blockedBy: PackagedBundledBinarySmokeInvocationPlanBlocker[]
+  requiredInputs: string[]
+  acceptanceEvidence: string[]
+  candidateCommand: string
+  legacyCandidateCommand: string
+  forbiddenActions: string[]
+}
+
 export interface NativeRuntimeSmokeSummary {
   schemaVersion: number
   generatedAt: string
   mode: NativeRuntimeSmokeMode
   nativeSearchBinaryProvided: boolean
+  packagedAppRootProvided: boolean
   appNodeModulesRootProvided: boolean
+  packagedAppNodeModulesRootDerived: boolean
+  packagedAppRootResolutionEvidence: PackagedAppNodeModulesResolutionEvidence
   bundledBinaryVerified: boolean
   fixtureBundledPackageVerified: boolean
   usesTemporaryFixture: boolean
@@ -156,6 +215,7 @@ export interface NativeRuntimeSmokeSummary {
   packagingConfigAllowlistChangePlan: NativeSearchPackagingConfigAllowlistChangePlan
   optionalPackageExecutionPlan: NativeSearchOptionalPackageExecutionPlan
   packagedBundledBinarySmokePlan: PackagedBundledBinarySmokePlan
+  packagedBundledBinarySmokeInvocationPlan: PackagedBundledBinarySmokeInvocationPlan
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
@@ -237,6 +297,9 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
     } else if (arg === '--native-search-binary') {
       options.nativeSearchBinary = value
       index += 1
+    } else if (arg === '--packaged-app-root') {
+      options.packagedAppRoot = value
+      index += 1
     } else if (arg === '--app-node-modules-root') {
       options.appNodeModulesRoot = value
       index += 1
@@ -257,10 +320,71 @@ export function parseNativeRuntimeSmokeArgs(args: string[]): NativeRuntimeSmokeO
   return options
 }
 
+export function resolvePackagedAppNodeModulesRoot(input: {
+  packagedAppRoot?: string
+  appNodeModulesRoot?: string
+}): PackagedAppNodeModulesResolution {
+  if (input.appNodeModulesRoot) {
+    if (!existsSync(input.appNodeModulesRoot)) {
+      return {
+        resolved: false,
+        source: 'explicit_app_node_modules_root',
+        evidence: 'explicit_app_node_modules_root',
+        failureReason: 'app_node_modules_root_not_found',
+      }
+    }
+
+    return {
+      resolved: true,
+      source: 'explicit_app_node_modules_root',
+      evidence: 'explicit_app_node_modules_root',
+      appNodeModulesRoot: input.appNodeModulesRoot,
+    }
+  }
+
+  if (!input.packagedAppRoot) {
+    return {
+      resolved: false,
+      source: 'none',
+      evidence: 'none',
+    }
+  }
+
+  if (!existsSync(input.packagedAppRoot)) {
+    return {
+      resolved: false,
+      source: 'packaged_app_root',
+      evidence: 'none',
+      failureReason: 'packaged_app_root_not_found',
+    }
+  }
+
+  const candidates = getPackagedAppNodeModulesRootCandidates(input.packagedAppRoot)
+  for (const candidate of candidates) {
+    if (existsSync(candidate.appNodeModulesRoot)) {
+      return {
+        resolved: true,
+        source: 'packaged_app_root',
+        evidence: candidate.evidence,
+        appNodeModulesRoot: candidate.appNodeModulesRoot,
+      }
+    }
+  }
+
+  return {
+    resolved: false,
+    source: 'packaged_app_root',
+    evidence: 'none',
+    failureReason: 'packaged_app_root_unrecognized',
+  }
+}
+
 export function buildNativeRuntimeSmokeSummary(input: {
   mode: NativeRuntimeSmokeMode
   nativeSearchBinary?: string
+  packagedAppRoot?: string
   appNodeModulesRoot?: string
+  packagedAppNodeModulesResolution?: PackagedAppNodeModulesResolution
   verification?: NativeRuntimeSmokeVerification
   cases: NativeRuntimeSmokeCase[]
 }): NativeRuntimeSmokeSummary {
@@ -414,8 +538,13 @@ export function buildNativeRuntimeSmokeSummary(input: {
     bundledBinaryVerified,
     defaultEnableRiskReviewCompleted: false,
   })
+  const packagedAppNodeModulesResolution = input.packagedAppNodeModulesResolution
+    ?? resolvePackagedAppNodeModulesRoot({
+      packagedAppRoot: input.packagedAppRoot,
+      appNodeModulesRoot: input.appNodeModulesRoot,
+    })
   const packagedBundledBinarySmokePlan = buildPackagedBundledBinarySmokePlan({
-    appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
+    appNodeModulesRootProvided: packagedAppNodeModulesResolution.resolved,
     optionalPackagesPublished,
     optionalDependenciesDeclared,
     optionalDependenciesInstallChainVerified,
@@ -427,12 +556,24 @@ export function buildNativeRuntimeSmokeSummary(input: {
     realPackagedBinaryVerified,
     bundledBinaryVerified,
   })
+  const packagedBundledBinarySmokeInvocationPlan = buildPackagedBundledBinarySmokeInvocationPlan({
+    packagedAppRootProvided: Boolean(input.packagedAppRoot),
+    appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
+    appNodeModulesRootResolved: packagedAppNodeModulesResolution.resolved,
+    resolutionEvidence: packagedAppNodeModulesResolution.evidence,
+    plan: packagedBundledBinarySmokePlan,
+    bundledBinaryVerified,
+  })
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     mode: input.mode,
     nativeSearchBinaryProvided: Boolean(input.nativeSearchBinary),
+    packagedAppRootProvided: Boolean(input.packagedAppRoot),
     appNodeModulesRootProvided: Boolean(input.appNodeModulesRoot),
+    packagedAppNodeModulesRootDerived: packagedAppNodeModulesResolution.source === 'packaged_app_root'
+      && packagedAppNodeModulesResolution.resolved,
+    packagedAppRootResolutionEvidence: packagedAppNodeModulesResolution.evidence,
     bundledBinaryVerified,
     fixtureBundledPackageVerified: Boolean(verification.fixtureBundledPackageVerified),
     usesTemporaryFixture,
@@ -485,6 +626,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     packagingConfigAllowlistChangePlan,
     optionalPackageExecutionPlan,
     packagedBundledBinarySmokePlan,
+    packagedBundledBinarySmokeInvocationPlan,
     nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
       benchmarkEvaluated: false,
       benchmarkGatePassed: false,
@@ -566,8 +708,87 @@ function buildPackagedBundledBinarySmokePlan(input: {
       'do_not_modify_electron_builder_yml_without_approval',
       'do_not_add_native_search_optional_dependencies_before_publication',
     ],
-    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
   }
+}
+
+function buildPackagedBundledBinarySmokeInvocationPlan(input: {
+  packagedAppRootProvided: boolean
+  appNodeModulesRootProvided: boolean
+  appNodeModulesRootResolved: boolean
+  resolutionEvidence: PackagedAppNodeModulesResolutionEvidence
+  plan: PackagedBundledBinarySmokePlan
+  bundledBinaryVerified: boolean
+}): PackagedBundledBinarySmokeInvocationPlan {
+  const blockedBy: PackagedBundledBinarySmokeInvocationPlanBlocker[] = [
+    ...input.plan.blockedBy,
+  ]
+
+  if (!input.appNodeModulesRootResolved) {
+    if (input.appNodeModulesRootProvided) {
+      blockedBy.push('app_node_modules_root_unresolved')
+    } else {
+      blockedBy.push(input.packagedAppRootProvided
+        ? 'packaged_app_root_unresolved'
+        : 'packaged_app_root_required')
+    }
+  }
+
+  const inputMode = input.packagedAppRootProvided
+    ? 'packaged_app_root'
+    : input.appNodeModulesRootProvided ? 'app_node_modules_root' : 'none'
+  const status = input.bundledBinaryVerified && blockedBy.length === 0
+    ? 'verified'
+    : blockedBy.length === 0 ? 'ready_for_execution' : 'blocked'
+
+  return {
+    schemaVersion: 1,
+    status,
+    inputMode,
+    packagedAppRootProvided: input.packagedAppRootProvided,
+    appNodeModulesRootProvided: input.appNodeModulesRootProvided,
+    appNodeModulesRootResolved: input.appNodeModulesRootResolved,
+    resolutionEvidence: input.resolutionEvidence,
+    blockedBy: uniquePackagedBundledBinarySmokeInvocationBlockers(blockedBy),
+    requiredInputs: [
+      'published_optional_packages',
+      'native_search_optional_dependencies',
+      'optional_dependency_install_chain',
+      'electron_builder_native_search_allowlist',
+      'prebuilt_packaged_app_root',
+      'packaged_app_identity',
+      'bundled_native_search_binary',
+    ],
+    acceptanceEvidence: [
+      'packaged_app_root_resolves_to_app_node_modules',
+      'packaged_app_evidence_is_unpacked_app_or_asar_unpacked',
+      'packaged_app_identity_matches_codeinsights_electron',
+      'native_search_optional_package_manifest_valid',
+      'native_search_binary_is_executable',
+      'native_search_binary_sha256_matches_manifest',
+      'optional_packages_published_for_expected_version',
+      'optional_dependencies_install_chain_verified',
+      'builder_allowlist_includes_native_search_packages',
+      'summary_bundledBinaryVerified_true',
+    ],
+    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+    legacyCandidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+    forbiddenActions: [
+      'do_not_enable_native_by_default_before_verified',
+      'do_not_use_temporary_fixture_as_real_packaged_binary_evidence',
+      'do_not_use_system_path_for_native_binary',
+      'do_not_output_binary_path_packaged_root_or_node_modules_root',
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_add_native_search_optional_dependencies_before_publication',
+      'do_not_treat_invocation_plan_as_packaged_binary_verified',
+    ],
+  }
+}
+
+function uniquePackagedBundledBinarySmokeInvocationBlockers(
+  blockers: PackagedBundledBinarySmokeInvocationPlanBlocker[],
+): PackagedBundledBinarySmokeInvocationPlanBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 
 export function getNativeRuntimeSmokeExitCode(summary: NativeRuntimeSmokeSummary): 0 | 1 {
@@ -592,6 +813,10 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
     })}\n`, 'utf-8')
 
     cases.push(await runTypeScriptFallbackCase(fixturePath, options.query))
+    const packagedAppNodeModulesResolution = resolvePackagedAppNodeModulesRoot({
+      packagedAppRoot: options.packagedAppRoot,
+      appNodeModulesRoot: options.appNodeModulesRoot,
+    })
 
     if (options.mode === 'native-missing') {
       cases.push(await runNativeMissingCase(options.nativeSearchBinary ?? join(rootDir, 'missing-native-search')))
@@ -732,8 +957,11 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
         options.checkRegistry === true,
         buildNativeSearchOptionalDependencyExpectedVersions(optionalDependenciesInstallChainPlanVersion),
       )
+      if (options.packagedAppRoot) {
+        cases.push(buildPackagedAppRootResolutionCase(packagedAppNodeModulesResolution))
+      }
       const packagedAppResult = runPackagedAppLayoutCase(
-        options.appNodeModulesRoot,
+        packagedAppNodeModulesResolution.appNodeModulesRoot ?? options.appNodeModulesRoot,
         options.checkRegistry === true,
         optionalPackagePublication,
       )
@@ -784,7 +1012,9 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
     return buildNativeRuntimeSmokeSummary({
       mode: options.mode,
       nativeSearchBinary: options.nativeSearchBinary,
+      packagedAppRoot: options.packagedAppRoot,
       appNodeModulesRoot: options.appNodeModulesRoot,
+      packagedAppNodeModulesResolution,
       verification,
       cases,
     })
@@ -795,6 +1025,87 @@ export async function runNativeRuntimeSmoke(options: NativeRuntimeSmokeOptions):
       process.env.CODEINSIGHTS_CONFIG_DIR = previousConfigDir
     }
     rmSync(rootDir, { recursive: true, force: true })
+  }
+}
+
+function getPackagedAppNodeModulesRootCandidates(packagedAppRoot: string): Array<{
+  evidence: PackagedAppNodeModulesResolutionEvidence
+  appNodeModulesRoot: string
+}> {
+  const candidates: Array<{
+    evidence: PackagedAppNodeModulesResolutionEvidence
+    appNodeModulesRoot: string
+  }> = []
+  const baseName = basename(packagedAppRoot)
+  const lowerBaseName = baseName.toLowerCase()
+
+  if (extname(packagedAppRoot).toLowerCase() === '.app') {
+    const resourcesRoot = join(packagedAppRoot, 'Contents', 'Resources')
+    candidates.push(
+      {
+        evidence: 'macos_app_resources_app',
+        appNodeModulesRoot: join(resourcesRoot, 'app', 'node_modules'),
+      },
+      {
+        evidence: 'macos_app_asar_unpacked',
+        appNodeModulesRoot: join(resourcesRoot, 'app.asar.unpacked', 'node_modules'),
+      },
+    )
+  }
+
+  if (lowerBaseName === 'resources') {
+    candidates.push(
+      {
+        evidence: 'resources_app',
+        appNodeModulesRoot: join(packagedAppRoot, 'app', 'node_modules'),
+      },
+      {
+        evidence: 'resources_app_asar_unpacked',
+        appNodeModulesRoot: join(packagedAppRoot, 'app.asar.unpacked', 'node_modules'),
+      },
+    )
+  }
+
+  if (baseName === 'app') {
+    candidates.push({
+      evidence: 'direct_app_root',
+      appNodeModulesRoot: join(packagedAppRoot, 'node_modules'),
+    })
+  }
+
+  if (baseName === 'app.asar.unpacked') {
+    candidates.push({
+      evidence: 'direct_asar_unpacked_root',
+      appNodeModulesRoot: join(packagedAppRoot, 'node_modules'),
+    })
+  }
+
+  return candidates
+}
+
+function buildPackagedAppRootResolutionCase(
+  resolution: PackagedAppNodeModulesResolution,
+): NativeRuntimeSmokeCase {
+  if (resolution.resolved) {
+    return {
+      name: 'packaged-app-root-resolution',
+      status: 'passed',
+      detail: [
+        `packagedAppRootResolutionEvidence=${resolution.evidence}`,
+        'appNodeModulesRootResolved=true',
+      ].join('; '),
+    }
+  }
+
+  return {
+    name: 'packaged-app-root-resolution',
+    status: 'failed',
+    detail: [
+      `packagedAppRootResolutionEvidence=${resolution.evidence}`,
+      `reason=${resolution.failureReason ?? 'packaged_app_root_unrecognized'}`,
+      'appNodeModulesRootResolved=false',
+      'realPackagedBinaryVerified=false',
+    ].join('; '),
   }
 }
 
@@ -1191,7 +1502,7 @@ function runPackagedAppLayoutCase(
       case: {
         name: 'packaged-app-layout',
         status: 'skipped',
-        detail: '未提供 --app-node-modules-root；requiresPrebuiltPackagedApp=true; realPackagedBinaryVerified=false',
+        detail: '未提供 --packaged-app-root 或 --app-node-modules-root；requiresPrebuiltPackagedApp=true; realPackagedBinaryVerified=false',
       },
       layoutVerified: false,
       packagedAppEvidenceVerified: false,

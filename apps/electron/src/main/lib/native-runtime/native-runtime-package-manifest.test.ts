@@ -1021,7 +1021,7 @@ files:
       candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
       candidateVerificationCommands: [
         "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
       ],
       forbiddenActions: [
         'do_not_modify_electron_builder_yml_without_approval',
