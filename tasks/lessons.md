@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 publication invocation 发布证据收紧
+
+- `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据` 已成为当前最新开发基线；后续 Rust / Go 下次启动提示词的最新开发基线应指向 `77b266e8`，最新已确认恢复入口在本轮状态同步提交前仍是 `084546cc docs(rust-go): 回填 Phase 5 packaged smoke invocation 最新恢复入口`。
+- `f949fc13 feat(rust-go): 补齐 Phase 5 optional package publication invocation plan` 只把真实 `npm publish` 的 required inputs、candidate commands、per-package blocker、acceptance evidence 和 forbidden actions 机器可读化；`ready_for_invocation` 仍只表示可进入人工审核 / 调用，不等于 package 已发布。
+- `optionalPackagePublicationInvocationPlan.publishedPackages` 必须只来自 package-level `status="published"` 的有效 registry exact-version evidence；invalid、unavailable、duplicate、collision 或 plan-level 矛盾 evidence 都不能透传为已发布。
+- 完整 publication verified 必须要求 planned package 集合与 published package 集合唯一且严格匹配；任何重复、缺失、未知 package 或 metadata 无法验证，都只能进入 blocker / exclusion，不能让 `not_required_already_published` 或 default-enable gate 误通过。
+- 本轮仍不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+
 ## 2026-06-06 Rust / Go Phase 5 packaged smoke invocation 最新恢复入口回填
 
 - `076f25c6 docs(rust-go): 同步 Phase 5 packaged smoke invocation 状态` 是 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `edeba827`，最新恢复入口应从 `076f25c6` 或其后的最新 Rust / Go docs 提交继续。
