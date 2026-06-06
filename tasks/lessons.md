@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 release handoff 批准包边界
+
+- `99d76b0c feat(rust-go): 补齐 Phase 5 release handoff 批准包` 已成为当前最新开发基线；最新实际恢复入口在本轮状态同步提交前为 `3089b768 docs(rust-go): 回填 Phase 5 最新状态和启动提示词`。
+- `nativeSearchReleaseHandoffPlan.currentGateApprovalPacket` 只表示当前 `optionalPackageExecutionPlan.nextStage` 对应的批准准备包：blocked 时不得输出可执行候选命令，publication ready 时只能授权 release approval 后的 `npm publish <native-search-package-source:...> --access public` 调用审核，不授权 `package.json` / `bun.lock` / `electron-builder.yml` 修改、packaged app 创建或 default enable。
+- approval packet 不查询 registry、不发布、不安装、不写 package manifest / lockfile / builder、不读取 binary path，也不证明 `optionalPackagesPublished`、`optionalDependenciesDeclared`、`optionalDependenciesInstallChainVerified`、`packagingConfigVerified`、`realPackagedBinaryVerified`、`bundledBinaryVerified` 或 default-enable candidate。
+- 后续即使 handoff 进入 `ready_for_approval`，也必须继续按顺序 gate 执行：真实 publication verified 后才能考虑 optionalDependencies 声明 / install-chain；builder allowlist 实际修改仍需用户明确批准；真实 packaged app bundled binary smoke verified 必须同时满足 `bundledBinaryVerified=true` 且无 blocker。
+
 ## 2026-06-06 Rust / Go 阶段完成后的状态同步习惯
 
 - `f02ceae0 docs(rust-go): 同步 Phase 5 builder allowlist 修改意图状态` 已成为 `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `ddc818ae`，最新恢复入口应从 `f02ceae0` 或其后的最新 Rust / Go docs 状态同步提交继续。
