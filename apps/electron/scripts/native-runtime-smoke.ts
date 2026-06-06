@@ -1125,6 +1125,7 @@ function buildNativeSearchReleaseHandoffGateExecutionEvidenceChecklist(
         'optional_package_publication',
         'optional_package_install_chain',
         'packaged_app_bundled_binary_smoke',
+        'default_enable_risk_review',
       ].includes(item.gate),
       successCriteria: [
         ...getNativeSearchReleaseHandoffGateExecutionEvidence(item.gate),

@@ -1032,6 +1032,35 @@ describe('native-runtime-smoke', () => {
         postExecutionVerificationCommands: [],
       },
     ])
+    expect(executionChecklist.map((item) => ({
+      gate: item.gate,
+      networkRequired: item.networkRequired,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        networkRequired: true,
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        networkRequired: false,
+      },
+      {
+        gate: 'optional_package_install_chain',
+        networkRequired: true,
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        networkRequired: false,
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        networkRequired: true,
+      },
+      {
+        gate: 'default_enable_risk_review',
+        networkRequired: true,
+      },
+    ])
     expect(executionChecklist[0]).toEqual(expect.objectContaining({
       requiredApproval: 'release_approval',
       executionEvidenceRequired: true,
