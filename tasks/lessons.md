@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 release handoff 证据计划边界
+
+- `4fec7fab feat(rust-go): 补齐 Phase 5 release handoff 证据计划` 已成为当前最新开发基线；后续 Rust / Go 下次启动提示词的最新开发基线应指向 `4fec7fab`，最新已确认恢复入口在本轮状态同步提交前仍是 `6525f6fb docs(rust-go): 回填 Phase 5 publication invocation 最新恢复入口`。
+- `nativeSearchReleaseHandoffPlan` 只能作为真实 release / install / builder / packaged smoke / default-enable 前的交接证据聚合器。`ready_for_release_handoff` 只说明当前顺序 gate 的下一步可交给人工审核或执行，不等于真实 package 已发布、optionalDependencies 已声明或安装、builder allowlist 已修改、packaged binary 已验证或 native 可默认启用。
+- release handoff 的 ready 字段必须绑定 `optionalPackageExecutionPlan.nextStage`。后置 packaged smoke 布尔值、`ready_for_execution` 或手工构造的 `bundledBinaryVerified` 测试输入不能跳过 publish-target / source / publication 顺序 gate；如果上游 gate 未完成，handoff 必须 fail-closed 到上游 `nextGate`。
+- 本轮仍不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-06 Rust / Go Phase 5 publication invocation 最新恢复入口回填
 
 - `95305503 docs(rust-go): 同步 Phase 5 publication invocation 证据收紧状态` 已成为 `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `77b266e8`，最新恢复入口应从 `95305503` 或其后的最新 Rust / Go docs 状态同步提交继续。
