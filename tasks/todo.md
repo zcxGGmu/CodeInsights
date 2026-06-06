@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 fail-closed 最新恢复入口回填计划
+
+范围确认：用户要求更新文档最新开发状态，清楚标注已完成 / 未完成，确保下次启动可以继续跟踪进度，并直接给出下次启动提示词；同时要求把“每个阶段性任务完成后自动同步文档状态和提示词”的习惯继续固化。本轮只做状态文档回填：当前分支为 `rust-go-refactor`，当前 `git log` 已确认最新 Rust / Go docs 状态同步提交为 `8ed8c1c5 docs(rust-go): 同步 Phase 5 fail-closed 证据状态`，最新开发基线保持 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据`。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -25 --oneline`，确认当前分支、HEAD 与最近 Rust / Go 提交历史。
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和 `native/search/`，确认本轮只需做状态同步。
+- [x] 更新 development checklist 顶部状态、下次启动入口和底部可复制提示词，把最新已确认恢复入口从 `6bde0340` 推进到 `8ed8c1c5`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态和可复制提示词，把最新已确认恢复入口推进到 `8ed8c1c5`。
+- [x] 更新 `tasks/lessons.md`，固化 `8ed8c1c5` 是 `3f5a0783` 后当前已确认恢复入口，并记录阶段完成后自动同步状态文档 / 提示词的默认动作。
+- [x] 更新本 Review，记录完成项、未完成项、验证命令和禁改边界。
+- [x] 运行 `git diff --check`、禁改文件 diff 检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描、恢复入口一致性扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `6bde0340 docs(rust-go): 回填 Phase 5 release handoff 最新恢复入口` 推进到 `8ed8c1c5 docs(rust-go): 同步 Phase 5 fail-closed 证据状态`；最新开发基线保持 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据`。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 release handoff fail-closed 证据收紧和对应 docs 状态同步。真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 习惯固化：已补 `tasks/lessons.md`，明确每个阶段性任务完成并验证通过后，默认自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复给出实际 docs HEAD 和可复制启动提示词。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / 任务状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；development checklist 与 `next-session-prompt.md` 的当前恢复入口均指向 `8ed8c1c5`，旧 `6bde0340` 不再作为最新恢复入口残留；`git status --short --branch` 仅显示本轮 4 个 docs / tasks 文件。
+- 本轮状态同步提交完成后，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口；最终回复会给出本轮实际 HEAD 和可复制提示词。
+
 ## 2026-06-06 Rust/Go Phase 5 release handoff fail-closed 证据收紧计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `6bde0340 docs(rust-go): 回填 Phase 5 release handoff 最新恢复入口`，最新开发基线为 `4fec7fab feat(rust-go): 补齐 Phase 5 release handoff 证据计划`。本轮只推进真实 optional package 发布 / install-chain / builder allowlist / packaged smoke 之前的 fail-closed 证据语义收紧：锁住 `nativeSearchReleaseHandoffPlan`、`packagedBundledBinarySmokePlan` 和 `packagedBundledBinarySmokeInvocationPlan` 不能被后置 packaged smoke 布尔值或 ready 字段绕过上游 gate，并补充真实 packaged app bundled binary smoke 的机器可读设计约束。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 fail-closed 最新恢复入口回填
+
+- `8ed8c1c5 docs(rust-go): 同步 Phase 5 fail-closed 证据状态` 已成为 `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `3f5a0783`，最新恢复入口应从 `8ed8c1c5` 或其后的最新 Rust / Go docs 状态同步提交继续。
+- 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，即使当前 HEAD 已经是 docs 状态同步提交，也要再次用 `git status --short --branch` 与 `git log -25 --oneline` 回填当前真实 docs HEAD，不能让 checklist 或 next-session prompt 停在上一轮恢复入口。
+- 每个阶段性任务完成并验证通过后，默认自动执行状态同步：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复必须给出本轮实际 docs HEAD 和可复制启动提示词。
+- 状态同步不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-06 Rust / Go Phase 5 release handoff fail-closed 证据收紧
 
 - `3f5a0783 feat(rust-go): 收紧 Phase 5 release handoff fail-closed 证据` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口仍是 `6bde0340 docs(rust-go): 回填 Phase 5 release handoff 最新恢复入口`。
