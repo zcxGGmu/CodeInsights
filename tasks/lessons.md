@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go 阶段完成后的状态同步习惯
+
+- `f02ceae0 docs(rust-go): 同步 Phase 5 builder allowlist 修改意图状态` 已成为 `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `ddc818ae`，最新恢复入口应从 `f02ceae0` 或其后的最新 Rust / Go docs 状态同步提交继续。
+- 用户明确要求把“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”作为阶段性任务完成后的固定习惯。以后每完成一个阶段并验证通过后，不等用户提醒，自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons。
+- 状态同步必须包含可追踪恢复入口、已完成 / 未完成清单、no-go 边界验证和可复制下次启动提示词；同步后单独提交 docs / tasks 状态文件，并在最终回复给出实际 docs HEAD。
+- 这个习惯不改变项目 no-go：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-06 Rust / Go Phase 5 builder allowlist 修改意图边界
 
 - `ddc818ae feat(rust-go): 补齐 Phase 5 builder allowlist 修改意图` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口为 `c1890a04 docs(rust-go): 回填 Phase 5 fail-closed 最新恢复入口`。
