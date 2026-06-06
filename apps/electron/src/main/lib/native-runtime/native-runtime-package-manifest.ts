@@ -132,6 +132,61 @@ export interface NativeSearchOptionalPackagePublicationChangePlan {
   forbiddenActions: string[]
 }
 
+export type NativeSearchOptionalPackagePublicationInvocationPlanStatus =
+  | 'blocked'
+  | 'ready_for_invocation'
+  | 'not_required_already_published'
+
+export type NativeSearchOptionalPackagePublicationInvocationPlanBlocker =
+  | 'optional_package_publication_plan_not_ready'
+  | 'optional_package_publication_version_required'
+  | 'optional_package_publication_version_invalid'
+  | 'optional_package_publish_target_not_ready'
+  | 'optional_package_source_not_ready'
+  | 'optional_packages_already_published'
+  | 'optional_package_publication_partial'
+  | 'optional_package_publication_metadata_invalid'
+  | 'optional_package_publication_state_unavailable'
+  | 'optional_package_invocation_commands_unavailable'
+
+export type NativeSearchOptionalPackagePublicationInvocationPackageStatus =
+  | 'blocked'
+  | 'ready_for_invocation'
+  | 'published'
+  | 'excluded'
+
+export type NativeSearchOptionalPackagePublicationInvocationPackageBlocker =
+  | 'optional_package_publication_plan_not_ready'
+  | 'optional_package_already_published'
+  | 'optional_package_publication_command_excluded'
+  | 'optional_package_publication_command_unavailable'
+
+export interface NativeSearchOptionalPackagePublicationInvocationPackage {
+  packageName: string
+  packageVersion: string | null
+  status: NativeSearchOptionalPackagePublicationInvocationPackageStatus
+  blockedBy: NativeSearchOptionalPackagePublicationInvocationPackageBlocker[]
+  candidatePublicationCommand: string | null
+}
+
+export interface NativeSearchOptionalPackagePublicationInvocationPlan {
+  schemaVersion: 1
+  status: NativeSearchOptionalPackagePublicationInvocationPlanStatus
+  packageVersion: string | null
+  approvalRequired: boolean
+  changePlanStatus: NativeSearchOptionalPackagePublicationChangePlanStatus
+  readyPackages: string[]
+  excludedPackages: string[]
+  publishedPackages: string[]
+  packages: NativeSearchOptionalPackagePublicationInvocationPackage[]
+  blockedBy: NativeSearchOptionalPackagePublicationInvocationPlanBlocker[]
+  requiredInputs: string[]
+  acceptanceEvidence: string[]
+  candidateInvocationAction: string
+  candidatePublicationCommands: string[]
+  forbiddenActions: string[]
+}
+
 export type NativeSearchOptionalPackagePublishTargetBlocker =
   | 'publish_target_version_required'
   | 'publish_target_version_invalid'
@@ -624,6 +679,77 @@ export function buildNativeSearchOptionalPackagePublicationChangePlan(
   }
 }
 
+export function buildNativeSearchOptionalPackagePublicationInvocationPlan(
+  changePlan: NativeSearchOptionalPackagePublicationChangePlan,
+): NativeSearchOptionalPackagePublicationInvocationPlan {
+  const blockedBy = getNativeSearchPublicationInvocationBlockers(changePlan)
+  const candidatePublicationCommands = blockedBy.length === 0
+    ? changePlan.candidatePublicationCommands
+    : []
+  const packages = changePlan.plannedPackages.map((plannedPackage) => (
+    buildNativeSearchPublicationInvocationPackage(
+      plannedPackage,
+      changePlan,
+      candidatePublicationCommands,
+      blockedBy,
+    )
+  ))
+  const readyPackages = packages
+    .filter((item) => item.status === 'ready_for_invocation')
+    .map((item) => item.packageName)
+  const optionalPackagesFullyPublished = isNativeSearchOptionalPackagePublicationFullyVerified(changePlan)
+  const status: NativeSearchOptionalPackagePublicationInvocationPlanStatus = optionalPackagesFullyPublished
+    ? 'not_required_already_published'
+    : blockedBy.length === 0 && readyPackages.length > 0 ? 'ready_for_invocation' : 'blocked'
+
+  return {
+    schemaVersion: 1,
+    status,
+    packageVersion: changePlan.packageVersion,
+    approvalRequired: status === 'ready_for_invocation',
+    changePlanStatus: changePlan.status,
+    readyPackages,
+    excludedPackages: uniqueStrings([
+      ...changePlan.commandExcludedPackages,
+      ...packages
+        .filter((item) => item.status === 'excluded')
+        .map((item) => item.packageName),
+    ]),
+    publishedPackages: changePlan.publishedPackages,
+    packages,
+    blockedBy,
+    requiredInputs: [
+      'release_approval',
+      'npm_registry_auth_with_publish_access',
+      'optional_package_publish_target_ready',
+      'optional_package_source_ready',
+      'exact_package_version',
+      'per_platform_native_search_package_sources',
+    ],
+    acceptanceEvidence: [
+      'npm_publish_commands_exit_zero_for_all_ready_packages',
+      'registry_packument_contains_exact_expected_versions',
+      'registry_metadata_matches_platform_arch_and_binary',
+      'summary_publishedPackages_contains_only_verified_registry_evidence',
+      'summary_optionalPackagesPublished_true_after_registry_check',
+    ],
+    candidateInvocationAction: 'invoke_optional_package_publication_after_release_approval',
+    candidatePublicationCommands,
+    forbiddenActions: [
+      'do_not_run_npm_publish_without_release_approval',
+      'do_not_run_npm_pack_as_part_of_invocation_plan',
+      'do_not_publish_excluded_or_collision_packages',
+      'do_not_modify_package_json_before_publication_verified',
+      'do_not_modify_bun_lock_before_publication_verified',
+      'do_not_modify_electron_builder_yml_without_approval',
+      'do_not_treat_invocation_plan_as_packages_published',
+      'do_not_treat_invocation_plan_as_install_chain_verified',
+      'do_not_treat_invocation_plan_as_packaged_binary_verified',
+      'do_not_enable_native_by_default_before_verified',
+    ],
+  }
+}
+
 export function validateNativeSearchOptionalPackagePublication(
   options: ValidateNativeSearchOptionalPackagePublicationOptions,
 ): NativeSearchOptionalPackagePublicationValidationResult {
@@ -1004,6 +1130,116 @@ function normalizePackageNameList(values: string[], expectedPackages: string[]):
   return values.filter((value, index) => (
     expectedPackages.includes(value) && values.indexOf(value) === index
   ))
+}
+
+function getNativeSearchPublicationInvocationBlockers(
+  changePlan: NativeSearchOptionalPackagePublicationChangePlan,
+): NativeSearchOptionalPackagePublicationInvocationPlanBlocker[] {
+  const blockers: NativeSearchOptionalPackagePublicationInvocationPlanBlocker[] = []
+  const optionalPackagesFullyPublished = isNativeSearchOptionalPackagePublicationFullyVerified(changePlan)
+
+  if (optionalPackagesFullyPublished) {
+    return ['optional_packages_already_published']
+  }
+
+  if (changePlan.packageVersion == null) {
+    blockers.push('optional_package_publication_version_required')
+  } else if (!isReleasePackageVersion(changePlan.packageVersion)) {
+    blockers.push('optional_package_publication_version_invalid')
+  }
+
+  if (changePlan.status !== 'ready_for_review') {
+    blockers.push('optional_package_publication_plan_not_ready')
+  }
+  if (!changePlan.publishTargetReady) blockers.push('optional_package_publish_target_not_ready')
+  if (!changePlan.packageSourceReady) blockers.push('optional_package_source_not_ready')
+  if (changePlan.blockedBy.includes('optional_package_publication_partial')) {
+    blockers.push('optional_package_publication_partial')
+  }
+  if (changePlan.invalidPublishedPackages.length > 0 || changePlan.existingInvalidPublishedPackages.length > 0) {
+    blockers.push('optional_package_publication_metadata_invalid')
+  }
+  if (changePlan.unavailablePublishedPackages.length > 0) {
+    blockers.push('optional_package_publication_state_unavailable')
+  }
+  if (!optionalPackagesFullyPublished && changePlan.candidatePublicationCommands.length === 0) {
+    blockers.push('optional_package_invocation_commands_unavailable')
+  }
+
+  return uniquePublicationInvocationBlockers(blockers)
+}
+
+function isNativeSearchOptionalPackagePublicationFullyVerified(
+  changePlan: NativeSearchOptionalPackagePublicationChangePlan,
+): boolean {
+  return changePlan.optionalPackagesPublished
+    && changePlan.publishedPackages.length === changePlan.plannedPackages.length
+    && changePlan.missingPublishedPackages.length === 0
+    && changePlan.invalidPublishedPackages.length === 0
+    && changePlan.existingInvalidPublishedPackages.length === 0
+    && changePlan.unavailablePublishedPackages.length === 0
+}
+
+function buildNativeSearchPublicationInvocationPackage(
+  plannedPackage: NativeSearchPlannedOptionalPackagePublication,
+  changePlan: NativeSearchOptionalPackagePublicationChangePlan,
+  candidatePublicationCommands: string[],
+  planBlockers: NativeSearchOptionalPackagePublicationInvocationPlanBlocker[],
+): NativeSearchOptionalPackagePublicationInvocationPackage {
+  const candidatePublicationCommand = `npm publish <native-search-package-source:${plannedPackage.packageName}> --access public`
+  if (changePlan.publishedPackages.includes(plannedPackage.packageName)) {
+    return {
+      packageName: plannedPackage.packageName,
+      packageVersion: plannedPackage.packageVersion,
+      status: 'published',
+      blockedBy: ['optional_package_already_published'],
+      candidatePublicationCommand: null,
+    }
+  }
+
+  if (changePlan.commandExcludedPackages.includes(plannedPackage.packageName)) {
+    return {
+      packageName: plannedPackage.packageName,
+      packageVersion: plannedPackage.packageVersion,
+      status: 'excluded',
+      blockedBy: ['optional_package_publication_command_excluded'],
+      candidatePublicationCommand: null,
+    }
+  }
+
+  if (planBlockers.length > 0) {
+    return {
+      packageName: plannedPackage.packageName,
+      packageVersion: plannedPackage.packageVersion,
+      status: 'blocked',
+      blockedBy: ['optional_package_publication_plan_not_ready'],
+      candidatePublicationCommand: null,
+    }
+  }
+
+  if (!candidatePublicationCommands.includes(candidatePublicationCommand)) {
+    return {
+      packageName: plannedPackage.packageName,
+      packageVersion: plannedPackage.packageVersion,
+      status: 'blocked',
+      blockedBy: ['optional_package_publication_command_unavailable'],
+      candidatePublicationCommand: null,
+    }
+  }
+
+  return {
+    packageName: plannedPackage.packageName,
+    packageVersion: plannedPackage.packageVersion,
+    status: 'ready_for_invocation',
+    blockedBy: [],
+    candidatePublicationCommand,
+  }
+}
+
+function uniquePublicationInvocationBlockers(
+  blockers: NativeSearchOptionalPackagePublicationInvocationPlanBlocker[],
+): NativeSearchOptionalPackagePublicationInvocationPlanBlocker[] {
+  return blockers.filter((blocker, index) => blockers.indexOf(blocker) === index)
 }
 
 function getNativeSearchOptionalPackageExecutionNextStage(options: {

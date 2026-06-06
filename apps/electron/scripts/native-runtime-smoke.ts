@@ -14,6 +14,7 @@ import {
 } from '../src/main/lib/native-runtime/native-runtime-default-enable-readiness'
 import {
   buildNativeSearchPackagingConfigAllowlistChangePlan,
+  buildNativeSearchOptionalPackagePublicationInvocationPlan,
   buildNativeSearchOptionalPackagePublicationChangePlan,
   buildNativeSearchOptionalDependenciesInstallChainChangePlan,
   buildNativeSearchPackageManifest,
@@ -28,6 +29,7 @@ import {
   validateNativeSearchOptionalPackageInstallChain,
   buildNativeSearchOptionalPackageExecutionPlan,
   type NativeSearchPackagingConfigAllowlistChangePlan,
+  type NativeSearchOptionalPackagePublicationInvocationPlan,
   type NativeSearchOptionalPackagePublicationChangePlan,
   type NativeSearchOptionalDependenciesInstallChainChangePlan,
   type NativeSearchOptionalPackageSourceBlocker,
@@ -173,6 +175,7 @@ export interface NativeRuntimeSmokeSummary {
   optionalPackagePublicationChecked: boolean
   optionalPackagesPublished: boolean
   optionalPackagePublicationChangePlan: NativeSearchOptionalPackagePublicationChangePlan
+  optionalPackagePublicationInvocationPlan: NativeSearchOptionalPackagePublicationInvocationPlan
   optionalDependenciesInstallChainVerified: boolean
   optionalDependenciesLockfileVerified: boolean
   optionalDependenciesInstalledPackagesVerified: boolean
@@ -478,6 +481,9 @@ export function buildNativeRuntimeSmokeSummary(input: {
       unavailablePackages: unavailablePublishedOptionalPackages,
     },
   })
+  const optionalPackagePublicationInvocationPlan = buildNativeSearchOptionalPackagePublicationInvocationPlan(
+    optionalPackagePublicationChangePlan,
+  )
   const optionalDependenciesInstallChainChangePlan = buildNativeSearchOptionalDependenciesInstallChainChangePlan({
     packageVersion: optionalDependenciesInstallChainPlanVersion,
     publication: {
@@ -584,6 +590,7 @@ export function buildNativeRuntimeSmokeSummary(input: {
     optionalPackagePublicationChecked,
     optionalPackagesPublished,
     optionalPackagePublicationChangePlan,
+    optionalPackagePublicationInvocationPlan,
     optionalDependenciesInstallChainVerified,
     optionalDependenciesLockfileVerified,
     optionalDependenciesInstalledPackagesVerified,

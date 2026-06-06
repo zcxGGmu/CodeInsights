@@ -489,6 +489,35 @@ describe('native-runtime-smoke', () => {
         `npm publish <native-search-package-source:${plan.packageName}> --access public`
       )),
     )
+    expect(summary.optionalPackagePublicationInvocationPlan).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      status: 'ready_for_invocation',
+      packageVersion: '0.0.3',
+      approvalRequired: true,
+      changePlanStatus: 'ready_for_review',
+      readyPackages,
+      excludedPackages: [],
+      publishedPackages: [],
+      blockedBy: [],
+      candidateInvocationAction: 'invoke_optional_package_publication_after_release_approval',
+    }))
+    expect(summary.optionalPackagePublicationInvocationPlan.packages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => ({
+        packageName: plan.packageName,
+        packageVersion: '0.0.3',
+        status: 'ready_for_invocation',
+        blockedBy: [],
+        candidatePublicationCommand: `npm publish <native-search-package-source:${plan.packageName}> --access public`,
+      })),
+    )
+    expect(summary.optionalPackagePublicationInvocationPlan.candidatePublicationCommands).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      )),
+    )
+    expect(summary.optionalPackagePublicationInvocationPlan.forbiddenActions).toContain(
+      'do_not_treat_invocation_plan_as_packages_published',
+    )
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
@@ -501,6 +530,9 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.optionalPackagePublicationChangePlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.optionalPackagePublicationChangePlan)).not.toContain('binaryPath')
     expect(JSON.stringify(summary.optionalPackagePublicationChangePlan)).not.toContain('registry.npmjs.org')
+    expect(JSON.stringify(summary.optionalPackagePublicationInvocationPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.optionalPackagePublicationInvocationPlan)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary.optionalPackagePublicationInvocationPlan)).not.toContain('registry.npmjs.org')
   })
 
   test('summary 输出 optionalDependencies install-chain dry-run plan 且不证明真实安装链路', () => {
@@ -1789,6 +1821,14 @@ describe('native-runtime-smoke', () => {
       'optional_package_publish_target_not_ready',
       'optional_packages_not_published',
     ])
+    expect(summary.optionalPackagePublicationInvocationPlan.status).toBe('blocked')
+    expect(summary.optionalPackagePublicationInvocationPlan.approvalRequired).toBe(false)
+    expect(summary.optionalPackagePublicationInvocationPlan.readyPackages).toEqual([])
+    expect(summary.optionalPackagePublicationInvocationPlan.blockedBy).toEqual([
+      'optional_package_publication_plan_not_ready',
+      'optional_package_publish_target_not_ready',
+    ])
+    expect(summary.optionalPackagePublicationInvocationPlan.candidatePublicationCommands).toEqual([])
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
@@ -1887,6 +1927,19 @@ describe('native-runtime-smoke', () => {
       "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3",
       "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
     ])
+    expect(summary.optionalPackagePublicationInvocationPlan.status).toBe('ready_for_invocation')
+    expect(summary.optionalPackagePublicationInvocationPlan.packageVersion).toBe('0.0.3')
+    expect(summary.optionalPackagePublicationInvocationPlan.approvalRequired).toBe(true)
+    expect(summary.optionalPackagePublicationInvocationPlan.readyPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackagePublicationInvocationPlan.publishedPackages).toEqual([])
+    expect(summary.optionalPackagePublicationInvocationPlan.blockedBy).toEqual([])
+    expect(summary.optionalPackagePublicationInvocationPlan.candidatePublicationCommands).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      )),
+    )
     expect(summary.cases).toContainEqual(expect.objectContaining({
       name: 'optional-package-publish-target',
       status: 'passed',
@@ -1946,6 +1999,17 @@ describe('native-runtime-smoke', () => {
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
     )
     expect(summary.optionalPackagePublicationChangePlan.candidatePublicationCommands).toEqual([])
+    expect(summary.optionalPackagePublicationInvocationPlan.status).toBe('blocked')
+    expect(summary.optionalPackagePublicationInvocationPlan.readyPackages).toEqual([])
+    expect(summary.optionalPackagePublicationInvocationPlan.excludedPackages).toEqual(
+      NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName),
+    )
+    expect(summary.optionalPackagePublicationInvocationPlan.blockedBy).toEqual([
+      'optional_package_publication_plan_not_ready',
+      'optional_package_publish_target_not_ready',
+      'optional_package_invocation_commands_unavailable',
+    ])
+    expect(summary.optionalPackagePublicationInvocationPlan.candidatePublicationCommands).toEqual([])
     expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
   })
 
