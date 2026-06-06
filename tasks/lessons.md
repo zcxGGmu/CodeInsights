@@ -1,5 +1,18 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 default-enable 证据清单网络副作用边界
+
+- `72a00b01 fix(rust-go): 标记 default enable 证据清单网络边界` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口仍为 `bc53cc75 docs(rust-go): 回填 Phase 5 批准队列最新恢复入口`。
+- evidence checklist 的 `networkRequired` 必须描述批准后验证设计的真实副作用，而不是只看当前 gate 是否暴露 `postExecutionVerificationCommands`。`default_enable_risk_review` 的未来验证命令包含显式 `--check-registry`，因此即使 blocked 且命令列表为空，也必须标记 `networkRequired=true`。
+- future / blocked gate 允许记录未来执行副作用边界，但仍必须保持 `postExecutionVerificationCommands=[]`、`candidateCommands=[]`，不得把副作用标记当成授权执行、联网、发布、安装或 default enable。
+
+## 2026-06-07 Rust / Go Phase 5 release handoff 执行证据清单边界
+
+- `cb30b819 feat(rust-go): 补齐 Phase 5 release handoff 执行证据清单` 新增了当前 checklist 主体；后续最新开发基线已推进到 `72a00b01 fix(rust-go): 标记 default enable 证据清单网络边界`。
+- `nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist` 只能表示每个真实 gate 在批准执行后必须补齐的证据、当前 gate 的 post-execution verification command、副作用边界和 fail-closed criteria；它不是执行结果，不等于 package published / optionalDependencies declared / install-chain verified / builder allowlist modified / packaged binary verified / default enable candidate。
+- future 或 blocked gate 必须保持 `postExecutionVerificationCommands=[]`；只有当前且 `ready_for_approval` 的 gate 可以暴露批准后的验证命令。不要让未来 gate 的命令、success criteria 或 required evidence 提前变成可执行授权。
+- 本轮 no-go 不变：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-07 Rust / Go Phase 5 最新恢复入口回填习惯
 
 - `9d8520fa docs(rust-go): 同步 Phase 5 release handoff 批准队列状态` 已成为 `197569d5 feat(rust-go): 补齐 Phase 5 release handoff 批准队列` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `197569d5`，最新恢复入口应从 `9d8520fa` 或其后的最新 Rust / Go docs 状态同步提交继续。
