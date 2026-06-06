@@ -140,6 +140,21 @@ export type PackagedBundledBinarySmokeInvocationPlanBlocker =
   | 'packaged_app_root_required'
   | 'packaged_app_root_unresolved'
 
+export interface PackagedBundledBinarySmokeExecutionDesign {
+  schemaVersion: 1
+  preferredInputMode: 'packaged_app_root'
+  legacyInputMode: 'app_node_modules_root'
+  registryCheckRequired: boolean
+  realPackagedAppRequired: boolean
+  temporaryFixtureAllowedAsRealEvidence: boolean
+  createsPackagedApp: boolean
+  publishesPackages: boolean
+  installsDependencies: boolean
+  modifiesBuilderConfig: boolean
+  passCriteria: string[]
+  failClosedCriteria: string[]
+}
+
 export interface PackagedBundledBinarySmokeInvocationPlan {
   schemaVersion: 1
   status: PackagedBundledBinarySmokeInvocationPlanStatus
@@ -151,6 +166,7 @@ export interface PackagedBundledBinarySmokeInvocationPlan {
   blockedBy: PackagedBundledBinarySmokeInvocationPlanBlocker[]
   requiredInputs: string[]
   acceptanceEvidence: string[]
+  executionDesign: PackagedBundledBinarySmokeExecutionDesign
   candidateCommand: string
   legacyCandidateCommand: string
   forbiddenActions: string[]
@@ -183,6 +199,15 @@ export type NativeSearchReleaseHandoffPlanMissingEvidence =
   | 'real_packaged_app_bundled_binary_smoke'
   | 'default_enable_risk_review'
 
+export interface NativeSearchReleaseHandoffGateBinding {
+  schemaVersion: 1
+  authoritativeNextGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  publicationInvocationAllowedNextGate: 'optional_package_publication'
+  packagedSmokeAllowedNextGate: 'packaged_app_bundled_binary_smoke'
+  verifiedRequiresExecutionPlanVerified: boolean
+  failClosedOnOutOfOrderEvidence: boolean
+}
+
 export interface NativeSearchReleaseHandoffPlan {
   schemaVersion: 1
   status: NativeSearchReleaseHandoffPlanStatus
@@ -197,6 +222,7 @@ export interface NativeSearchReleaseHandoffPlan {
   readyForDefaultEnableRiskReview: boolean
   blockedBy: NativeSearchReleaseHandoffPlanBlocker[]
   missingEvidence: NativeSearchReleaseHandoffPlanMissingEvidence[]
+  gateBinding: NativeSearchReleaseHandoffGateBinding
   requiredApprovals: string[]
   acceptanceEvidence: string[]
   candidateNextCommands: string[]
@@ -816,6 +842,14 @@ function buildNativeSearchReleaseHandoffPlan(input: {
     readyForDefaultEnableRiskReview,
     blockedBy,
     missingEvidence: getNativeSearchReleaseHandoffMissingEvidence(input),
+    gateBinding: {
+      schemaVersion: 1,
+      authoritativeNextGate: input.optionalPackageExecutionPlan.nextStage,
+      publicationInvocationAllowedNextGate: 'optional_package_publication',
+      packagedSmokeAllowedNextGate: 'packaged_app_bundled_binary_smoke',
+      verifiedRequiresExecutionPlanVerified: true,
+      failClosedOnOutOfOrderEvidence: true,
+    },
     requiredApprovals: [
       'release_approval',
       'npm_registry_publish_access',
@@ -1069,6 +1103,7 @@ function buildPackagedBundledBinarySmokeInvocationPlan(input: {
       'builder_allowlist_includes_native_search_packages',
       'summary_bundledBinaryVerified_true',
     ],
+    executionDesign: buildPackagedBundledBinarySmokeExecutionDesign(),
     candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
     legacyCandidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
     forbiddenActions: [
@@ -1079,6 +1114,37 @@ function buildPackagedBundledBinarySmokeInvocationPlan(input: {
       'do_not_modify_electron_builder_yml_without_approval',
       'do_not_add_native_search_optional_dependencies_before_publication',
       'do_not_treat_invocation_plan_as_packaged_binary_verified',
+    ],
+  }
+}
+
+function buildPackagedBundledBinarySmokeExecutionDesign(): PackagedBundledBinarySmokeExecutionDesign {
+  return {
+    schemaVersion: 1,
+    preferredInputMode: 'packaged_app_root',
+    legacyInputMode: 'app_node_modules_root',
+    registryCheckRequired: true,
+    realPackagedAppRequired: true,
+    temporaryFixtureAllowedAsRealEvidence: false,
+    createsPackagedApp: false,
+    publishesPackages: false,
+    installsDependencies: false,
+    modifiesBuilderConfig: false,
+    passCriteria: [
+      'packaged_app_root_resolves_to_app_node_modules',
+      'packaged_app_identity_matches_codeinsights_electron',
+      'optional_packages_published_for_expected_version',
+      'optional_dependencies_install_chain_verified',
+      'builder_allowlist_includes_native_search_packages',
+      'summary_bundledBinaryVerified_true',
+    ],
+    failClosedCriteria: [
+      'missing_or_unresolved_packaged_app_root',
+      'temporary_fixture_used_as_real_evidence',
+      'optional_packages_not_published',
+      'optional_dependencies_not_installed',
+      'builder_allowlist_not_verified',
+      'bundledBinaryVerified_not_true',
     ],
   }
 }

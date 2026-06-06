@@ -640,6 +640,14 @@ describe('native-runtime-smoke', () => {
       readyForDefaultEnableRiskReview: false,
       candidateNextCommands: [],
     }))
+    expect(summary.nativeSearchReleaseHandoffPlan.gateBinding).toEqual({
+      schemaVersion: 1,
+      authoritativeNextGate: 'publish_target_preflight',
+      publicationInvocationAllowedNextGate: 'optional_package_publication',
+      packagedSmokeAllowedNextGate: 'packaged_app_bundled_binary_smoke',
+      verifiedRequiresExecutionPlanVerified: true,
+      failClosedOnOutOfOrderEvidence: true,
+    })
     expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_package_source_not_ready',
@@ -967,6 +975,34 @@ describe('native-runtime-smoke', () => {
         'builder_allowlist_includes_native_search_packages',
         'summary_bundledBinaryVerified_true',
       ],
+      executionDesign: {
+        schemaVersion: 1,
+        preferredInputMode: 'packaged_app_root',
+        legacyInputMode: 'app_node_modules_root',
+        registryCheckRequired: true,
+        realPackagedAppRequired: true,
+        temporaryFixtureAllowedAsRealEvidence: false,
+        createsPackagedApp: false,
+        publishesPackages: false,
+        installsDependencies: false,
+        modifiesBuilderConfig: false,
+        passCriteria: [
+          'packaged_app_root_resolves_to_app_node_modules',
+          'packaged_app_identity_matches_codeinsights_electron',
+          'optional_packages_published_for_expected_version',
+          'optional_dependencies_install_chain_verified',
+          'builder_allowlist_includes_native_search_packages',
+          'summary_bundledBinaryVerified_true',
+        ],
+        failClosedCriteria: [
+          'missing_or_unresolved_packaged_app_root',
+          'temporary_fixture_used_as_real_evidence',
+          'optional_packages_not_published',
+          'optional_dependencies_not_installed',
+          'builder_allowlist_not_verified',
+          'bundledBinaryVerified_not_true',
+        ],
+      },
       candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
       legacyCandidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
       forbiddenActions: [
@@ -1142,6 +1178,34 @@ describe('native-runtime-smoke', () => {
     expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootProvided).toBe(true)
     expect(summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootResolved).toBe(true)
     expect(summary.packagedBundledBinarySmokeInvocationPlan.blockedBy).toEqual([])
+    expect(summary.packagedBundledBinarySmokeInvocationPlan.executionDesign).toEqual({
+      schemaVersion: 1,
+      preferredInputMode: 'packaged_app_root',
+      legacyInputMode: 'app_node_modules_root',
+      registryCheckRequired: true,
+      realPackagedAppRequired: true,
+      temporaryFixtureAllowedAsRealEvidence: false,
+      createsPackagedApp: false,
+      publishesPackages: false,
+      installsDependencies: false,
+      modifiesBuilderConfig: false,
+      passCriteria: [
+        'packaged_app_root_resolves_to_app_node_modules',
+        'packaged_app_identity_matches_codeinsights_electron',
+        'optional_packages_published_for_expected_version',
+        'optional_dependencies_install_chain_verified',
+        'builder_allowlist_includes_native_search_packages',
+        'summary_bundledBinaryVerified_true',
+      ],
+      failClosedCriteria: [
+        'missing_or_unresolved_packaged_app_root',
+        'temporary_fixture_used_as_real_evidence',
+        'optional_packages_not_published',
+        'optional_dependencies_not_installed',
+        'builder_allowlist_not_verified',
+        'bundledBinaryVerified_not_true',
+      ],
+    })
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
