@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-06 Rust / Go Phase 5 publication invocation 最新恢复入口回填
+
+- `95305503 docs(rust-go): 同步 Phase 5 publication invocation 证据收紧状态` 已成为 `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `77b266e8`，最新恢复入口应从 `95305503` 或其后的最新 Rust / Go docs 状态同步提交继续。
+- 即使刚完成过状态同步，用户再次要求“更新文档最新开发状态 / 标注完成未完成 / 给下次启动提示词”时，也必须先核对 `git status --short --branch` 与 `git log -25 --oneline`，写 `tasks/todo.md` 小计划，再同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons。
+- 每个阶段性任务完成并验证通过后的固定收尾是：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复再给出本轮实际 HEAD 和可复制启动提示词。
+- 本轮只回填恢复入口和完成 / 未完成状态，不改变 no-go：native 继续 default off / 显式 opt-in；默认 smoke 不联网；不创建 packaged native binary；不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+
 ## 2026-06-06 Rust / Go Phase 5 publication invocation 发布证据收紧
 
 - `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据` 已成为当前最新开发基线；后续 Rust / Go 下次启动提示词的最新开发基线应指向 `77b266e8`，最新已确认恢复入口在本轮状态同步提交前仍是 `084546cc docs(rust-go): 回填 Phase 5 packaged smoke invocation 最新恢复入口`。

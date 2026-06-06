@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-06 Rust/Go Phase 5 publication invocation 最新恢复入口回填计划
+
+范围确认：用户要求更新文档最新开发状态，清楚标注完成 / 未完成，确保下次启动可以跟踪进度继续开发，并提供可直接复制的下次启动提示词；同时要求把“每个阶段性任务完成后自动同步文档状态”的习惯固化。本轮只做状态文档回填：当前 HEAD 为 `95305503 docs(rust-go): 同步 Phase 5 publication invocation 证据收紧状态`，最新开发基线保持为 `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据`，最新已确认恢复入口推进到 `95305503`。继续保持 native default off / 显式 opt-in；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不 push，不创建 PR。
+
+- [x] 运行 `git status --short --branch` 和 `git log -25 --oneline`，确认当前分支为 `rust-go-refactor`、工作树起始干净，且最近历史包含 `95305503`、`77b266e8`、`f949fc13`、`084546cc`、`076f25c6` 和 `edeba827`。
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、Rust / Go checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和 `native/search/`，确认本轮只需做状态同步。
+- [x] 更新 `tasks/lessons.md`，固化 `95305503` 是 `77b266e8` 后当前已确认恢复入口，并再次记录阶段完成后自动同步 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons 的习惯。
+- [x] 更新 development checklist 顶部状态、下次启动入口和底部可复制提示词，把最新已确认恢复入口从 `084546cc` 推进到 `95305503`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md` 顶部状态和可复制提示词，把最新已确认恢复入口推进到 `95305503`。
+- [x] 更新本 Review，记录完成项、未完成项、验证命令和禁改边界。
+- [x] 运行 `git diff --check`、禁改文件 diff 检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描、旧主动恢复入口残留扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist 和 `next-session-prompt.md` 的最新已确认恢复入口从 `084546cc docs(rust-go): 回填 Phase 5 packaged smoke invocation 最新恢复入口` 推进到 `95305503 docs(rust-go): 同步 Phase 5 publication invocation 证据收紧状态`；最新开发基线保持 `77b266e8 fix(rust-go): 收紧 Phase 5 publication invocation 发布证据`。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 optional package publication invocation plan 和 publication invocation 发布证据收紧。真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 语义边界继续明确：`optionalPackagePublicationInvocationPlan` 只表示真实 `npm publish` 调用输入、候选命令、验收证据和 forbidden actions 已机器可读化；`ready_for_invocation` 不等于 package 已发布。`publishedPackages` 只能来自真实 registry exact-version publication evidence；collision、invalid、unavailable、duplicate 或矛盾 metadata 只能进入 blocker / exclusion。真实 verified 仍必须同时满足 `bundledBinaryVerified=true` 且无 blocker。
+- 已补 `tasks/lessons.md`：每个阶段性任务完成并通过验证后，默认更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / 任务状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check`；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`git diff -- apps/electron/package.json bun.lock | rg -n '@codeinsights/native-search|optionalDependencies|native-search-' || true` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock || true` 无输出；排除 `.git` / `node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；旧主动恢复入口扫描无输出；`git status --short --branch` 仅显示本轮 4 个 docs / tasks 文件。本轮状态同步提交完成后，下次启动以 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-06 Rust/Go Phase 5 optional package publication invocation plan 计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已确认当前分支为 `rust-go-refactor`、工作树起始干净，当前 HEAD 为 `084546cc docs(rust-go): 回填 Phase 5 packaged smoke invocation 最新恢复入口`，最新开发基线为 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan`。本轮只推进真实 optional package 发布前的调用设计前置：在既有 `optionalPackagePublicationChangePlan` 之上新增只读 `optionalPackagePublicationInvocationPlan`，把真实 `npm publish` 前的 required inputs、candidate commands、per-package invocation blockers、acceptance evidence 和 forbidden actions 机器可读化。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行 `npm pack`，不安装依赖；除按项目规则递增 `@codeinsights/electron` patch 版本并同步 `bun.lock` 外，不写真实 optionalDependencies 声明 / 安装链路，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
