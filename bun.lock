@@ -20,7 +20,7 @@
     },
     "apps/electron": {
       "name": "@codeinsights/electron",
-      "version": "0.0.167",
+      "version": "0.0.168",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.2.123",
         "@openai/codex": "0.130.0",

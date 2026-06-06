@@ -1019,6 +1019,35 @@ files:
         'node_modules/@codeinsights/native-search-*',
         'node_modules/@codeinsights/native-search-*/**/*',
       ],
+      candidateYamlEditPlan: {
+        schemaVersion: 1,
+        targetFile: 'apps/electron/electron-builder.yml',
+        modifiesFile: false,
+        operationOrder: [
+          'remove_blocking_native_search_excludes',
+          'add_missing_exact_native_search_includes',
+          'run_packaging_config_preflight',
+        ],
+        addIncludes: requiredIncludes,
+        keepIncludes: [],
+        removeRules: ['!node_modules/@codeinsights/**'],
+        forbiddenIncludes: [
+          'node_modules/**',
+          'node_modules/**/*',
+          'node_modules/@codeinsights/*',
+          'node_modules/@codeinsights/**',
+          'node_modules/@codeinsights/**/*',
+          'node_modules/@codeinsights/native-search-*',
+          'node_modules/@codeinsights/native-search-*/**/*',
+        ],
+        acceptanceEvidence: [
+          'electron_builder_yml_reviewed_after_approval',
+          'all_native_search_packages_have_exact_files_include',
+          'blocking_codeinsights_node_modules_excludes_removed',
+          'no_broad_node_modules_or_native_search_wildcard_include',
+          'packaging_config_preflight_passes_after_edit',
+        ],
+      },
       candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
       candidateVerificationCommands: [
         "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
@@ -1059,6 +1088,18 @@ files:
     expect(plan.blockingExcludes).toEqual([])
     expect(plan.tooBroadIncludes).toEqual([])
     expect(plan.removalCandidates).toEqual([])
+    expect(plan.candidateYamlEditPlan).toEqual(expect.objectContaining({
+      targetFile: 'apps/electron/electron-builder.yml',
+      modifiesFile: false,
+      addIncludes: [],
+      keepIncludes: [
+        'node_modules/@codeinsights/native-search-darwin-arm64/**/*',
+        'node_modules/@codeinsights/native-search-darwin-x64/**/*',
+        'node_modules/@codeinsights/native-search-win32-x64/**/*',
+        'node_modules/@codeinsights/native-search-linux-x64/**/*',
+      ],
+      removeRules: [],
+    }))
     expect(plan.forbiddenActions).toContain('do_not_treat_allowlist_plan_as_packaged_binary_verified')
     expect(JSON.stringify(plan)).not.toContain('/Users/')
     expect(JSON.stringify(plan)).not.toContain('binaryPath')
@@ -1079,6 +1120,8 @@ files:
     expect(plan.currentConfigVerified).toBe(false)
     expect(plan.missingIncludes).toEqual([])
     expect(plan.removalCandidates).toEqual([])
+    expect(plan.candidateYamlEditPlan.addIncludes).toEqual([])
+    expect(plan.candidateYamlEditPlan.removeRules).toEqual([])
     expect(plan.forbiddenActions).toContain('do_not_treat_allowlist_plan_as_packaging_config_verified')
   })
 
@@ -1092,6 +1135,12 @@ files:
     expect(plan.status).toBe('blocked')
     expect(plan.tooBroadIncludes).toEqual(['node_modules/@codeinsights/native-search-*/**/*'])
     expect(plan.removalCandidates).toEqual(['node_modules/@codeinsights/native-search-*/**/*'])
+    expect(plan.candidateYamlEditPlan.removeRules).toEqual([
+      'node_modules/@codeinsights/native-search-*/**/*',
+    ])
+    expect(plan.candidateYamlEditPlan.forbiddenIncludes).toContain(
+      'node_modules/@codeinsights/native-search-*/**/*',
+    )
     expect(plan.forbiddenIncludes).toContain('node_modules/@codeinsights/native-search-*/**/*')
     expect(plan.currentConfigVerified).toBe(false)
   })

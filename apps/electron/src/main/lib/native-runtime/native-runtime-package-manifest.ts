@@ -251,6 +251,23 @@ export type NativeSearchPackagingConfigAllowlistChangePlanStatus =
   | 'blocked'
   | 'ready_for_review'
 
+export type NativeSearchPackagingConfigAllowlistCandidateYamlEditOperation =
+  | 'remove_blocking_native_search_excludes'
+  | 'add_missing_exact_native_search_includes'
+  | 'run_packaging_config_preflight'
+
+export interface NativeSearchPackagingConfigAllowlistCandidateYamlEditPlan {
+  schemaVersion: 1
+  targetFile: 'apps/electron/electron-builder.yml'
+  modifiesFile: false
+  operationOrder: NativeSearchPackagingConfigAllowlistCandidateYamlEditOperation[]
+  addIncludes: string[]
+  keepIncludes: string[]
+  removeRules: string[]
+  forbiddenIncludes: string[]
+  acceptanceEvidence: string[]
+}
+
 export interface NativeSearchPackagingConfigAllowlistChangePlan {
   schemaVersion: 1
   status: NativeSearchPackagingConfigAllowlistChangePlanStatus
@@ -262,6 +279,7 @@ export interface NativeSearchPackagingConfigAllowlistChangePlan {
   tooBroadIncludes: string[]
   removalCandidates: string[]
   forbiddenIncludes: string[]
+  candidateYamlEditPlan: NativeSearchPackagingConfigAllowlistCandidateYamlEditPlan
   candidateReviewAction: string
   candidateVerificationCommands: string[]
   forbiddenActions: string[]
@@ -1013,6 +1031,15 @@ export function buildNativeSearchPackagingConfigAllowlistChangePlan(
     || validation.missingPackages.length > 0
     || validation.blockingExcludes.length > 0
     || validation.tooBroadIncludes.length > 0
+  const forbiddenIncludes = [
+    'node_modules/**',
+    'node_modules/**/*',
+    'node_modules/@codeinsights/*',
+    'node_modules/@codeinsights/**',
+    'node_modules/@codeinsights/**/*',
+    'node_modules/@codeinsights/native-search-*',
+    'node_modules/@codeinsights/native-search-*/**/*',
+  ]
 
   return {
     schemaVersion: 1,
@@ -1024,15 +1051,13 @@ export function buildNativeSearchPackagingConfigAllowlistChangePlan(
     blockingExcludes: validation.blockingExcludes,
     tooBroadIncludes: validation.tooBroadIncludes,
     removalCandidates,
-    forbiddenIncludes: [
-      'node_modules/**',
-      'node_modules/**/*',
-      'node_modules/@codeinsights/*',
-      'node_modules/@codeinsights/**',
-      'node_modules/@codeinsights/**/*',
-      'node_modules/@codeinsights/native-search-*',
-      'node_modules/@codeinsights/native-search-*/**/*',
-    ],
+    forbiddenIncludes,
+    candidateYamlEditPlan: buildNativeSearchPackagingConfigCandidateYamlEditPlan({
+      requiredIncludes,
+      missingIncludes,
+      removalCandidates,
+      forbiddenIncludes,
+    }),
     candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
     candidateVerificationCommands: [
       "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
@@ -1046,6 +1071,39 @@ export function buildNativeSearchPackagingConfigAllowlistChangePlan(
       'do_not_treat_allowlist_plan_as_packaging_config_verified',
       'do_not_treat_allowlist_plan_as_packaged_binary_verified',
       'do_not_enable_native_by_default_before_verified',
+    ],
+  }
+}
+
+function buildNativeSearchPackagingConfigCandidateYamlEditPlan(input: {
+  requiredIncludes: string[]
+  missingIncludes: string[]
+  removalCandidates: string[]
+  forbiddenIncludes: string[]
+}): NativeSearchPackagingConfigAllowlistCandidateYamlEditPlan {
+  const keepIncludes = input.requiredIncludes.filter((includeRule) => (
+    !input.missingIncludes.includes(includeRule)
+  ))
+
+  return {
+    schemaVersion: 1,
+    targetFile: 'apps/electron/electron-builder.yml',
+    modifiesFile: false,
+    operationOrder: [
+      'remove_blocking_native_search_excludes',
+      'add_missing_exact_native_search_includes',
+      'run_packaging_config_preflight',
+    ],
+    addIncludes: input.missingIncludes,
+    keepIncludes,
+    removeRules: input.removalCandidates,
+    forbiddenIncludes: input.forbiddenIncludes,
+    acceptanceEvidence: [
+      'electron_builder_yml_reviewed_after_approval',
+      'all_native_search_packages_have_exact_files_include',
+      'blocking_codeinsights_node_modules_excludes_removed',
+      'no_broad_node_modules_or_native_search_wildcard_include',
+      'packaging_config_preflight_passes_after_edit',
     ],
   }
 }

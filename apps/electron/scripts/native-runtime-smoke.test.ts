@@ -1066,6 +1066,40 @@ describe('native-runtime-smoke', () => {
         'node_modules/@codeinsights/native-search-*',
         'node_modules/@codeinsights/native-search-*/**/*',
       ],
+      candidateYamlEditPlan: {
+        schemaVersion: 1,
+        targetFile: 'apps/electron/electron-builder.yml',
+        modifiesFile: false,
+        operationOrder: [
+          'remove_blocking_native_search_excludes',
+          'add_missing_exact_native_search_includes',
+          'run_packaging_config_preflight',
+        ],
+        addIncludes: [
+          'node_modules/@codeinsights/native-search-darwin-arm64/**/*',
+          'node_modules/@codeinsights/native-search-darwin-x64/**/*',
+          'node_modules/@codeinsights/native-search-win32-x64/**/*',
+          'node_modules/@codeinsights/native-search-linux-x64/**/*',
+        ],
+        keepIncludes: [],
+        removeRules: ['!node_modules/@codeinsights/**'],
+        forbiddenIncludes: [
+          'node_modules/**',
+          'node_modules/**/*',
+          'node_modules/@codeinsights/*',
+          'node_modules/@codeinsights/**',
+          'node_modules/@codeinsights/**/*',
+          'node_modules/@codeinsights/native-search-*',
+          'node_modules/@codeinsights/native-search-*/**/*',
+        ],
+        acceptanceEvidence: [
+          'electron_builder_yml_reviewed_after_approval',
+          'all_native_search_packages_have_exact_files_include',
+          'blocking_codeinsights_node_modules_excludes_removed',
+          'no_broad_node_modules_or_native_search_wildcard_include',
+          'packaging_config_preflight_passes_after_edit',
+        ],
+      },
       candidateReviewAction: 'prepare_builder_allowlist_change_for_review',
       candidateVerificationCommands: [
         "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
@@ -1139,6 +1173,12 @@ describe('native-runtime-smoke', () => {
     expect(summary.packagingConfigAllowlistChangePlan.approvalRequired).toBe(true)
     expect(summary.packagingConfigAllowlistChangePlan.missingIncludes).toEqual([])
     expect(summary.packagingConfigAllowlistChangePlan.removalCandidates).toEqual([])
+    expect(summary.packagingConfigAllowlistChangePlan.candidateYamlEditPlan).toEqual(expect.objectContaining({
+      targetFile: 'apps/electron/electron-builder.yml',
+      modifiesFile: false,
+      addIncludes: [],
+      removeRules: [],
+    }))
     expect(summary.optionalPackagesPublished).toBe(false)
     expect(summary.optionalDependenciesDeclared).toBe(false)
     expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
