@@ -732,6 +732,63 @@ describe('native-runtime-smoke', () => {
         candidateCommands: [],
       },
     ])
+    expect(summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      currentGate: item.currentGate,
+      postExecutionVerificationCommands: item.postExecutionVerificationCommands,
+      remoteWriteRequired: item.remoteWriteRequired,
+      workspaceMutationRequired: item.workspaceMutationRequired,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: true,
+        workspaceMutationRequired: false,
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: false,
+        workspaceMutationRequired: true,
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: false,
+        workspaceMutationRequired: true,
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: false,
+        workspaceMutationRequired: true,
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: false,
+        workspaceMutationRequired: false,
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+        remoteWriteRequired: false,
+        workspaceMutationRequired: false,
+      },
+    ])
     expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_package_source_not_ready',
@@ -929,6 +986,65 @@ describe('native-runtime-smoke', () => {
         candidateCommands: [],
       },
     ])
+    const executionChecklist = summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist
+    expect(executionChecklist.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      currentGate: item.currentGate,
+      postExecutionVerificationCommands: item.postExecutionVerificationCommands,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'ready_for_approval',
+        currentGate: true,
+        postExecutionVerificationCommands: [
+          "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+        ],
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        postExecutionVerificationCommands: [],
+      },
+    ])
+    expect(executionChecklist[0]).toEqual(expect.objectContaining({
+      requiredApproval: 'release_approval',
+      executionEvidenceRequired: true,
+      remoteWriteRequired: true,
+      workspaceMutationRequired: false,
+      networkRequired: true,
+      requiredEvidenceAfterExecution: [
+        'npm_publish_commands_exit_zero_for_all_ready_packages',
+        'registry_packument_contains_exact_expected_versions',
+        'registry_metadata_matches_platform_arch_and_binary',
+        'summary_optionalPackagesPublished_true_after_registry_check',
+      ],
+    }))
     expect(summary.nativeSearchReleaseHandoffPlan.acceptanceEvidence).toContain(
       'registry_packument_contains_exact_expected_versions',
     )
