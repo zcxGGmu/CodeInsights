@@ -279,7 +279,7 @@ describe('native-runtime-package-manifest', () => {
     const installedPackageManifests = Object.fromEntries(
       NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => [
         plan.packageName,
-        { name: plan.packageName, version: '0.0.2' },
+        createOptionalPackageSourceFixture(plan, '0.0.2').packageJson,
       ]),
     )
     const lockfileText = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
@@ -324,8 +324,9 @@ describe('native-runtime-package-manifest', () => {
     expect(JSON.stringify(missingResult)).not.toContain('/Users/')
     expect(JSON.stringify(missingResult)).not.toContain('node_modules')
 
-    const invalidInstalledPackage = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]?.packageName
-    if (!invalidInstalledPackage) throw new Error('native search optional package plan should exist')
+    const invalidInstalledPlan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS[0]
+    if (!invalidInstalledPlan) throw new Error('native search optional package plan should exist')
+    const invalidInstalledPackage = invalidInstalledPlan.packageName
     const invalidResult = validateNativeSearchOptionalPackageInstallChain({
       packageJson: { optionalDependencies },
       lockfileText,
@@ -339,6 +340,46 @@ describe('native-runtime-package-manifest', () => {
     })
     expect(invalidResult.verified).toBe(false)
     expect(invalidResult.invalidInstalledPackages).toEqual([invalidInstalledPackage])
+    expect(JSON.stringify(invalidResult)).not.toContain('/Users/')
+    expect(JSON.stringify(invalidResult)).not.toContain('node_modules')
+
+    const incompleteInstalledResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText,
+      installedPackageManifests: {
+        ...installedPackageManifests,
+        [invalidInstalledPackage]: {
+          name: invalidInstalledPackage,
+          version: '0.0.2',
+        },
+      },
+    })
+    expect(incompleteInstalledResult.verified).toBe(false)
+    expect(incompleteInstalledResult.installedPackagesVerified).toBe(false)
+    expect(incompleteInstalledResult.invalidInstalledPackages).toEqual([invalidInstalledPackage])
+
+    const unsafeInstalledResult = validateNativeSearchOptionalPackageInstallChain({
+      packageJson: { optionalDependencies },
+      lockfileText,
+      installedPackageManifests: {
+        ...installedPackageManifests,
+        [invalidInstalledPackage]: createOptionalPackageSourceFixture(
+          invalidInstalledPlan,
+          '0.0.2',
+          {
+            packageJsonPatch: {
+              scripts: { install: 'node install.js' },
+              dependencies: { 'left-pad': '1.3.0' },
+            },
+          },
+        ).packageJson,
+      },
+    })
+    expect(unsafeInstalledResult.verified).toBe(false)
+    expect(unsafeInstalledResult.installedPackagesVerified).toBe(false)
+    expect(unsafeInstalledResult.invalidInstalledPackages).toEqual([invalidInstalledPackage])
+    expect(JSON.stringify(unsafeInstalledResult)).not.toContain('/Users/')
+    expect(JSON.stringify(unsafeInstalledResult)).not.toContain('node_modules')
 
     const importerOnlyLockfile = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS
       .map((plan) => `        "${plan.packageName}": "0.0.2",`)

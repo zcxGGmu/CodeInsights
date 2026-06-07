@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 no-go audit summary 与 install-chain metadata 加固计划
+
+范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；当前 HEAD 为 `345dcf01 docs(rust-go): 同步 Phase 5 no-go 边界审计状态`，最新实现基线为 `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计`。本轮只在 native default off / 显式 opt-in 前提下推进两个 no-go 内切片：把已有 `evaluateNativeSearchReleaseHandoffNoGoBoundary()` 外显到 smoke summary / case 证据面，并加固 optional package install-chain 对 installed package manifest metadata 的只读校验。默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不创建 packaged native binary，不 push，不创建 PR。
+
+- [x] 在 `NativeRuntimeSmokeSummary` 增加 `nativeSearchReleaseHandoffNoGoBoundaryAudit` 字段，由已有只读审计函数生成，summary 默认输出可归档 no-go 证据。
+- [x] 在 smoke summary cases 中追加 `release-handoff-no-go-boundary-audit` case；audit 失败时该 case 为 failed，使 CLI exit code fail closed；默认离线 no-go 通过时保持 passed。
+- [x] 补 BDD 覆盖默认 `packaged-manifest` summary audit、publication ready audit、summary 脱敏，以及既有手工 mutation 失败场景继续可拒绝越界命令 / premature verified flag。
+- [x] 加固 `validateNativeSearchOptionalPackageInstallChain()` 的 installed package manifest 校验：除 name / version 外，还要要求 os / cpu / bin / files / publishConfig 与 planned package source 约束一致，并拒绝 lifecycle scripts 与 runtime dependency 字段。
+- [x] 补 BDD 覆盖“optionalDependencies 与 lockfile 已声明，但 installed package manifest 只有 name/version 或含 install script/dependencies 时 install-chain 仍 false，invalidInstalledPackages 记录对应 package，且不泄露本地路径”。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不得新增真实 native search optionalDependencies。
+- [x] 运行聚焦测试、默认离线 smoke、typecheck、`git diff --check` 和 no-go 禁改验证。
+- [x] 阶段完成后更新本 Review；再同步 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和必要 lessons，运行 no-go 验证并单独提交状态同步文档。
+
+### Review
+
+- 实现完成：`NativeRuntimeSmokeSummary` 现在默认输出 `nativeSearchReleaseHandoffNoGoBoundaryAudit`，并追加 `release-handoff-no-go-boundary-audit` smoke case；audit 失败会把 case 标为 failed，从而让 CLI exit code fail closed。该 audit 仍只读消费 summary，不联网、不写文件、不执行发布 / install / builder / packaged smoke。
+- Install-chain metadata 加固完成：`isInstalledPackageManifestConsistent()` 不再接受只有 `name/version` 的 installed package manifest，而是复用 optional package source package.json 的严格 shape 校验，要求 exact version、`os` / `cpu` / `bin` / `files` / `publishConfig.access=public` 一致，并拒绝 lifecycle scripts 与 runtime dependency 字段。
+- BDD 覆盖已补齐：默认离线 blocked summary、publication-ready summary、完整 summary 敏感字符串扫描、audit case fail-closed exit code、installed package manifest 只有 `name/version`、含 install script / dependencies 和结果脱敏。
+- 版本同步：`@codeinsights/electron` 从 `0.0.176` 递增到 `0.0.177` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（125 pass）；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`；`git diff --check`。
+- 禁改边界保持：`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；未执行 `npm publish`，未运行真实 install，未修改 builder allowlist，未创建 packaged app / native binary，未 push，未创建 PR。
+
 ## 2026-06-07 Rust/Go Phase 5 no-go 边界审计状态同步计划
 
 范围确认：实现提交 `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计` 已落地并通过验证；本轮只同步 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review。继续保持 native default off / 显式 opt-in；不执行发布、不安装、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。

@@ -18,6 +18,10 @@ import {
   resolvePackagedAppNodeModulesRoot,
   runNativeRuntimeSmoke,
 } from './native-runtime-smoke'
+import type {
+  NativeSearchReleaseHandoffNoGoBoundaryAudit,
+  NativeSearchReleaseHandoffNoGoBoundaryViolation,
+} from './native-runtime-smoke'
 
 const originalNativeSearchBinary = process.env.CODEINSIGHTS_NATIVE_SEARCH_BINARY
 const originalFetch = globalThis.fetch
@@ -960,6 +964,22 @@ describe('native-runtime-smoke', () => {
     })
 
     expect(summary.optionalPackagePublicationInvocationPlan.status).toBe('ready_for_invocation')
+    expect(summary.optionalPackagesPublished).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(summary.nativeSearchReleaseHandoffNoGoBoundaryAudit).toEqual({
+      schemaVersion: 1,
+      passed: true,
+      currentGate: 'optional_package_publication',
+      defaultOffRequired: true,
+      explicitOptInRequired: true,
+      defaultEnableCandidate: false,
+      violations: [],
+    })
+    expect(summary.cases).toContainEqual({
+      name: 'release-handoff-no-go-boundary-audit',
+      status: 'passed',
+      detail: 'releaseHandoffNoGoBoundaryAudit=passed',
+    })
     expect(summary.nativeSearchReleaseHandoffPlan).toEqual(expect.objectContaining({
       schemaVersion: 1,
       status: 'ready_for_release_handoff',
@@ -1495,7 +1515,7 @@ describe('native-runtime-smoke', () => {
       cases: [{ name: 'packaged-manifest', status: 'skipped' }],
     })
 
-    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary)).toEqual({
+    const expectedAudit: NativeSearchReleaseHandoffNoGoBoundaryAudit = {
       schemaVersion: 1,
       passed: true,
       currentGate: 'publish_target_preflight',
@@ -1503,7 +1523,16 @@ describe('native-runtime-smoke', () => {
       explicitOptInRequired: true,
       defaultEnableCandidate: false,
       violations: [],
+    }
+
+    expect(summary.nativeSearchReleaseHandoffNoGoBoundaryAudit).toEqual(expectedAudit)
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary)).toEqual(expectedAudit)
+    expect(summary.cases).toContainEqual({
+      name: 'release-handoff-no-go-boundary-audit',
+      status: 'passed',
+      detail: 'releaseHandoffNoGoBoundaryAudit=passed',
     })
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(0)
   })
 
   test('release handoff no-go audit 允许 blocked approval packet 不要求 ready 命令', () => {
@@ -1898,12 +1927,21 @@ describe('native-runtime-smoke', () => {
       cases: [{ name: 'packaged-manifest', status: 'skipped', detail: '/Users/me/binaryPath' }],
     })
 
-    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([
+    const expectedViolations: NativeSearchReleaseHandoffNoGoBoundaryViolation[] = [
       {
         code: 'summary_leaks_sensitive_path_or_registry',
         field: 'summary',
       },
-    ])
+    ]
+
+    expect(summary.nativeSearchReleaseHandoffNoGoBoundaryAudit.violations).toEqual(expectedViolations)
+    expect(summary.cases).toContainEqual({
+      name: 'release-handoff-no-go-boundary-audit',
+      status: 'failed',
+      detail: 'releaseHandoffNoGoBoundaryAudit=failed; violations=summary_leaks_sensitive_path_or_registry',
+    })
+    expect(getNativeRuntimeSmokeExitCode(summary)).toBe(1)
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual(expectedViolations)
   })
 
   test('release handoff transition verifier 通过 publication gate 的合规迁移', () => {

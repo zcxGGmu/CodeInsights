@@ -1670,11 +1670,19 @@ function isInstalledPackageManifestConsistent(
   packageName: string,
   versionSpec: string | undefined,
 ): boolean {
-  if (packageManifest.name !== packageName) return false
-  if (typeof packageManifest.version !== 'string' || !isPackageVersion(packageManifest.version)) return false
-
   const expectedVersion = extractExactPackageVersion(versionSpec, packageName)
-  return expectedVersion == null || packageManifest.version === expectedVersion
+  if (expectedVersion == null) return false
+
+  const packagePlan = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.find((plan) => (
+    plan.packageName === packageName
+  ))
+  if (!packagePlan) return false
+
+  return isNativeSearchOptionalPackageSourcePackageJson(
+    packageManifest,
+    packagePlan,
+    expectedVersion,
+  )
 }
 
 function extractExactPackageVersion(

@@ -452,6 +452,7 @@ export interface NativeRuntimeSmokeSummary {
   packagedBundledBinarySmokePlan: PackagedBundledBinarySmokePlan
   packagedBundledBinarySmokeInvocationPlan: PackagedBundledBinarySmokeInvocationPlan
   nativeSearchReleaseHandoffPlan: NativeSearchReleaseHandoffPlan
+  nativeSearchReleaseHandoffNoGoBoundaryAudit: NativeSearchReleaseHandoffNoGoBoundaryAudit
   nativeSearchDefaultEnableReadiness: NativeSearchDefaultEnableReadiness
   requiresPrebuiltPackagedApp: boolean
   cases: NativeRuntimeSmokeCase[]
@@ -1141,7 +1142,28 @@ export function buildNativeRuntimeSmokeSummary(input: {
     packagedBundledBinarySmokeInvocationPlan,
     optionalPackageExecutionPlan,
   })
-  return {
+  const nativeSearchDefaultEnableReadiness = evaluateNativeSearchDefaultEnableReadiness({
+    benchmarkEvaluated: false,
+    benchmarkGatePassed: false,
+    agentFacadeNativeExtractorDeclared: false,
+    agentFacadeNativeParityEvaluated: false,
+    optionalPackagesPublished,
+    optionalDependenciesDeclared,
+    optionalDependenciesInstallChainVerified,
+    packagingConfigVerified,
+    packagedAppEvidenceVerified,
+    packagedAppIdentityVerified,
+    realPackagedBinaryVerified,
+    riskReviewCompleted: false,
+  })
+  const redactedCases = input.cases.map((smokeCase) => ({
+    ...smokeCase,
+    detail: smokeCase.detail ? redactNativeRuntimeText(smokeCase.detail) : undefined,
+  }))
+  const summaryWithoutNoGoAudit: Omit<
+    NativeRuntimeSmokeSummary,
+    'nativeSearchReleaseHandoffNoGoBoundaryAudit'
+  > = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     mode: input.mode,
@@ -1206,25 +1228,37 @@ export function buildNativeRuntimeSmokeSummary(input: {
     packagedBundledBinarySmokePlan,
     packagedBundledBinarySmokeInvocationPlan,
     nativeSearchReleaseHandoffPlan,
-    nativeSearchDefaultEnableReadiness: evaluateNativeSearchDefaultEnableReadiness({
-      benchmarkEvaluated: false,
-      benchmarkGatePassed: false,
-      agentFacadeNativeExtractorDeclared: false,
-      agentFacadeNativeParityEvaluated: false,
-      optionalPackagesPublished,
-      optionalDependenciesDeclared,
-      optionalDependenciesInstallChainVerified,
-      packagingConfigVerified,
-      packagedAppEvidenceVerified,
-      packagedAppIdentityVerified,
-      realPackagedBinaryVerified,
-      riskReviewCompleted: false,
-    }),
+    nativeSearchDefaultEnableReadiness,
     requiresPrebuiltPackagedApp: Boolean(verification.requiresPrebuiltPackagedApp),
-    cases: input.cases.map((smokeCase) => ({
-      ...smokeCase,
-      detail: smokeCase.detail ? redactNativeRuntimeText(smokeCase.detail) : undefined,
-    })),
+    cases: redactedCases,
+  }
+  const nativeSearchReleaseHandoffNoGoBoundaryAudit = evaluateNativeSearchReleaseHandoffNoGoBoundary({
+    ...summaryWithoutNoGoAudit,
+    nativeSearchReleaseHandoffNoGoBoundaryAudit: {
+      schemaVersion: 1,
+      passed: false,
+      currentGate: nativeSearchReleaseHandoffPlan.nextGate,
+      defaultOffRequired: nativeSearchReleaseHandoffPlan.defaultOffRequired,
+      explicitOptInRequired: nativeSearchDefaultEnableReadiness.explicitOptInRequired,
+      defaultEnableCandidate: nativeSearchDefaultEnableReadiness.defaultEnableCandidate,
+      violations: [],
+    },
+  })
+  const noGoAuditCase: NativeRuntimeSmokeCase = {
+    name: 'release-handoff-no-go-boundary-audit',
+    status: nativeSearchReleaseHandoffNoGoBoundaryAudit.passed ? 'passed' : 'failed',
+    detail: nativeSearchReleaseHandoffNoGoBoundaryAudit.passed
+      ? 'releaseHandoffNoGoBoundaryAudit=passed'
+      : `releaseHandoffNoGoBoundaryAudit=failed; violations=${nativeSearchReleaseHandoffNoGoBoundaryAudit.violations.map((violation) => violation.code).join(',')}`,
+  }
+
+  return {
+    ...summaryWithoutNoGoAudit,
+    nativeSearchReleaseHandoffNoGoBoundaryAudit,
+    cases: [
+      ...summaryWithoutNoGoAudit.cases,
+      noGoAuditCase,
+    ],
   }
 }
 
