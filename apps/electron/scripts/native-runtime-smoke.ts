@@ -278,6 +278,18 @@ export interface NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem {
   forbiddenActions: string[]
 }
 
+export interface NativeSearchReleaseHandoffGateTransitionEvaluation {
+  schemaVersion: 1
+  gate: NativeSearchReleaseHandoffApprovalGate
+  passed: boolean
+  expectedNextGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  actualNextGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  missingExpectedSummaryFlags: string[]
+  violatedMustRemainUnverifiedFlags: string[]
+  noGoBoundaryViolations: string[]
+  failedCriteria: string[]
+}
+
 export interface NativeSearchReleaseHandoffPlan {
   schemaVersion: 1
   status: NativeSearchReleaseHandoffPlanStatus
@@ -372,6 +384,12 @@ export interface NativeRuntimeSmokeSummary {
   cases: NativeRuntimeSmokeCase[]
 }
 
+interface EvaluateNativeSearchReleaseHandoffGateTransitionInput {
+  gate: NativeSearchReleaseHandoffApprovalGate
+  beforeSummary: NativeRuntimeSmokeSummary
+  afterSummary: NativeRuntimeSmokeSummary
+}
+
 interface NativeRuntimeSmokeVerification {
   bundledBinaryVerified?: boolean
   fixtureBundledPackageVerified?: boolean
@@ -422,6 +440,53 @@ interface NativeRuntimeSmokeVerification {
   tooBroadPackagingConfigIncludes?: string[]
   realPackagedBinaryVerified?: boolean
   requiresPrebuiltPackagedApp?: boolean
+}
+
+export function evaluateNativeSearchReleaseHandoffGateTransition(
+  input: EvaluateNativeSearchReleaseHandoffGateTransitionInput,
+): NativeSearchReleaseHandoffGateTransitionEvaluation {
+  const checklist = input.beforeSummary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist
+    .find((item) => item.gate === input.gate)
+  const expectedNextGate = checklist?.expectedNextGateAfterVerification
+    ?? getNativeSearchReleaseHandoffGateExpectedNextGate(input.gate)
+  const actualNextGate = input.afterSummary.nativeSearchReleaseHandoffPlan.nextGate
+  const beforeGateReadinessFailures = getNativeSearchReleaseHandoffTransitionReadinessFailures({
+    gate: input.gate,
+    checklist,
+    beforeSummary: input.beforeSummary,
+  })
+  const missingExpectedSummaryFlags = (checklist?.expectedSummaryFlagsAfterExecution ?? [])
+    .filter((flag) => !isNativeRuntimeSmokeSummaryFlagSatisfied(input.afterSummary, flag))
+  const violatedMustRemainUnverifiedFlags = (checklist?.mustRemainUnverifiedAfterExecution ?? [])
+    .filter((flag) => isNativeRuntimeSmokeSummaryFlagSatisfied(input.afterSummary, flag))
+  const gateSpecificBoundaryViolations = getNativeSearchReleaseHandoffGateSpecificBoundaryViolations(
+    input.gate,
+    input.afterSummary,
+  )
+  const noGoBoundaryViolations = [
+    ...violatedMustRemainUnverifiedFlags.map((flag) => `must_remain_unverified:${flag}`),
+    ...gateSpecificBoundaryViolations,
+  ]
+  const failedCriteria = uniqueStrings([
+    ...beforeGateReadinessFailures,
+    ...(actualNextGate !== expectedNextGate ? ['expected_next_gate_not_reached'] : []),
+    ...(missingExpectedSummaryFlags.length > 0 ? ['expected_summary_flags_missing_after_execution'] : []),
+    ...(violatedMustRemainUnverifiedFlags.length > 0 ? ['must_remain_unverified_flag_changed'] : []),
+    ...(noGoBoundaryViolations.length > 0 ? ['no_go_boundary_violation'] : []),
+    ...(input.gate === 'default_enable_risk_review' ? ['default_enable_risk_review_not_supported_in_current_smoke'] : []),
+  ])
+
+  return {
+    schemaVersion: 1,
+    gate: input.gate,
+    passed: failedCriteria.length === 0,
+    expectedNextGate,
+    actualNextGate,
+    missingExpectedSummaryFlags,
+    violatedMustRemainUnverifiedFlags,
+    noGoBoundaryViolations,
+    failedCriteria,
+  }
 }
 
 const NATIVE_SEARCH_RELEASE_HANDOFF_APPROVAL_GATES: NativeSearchReleaseHandoffApprovalGate[] = [
@@ -894,7 +959,11 @@ function buildNativeSearchReleaseHandoffPlan(input: {
   const readyForPublicationInvocation = input.optionalPackageExecutionPlan.nextStage === 'optional_package_publication'
     && input.optionalPackagePublicationInvocationPlan.status === 'ready_for_invocation'
   const readyForOptionalDependenciesHandoff = input.optionalPackageExecutionPlan.nextStage === 'optional_dependencies_declaration'
+    && input.optionalPackageExecutionPlan.readyForOptionalDependencies
+  const readyForInstallChainHandoff = input.optionalPackageExecutionPlan.nextStage === 'optional_package_install_chain'
+    && input.optionalPackageExecutionPlan.readyForInstallChain
   const readyForPackagingConfigHandoff = input.optionalPackageExecutionPlan.nextStage === 'packaging_config_allowlist'
+    && input.optionalPackageExecutionPlan.readyForPackagingConfigChange
   const readyForPackagedSmokeHandoff = input.optionalPackageExecutionPlan.nextStage === 'packaged_app_bundled_binary_smoke'
     && input.packagedBundledBinarySmokeInvocationPlan.status === 'ready_for_execution'
   const readyForDefaultEnableRiskReview = input.optionalPackageExecutionPlan.readyForDefaultEnableRiskReview
@@ -903,6 +972,9 @@ function buildNativeSearchReleaseHandoffPlan(input: {
     optionalPackagePublicationInvocationPlan: input.optionalPackagePublicationInvocationPlan,
     optionalPackageExecutionPlan: input.optionalPackageExecutionPlan,
     readyForPublicationInvocation,
+    readyForOptionalDependenciesHandoff,
+    readyForInstallChainHandoff,
+    readyForPackagingConfigHandoff,
     readyForPackagedSmokeHandoff,
     verified,
   })
@@ -1702,6 +1774,9 @@ function getNativeSearchReleaseHandoffBlockers(input: {
   optionalPackagePublicationInvocationPlan: NativeSearchOptionalPackagePublicationInvocationPlan
   optionalPackageExecutionPlan: NativeSearchOptionalPackageExecutionPlan
   readyForPublicationInvocation: boolean
+  readyForOptionalDependenciesHandoff: boolean
+  readyForInstallChainHandoff: boolean
+  readyForPackagingConfigHandoff: boolean
   readyForPackagedSmokeHandoff: boolean
   verified: boolean
 }): NativeSearchReleaseHandoffPlanBlocker[] {
@@ -1710,6 +1785,27 @@ function getNativeSearchReleaseHandoffBlockers(input: {
   if (
     input.optionalPackageExecutionPlan.nextStage === 'optional_package_publication'
     && input.readyForPublicationInvocation
+  ) {
+    return []
+  }
+
+  if (
+    input.optionalPackageExecutionPlan.nextStage === 'optional_dependencies_declaration'
+    && input.readyForOptionalDependenciesHandoff
+  ) {
+    return []
+  }
+
+  if (
+    input.optionalPackageExecutionPlan.nextStage === 'optional_package_install_chain'
+    && input.readyForInstallChainHandoff
+  ) {
+    return []
+  }
+
+  if (
+    input.optionalPackageExecutionPlan.nextStage === 'packaging_config_allowlist'
+    && input.readyForPackagingConfigHandoff
   ) {
     return []
   }
@@ -1849,6 +1945,107 @@ function getNativeSearchReleaseHandoffCandidateCommands(input: {
 
 function uniqueStrings(values: string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) === index)
+}
+
+function getNativeSearchReleaseHandoffTransitionReadinessFailures(input: {
+  gate: NativeSearchReleaseHandoffApprovalGate
+  checklist: NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem | undefined
+  beforeSummary: NativeRuntimeSmokeSummary
+}): string[] {
+  const failures: string[] = []
+
+  if (input.beforeSummary.nativeSearchReleaseHandoffPlan.nextGate !== input.gate) {
+    failures.push('before_next_gate_mismatch')
+  }
+  if (input.checklist?.currentGate !== true) {
+    failures.push('before_gate_not_current')
+  }
+  if (input.checklist?.status !== 'ready_for_approval') {
+    failures.push('before_gate_not_ready_for_approval')
+  }
+
+  return failures
+}
+
+function getNativeSearchReleaseHandoffGateSpecificBoundaryViolations(
+  gate: NativeSearchReleaseHandoffApprovalGate,
+  summary: NativeRuntimeSmokeSummary,
+): string[] {
+  if (gate !== 'packaged_app_bundled_binary_smoke') return []
+
+  const violations: string[] = []
+  if (summary.packagedBundledBinarySmokePlan.status !== 'verified') {
+    violations.push('packaged_smoke_plan_not_verified')
+  }
+  if (summary.packagedBundledBinarySmokePlan.blockedBy.length > 0) {
+    violations.push('packaged_smoke_plan_blocked')
+  }
+  if (summary.packagedBundledBinarySmokeInvocationPlan.status !== 'verified') {
+    violations.push('packaged_smoke_invocation_not_verified')
+  }
+  if (summary.packagedBundledBinarySmokeInvocationPlan.blockedBy.length > 0) {
+    violations.push('packaged_smoke_invocation_blocked')
+  }
+  if (!summary.packagedBundledBinarySmokeInvocationPlan.appNodeModulesRootResolved) {
+    violations.push('packaged_app_node_modules_root_unresolved')
+  }
+  if (!summary.packagedAppLayoutVerified) {
+    violations.push('packaged_app_layout_not_verified')
+  }
+  if (!summary.packagedAppEvidenceVerified) {
+    violations.push('packaged_app_evidence_not_verified')
+  }
+  if (!summary.packagedAppIdentityVerified) {
+    violations.push('packaged_app_identity_not_verified')
+  }
+
+  return violations
+}
+
+function isNativeRuntimeSmokeSummaryFlagSatisfied(
+  summary: NativeRuntimeSmokeSummary,
+  flag: string,
+): boolean {
+  const [path, rawExpectedValue] = flag.split('=')
+  const value = getNativeRuntimeSmokeSummaryFlagValue(summary, path ?? '')
+  if (rawExpectedValue == null) return value === true
+  if (rawExpectedValue === 'true') return value === true
+  if (rawExpectedValue === 'false') return value === false
+  return false
+}
+
+function getNativeRuntimeSmokeSummaryFlagValue(
+  summary: NativeRuntimeSmokeSummary,
+  path: string,
+): boolean | undefined {
+  switch (path) {
+    case 'optionalPackagePublicationChecked':
+      return summary.optionalPackagePublicationChecked
+    case 'optionalPackagesPublished':
+      return summary.optionalPackagesPublished
+    case 'optionalDependenciesDeclared':
+      return summary.optionalDependenciesDeclared
+    case 'optionalDependenciesInstallChainVerified':
+      return summary.optionalDependenciesInstallChainVerified
+    case 'optionalDependenciesLockfileVerified':
+      return summary.optionalDependenciesLockfileVerified
+    case 'optionalDependenciesInstalledPackagesVerified':
+      return summary.optionalDependenciesInstalledPackagesVerified
+    case 'packagingConfigVerified':
+      return summary.packagingConfigVerified
+    case 'realPackagedBinaryVerified':
+      return summary.realPackagedBinaryVerified
+    case 'bundledBinaryVerified':
+      return summary.bundledBinaryVerified
+    case 'usesTemporaryFixture':
+      return summary.usesTemporaryFixture
+    case 'nativeSearchDefaultEnableReadiness.defaultEnableCandidate':
+      return summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate
+    case 'optionalPackageExecutionPlan.verified':
+      return summary.optionalPackageExecutionPlan.verified
+    default:
+      return undefined
+  }
 }
 
 function buildPackagedBundledBinarySmokeInvocationPlan(input: {

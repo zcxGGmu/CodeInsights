@@ -11,6 +11,7 @@ import {
 import {
   buildPackagedPackagingConfigPreflightCase,
   buildNativeRuntimeSmokeSummary,
+  evaluateNativeSearchReleaseHandoffGateTransition,
   getNativeRuntimeSmokeExitCode,
   parseNativeRuntimeSmokeArgs,
   resolvePackagedAppNodeModulesRoot,
@@ -1276,9 +1277,13 @@ describe('native-runtime-smoke', () => {
       },
       {
         gate: 'optional_dependencies_declaration',
-        status: 'blocked_current_gate',
+        status: 'ready_for_approval',
         currentGate: true,
-        candidateCommands: [],
+        candidateCommands: [
+          "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+          'bun install --frozen-lockfile --dry-run',
+          "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+        ],
       },
       {
         gate: 'optional_package_install_chain',
@@ -1308,9 +1313,11 @@ describe('native-runtime-smoke', () => {
     const declarationChecklist = summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist
       .find((item) => item.gate === 'optional_dependencies_declaration')
     expect(declarationChecklist).toEqual(expect.objectContaining({
-      status: 'blocked_current_gate',
+      status: 'ready_for_approval',
       currentGate: true,
-      postExecutionVerificationCommands: [],
+      postExecutionVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ],
       expectedNextGateAfterVerification: 'optional_package_install_chain',
       expectedSummaryFlagsAfterExecution: [
         'optionalDependenciesDeclared=true',
@@ -1334,6 +1341,673 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
+  })
+
+  test('release handoff transition verifier 通过 publication gate 的合规迁移', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{ name: 'before-publication', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+      },
+      cases: [{ name: 'after-publication', status: 'passed' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_package_publication',
+      beforeSummary,
+      afterSummary,
+    })).toEqual({
+      schemaVersion: 1,
+      gate: 'optional_package_publication',
+      passed: true,
+      expectedNextGate: 'optional_dependencies_declaration',
+      actualNextGate: 'optional_dependencies_declaration',
+      missingExpectedSummaryFlags: [],
+      violatedMustRemainUnverifiedFlags: [],
+      noGoBoundaryViolations: [],
+      failedCriteria: [],
+    })
+  })
+
+  test('release handoff transition verifier 拒绝未到达当前 ready gate 的评估', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: false,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: false,
+      },
+      cases: [{ name: 'before-future-gate', status: 'skipped' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+      },
+      cases: [{ name: 'after-publication', status: 'passed' }],
+    })
+
+    const result = evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_package_publication',
+      beforeSummary,
+      afterSummary,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.actualNextGate).toBe('optional_dependencies_declaration')
+    expect(result.failedCriteria).toEqual([
+      'before_next_gate_mismatch',
+      'before_gate_not_current',
+      'before_gate_not_ready_for_approval',
+    ])
+  })
+
+  test('release handoff transition verifier 拒绝 publication 后跳过 optionalDependencies / builder / packaged gates', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{ name: 'before-publication', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        realPackagedBinaryVerified: true,
+        bundledBinaryVerified: true,
+      },
+      cases: [{ name: 'after-publication-jump', status: 'passed' }],
+    })
+
+    const result = evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_package_publication',
+      beforeSummary,
+      afterSummary,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.actualNextGate).toBe('default_enable_risk_review')
+    expect(result.violatedMustRemainUnverifiedFlags).toEqual([
+      'optionalDependenciesDeclared',
+      'optionalDependenciesInstallChainVerified',
+      'optionalDependenciesLockfileVerified',
+      'optionalDependenciesInstalledPackagesVerified',
+      'packagingConfigVerified',
+      'realPackagedBinaryVerified',
+      'bundledBinaryVerified',
+    ])
+    expect(result.noGoBoundaryViolations).toEqual([
+      'must_remain_unverified:optionalDependenciesDeclared',
+      'must_remain_unverified:optionalDependenciesInstallChainVerified',
+      'must_remain_unverified:optionalDependenciesLockfileVerified',
+      'must_remain_unverified:optionalDependenciesInstalledPackagesVerified',
+      'must_remain_unverified:packagingConfigVerified',
+      'must_remain_unverified:realPackagedBinaryVerified',
+      'must_remain_unverified:bundledBinaryVerified',
+    ])
+    expect(result.failedCriteria).toEqual([
+      'expected_next_gate_not_reached',
+      'must_remain_unverified_flag_changed',
+      'no_go_boundary_violation',
+    ])
+  })
+
+  test('release handoff transition verifier 拒绝 declaration 后提前混入 lockfile / installed 子证据', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+      },
+      cases: [{ name: 'before-declaration', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+      },
+      cases: [{ name: 'after-declaration-jump', status: 'passed' }],
+    })
+
+    const result = evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_dependencies_declaration',
+      beforeSummary,
+      afterSummary,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.violatedMustRemainUnverifiedFlags).toEqual([
+      'optionalDependenciesInstallChainVerified',
+      'optionalDependenciesLockfileVerified',
+      'optionalDependenciesInstalledPackagesVerified',
+    ])
+    expect(result.failedCriteria).toContain('must_remain_unverified_flag_changed')
+  })
+
+  test('release handoff transition verifier 通过 declaration gate 的合规迁移', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+      },
+      cases: [{ name: 'before-declaration', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+      },
+      cases: [{ name: 'after-declaration', status: 'passed' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_dependencies_declaration',
+      beforeSummary,
+      afterSummary,
+    })).toEqual({
+      schemaVersion: 1,
+      gate: 'optional_dependencies_declaration',
+      passed: true,
+      expectedNextGate: 'optional_package_install_chain',
+      actualNextGate: 'optional_package_install_chain',
+      missingExpectedSummaryFlags: [],
+      violatedMustRemainUnverifiedFlags: [],
+      noGoBoundaryViolations: [],
+      failedCriteria: [],
+    })
+  })
+
+  test('release handoff transition verifier 通过 install-chain gate 的合规迁移', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+      },
+      cases: [{ name: 'before-install-chain', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+      },
+      cases: [{ name: 'after-install-chain', status: 'passed' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'optional_package_install_chain',
+      beforeSummary,
+      afterSummary,
+    })).toEqual({
+      schemaVersion: 1,
+      gate: 'optional_package_install_chain',
+      passed: true,
+      expectedNextGate: 'packaging_config_allowlist',
+      actualNextGate: 'packaging_config_allowlist',
+      missingExpectedSummaryFlags: [],
+      violatedMustRemainUnverifiedFlags: [],
+      noGoBoundaryViolations: [],
+      failedCriteria: [],
+    })
+  })
+
+  test('release handoff transition verifier 通过 packaging config gate 的合规迁移', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+      },
+      cases: [{ name: 'before-packaging-config', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+      },
+      cases: [{ name: 'after-packaging-config', status: 'passed' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'packaging_config_allowlist',
+      beforeSummary,
+      afterSummary,
+    })).toEqual({
+      schemaVersion: 1,
+      gate: 'packaging_config_allowlist',
+      passed: true,
+      expectedNextGate: 'packaged_app_bundled_binary_smoke',
+      actualNextGate: 'packaged_app_bundled_binary_smoke',
+      missingExpectedSummaryFlags: [],
+      violatedMustRemainUnverifiedFlags: [],
+      noGoBoundaryViolations: [],
+      failedCriteria: [],
+    })
+  })
+
+  test('release handoff transition verifier 拒绝 packaging config 后提前证明 packaged binary', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+      },
+      cases: [{ name: 'before-packaging-config', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        realPackagedBinaryVerified: true,
+        bundledBinaryVerified: true,
+      },
+      cases: [{ name: 'after-packaging-jump', status: 'passed' }],
+    })
+
+    const result = evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'packaging_config_allowlist',
+      beforeSummary,
+      afterSummary,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.violatedMustRemainUnverifiedFlags).toEqual([
+      'realPackagedBinaryVerified',
+      'bundledBinaryVerified',
+    ])
+    expect(result.failedCriteria).toEqual([
+      'expected_next_gate_not_reached',
+      'must_remain_unverified_flag_changed',
+      'no_go_boundary_violation',
+    ])
+  })
+
+  test('release handoff transition verifier 拒绝 packaged smoke 顶层布尔值绕过 blocked plan', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+      },
+      cases: [{ name: 'before-packaged-smoke', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        realPackagedBinaryVerified: true,
+        bundledBinaryVerified: true,
+      },
+      cases: [{ name: 'after-packaged-smoke-without-root', status: 'passed' }],
+    })
+
+    const result = evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'packaged_app_bundled_binary_smoke',
+      beforeSummary,
+      afterSummary,
+    })
+
+    expect(afterSummary.bundledBinaryVerified).toBe(true)
+    expect(afterSummary.packagedBundledBinarySmokePlan.status).toBe('blocked')
+    expect(afterSummary.packagedBundledBinarySmokeInvocationPlan.status).toBe('blocked')
+    expect(result.passed).toBe(false)
+    expect(result.actualNextGate).toBe('default_enable_risk_review')
+    expect(result.noGoBoundaryViolations).toEqual([
+      'packaged_smoke_plan_not_verified',
+      'packaged_smoke_plan_blocked',
+      'packaged_smoke_invocation_not_verified',
+      'packaged_smoke_invocation_blocked',
+      'packaged_app_node_modules_root_unresolved',
+    ])
+    expect(result.failedCriteria).toEqual(['no_go_boundary_violation'])
+  })
+
+  test('release handoff transition verifier 允许 packaged smoke 后进入 default-enable 风险复核但不默认启用', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const beforeSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+      },
+      cases: [{ name: 'before-packaged-smoke', status: 'passed' }],
+    })
+    const afterSummary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        realPackagedBinaryVerified: true,
+        bundledBinaryVerified: true,
+      },
+      cases: [{ name: 'after-packaged-smoke', status: 'passed' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffGateTransition({
+      gate: 'packaged_app_bundled_binary_smoke',
+      beforeSummary,
+      afterSummary,
+    })).toEqual({
+      schemaVersion: 1,
+      gate: 'packaged_app_bundled_binary_smoke',
+      passed: true,
+      expectedNextGate: 'default_enable_risk_review',
+      actualNextGate: 'default_enable_risk_review',
+      missingExpectedSummaryFlags: [],
+      violatedMustRemainUnverifiedFlags: [],
+      noGoBoundaryViolations: [],
+      failedCriteria: [],
+    })
+    expect(afterSummary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
   })
 
   test('summary 顶层 ready 字段必须绑定 checked，避免和 execution plan 分叉', () => {
