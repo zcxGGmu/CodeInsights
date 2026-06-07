@@ -1,5 +1,47 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 release handoff gate 执行后状态迁移期望计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`；当前分支为 `rust-go-refactor`，工作树起始干净，启动 HEAD 为 `9b599b37 docs(rust-go): 同步 Phase 5 最新开发状态`，最新已确认实现基线仍为 `72a00b01 fix(rust-go): 标记 default enable 证据清单网络边界`，最近历史包含 `9b599b37`、`4518a2ce`、`ec64fec3`、`72a00b01`、`cb30b819`、`bc53cc75`、`9d8520fa`、`197569d5`。只读 explorer 复核后指出：现有 `gateExecutionEvidenceChecklist` 已说明“批准执行后要补哪些 evidence / post verification command”，但尚未说明“这些 evidence 成立后 summary 应迁移到哪个 next gate、哪些字段应变 true、哪些字段仍必须 false”。本轮据此重新规划，只在 `nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist` 中新增只读状态迁移期望字段，帮助后续真实 optional / packaged gate 执行后做 fail-closed 验收。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+启动基线：
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认当前分支、干净工作树和最近历史。
+- [x] 启动两个只读 explorer 子代理，分别复核 no-go 下的最小代码切片和阶段完成后的验证 / 文档同步要求；收到第一个 explorer 结果后按“出现偏差立即重规划”要求，将切片从执行前 readiness 调整为执行后状态迁移期望。
+
+实现计划：
+
+- [x] 测试先行扩展 `apps/electron/scripts/native-runtime-smoke.test.ts`，锁住 `gateExecutionEvidenceChecklist` 的状态迁移期望：publication gate 验证后只应推进到 `optional_dependencies_declaration`，且 optionalDependencies / install-chain / builder / packaged binary / default-enable 仍必须未验证；后续 gate 的 expected next gate 必须按顺序推进，不能跳 gate。
+- [x] 在 `apps/electron/scripts/native-runtime-smoke.ts` 中为 `gateExecutionEvidenceChecklist` 新增 `expectedNextGateAfterVerification`、`expectedSummaryFlagsAfterExecution`、`mustRemainUnverifiedAfterExecution` 和 `transitionFailClosedCriteria`，只读描述批准执行并验证后应出现的 summary 迁移，不查询 registry、不发布、不安装、不写 builder / package manifest / lockfile、不读取 binary path。
+- [x] 保持当前仓库默认输出 `optionalPackagesPublished=false`、`optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`packagingConfigVerified=false`、`realPackagedBinaryVerified=false`、`bundledBinaryVerified=false` 和 `nativeSearchDefaultEnableReadiness.defaultEnableCandidate=false`。
+- [x] 递增 `@codeinsights/electron` patch 版本并同步 `bun.lock`；不新增真实 native search optionalDependencies。
+
+验证计划：
+
+- [x] 运行 `bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`。
+- [x] 运行 `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`。
+- [x] 运行显式 registry dry-run：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3 --check-registry`，确认 transition expectation 只描述 publication gate 验证后应推进到 optionalDependencies declaration，不把命令或期望字段当成真实发布。
+- [x] 运行预期 no-go：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry`，确认 4 个计划 optional package 未发布时仍返回非零。
+- [x] 运行 `bun run --filter='@codeinsights/electron' typecheck`、`bun run --filter='@codeinsights/electron' build:main`、`bun install --frozen-lockfile --dry-run`、`git diff --check`。
+- [x] 禁改边界检查：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未创建 packaged native binary，未新增真实 native search optionalDependencies，未 push，未创建 PR。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 `tasks/todo.md` Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`b874628b feat(rust-go): 补齐 Phase 5 gate 状态迁移期望`。
+- 已在 `nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist` 中新增 `expectedNextGateAfterVerification`、`expectedSummaryFlagsAfterExecution`、`mustRemainUnverifiedAfterExecution` 和 `transitionFailClosedCriteria`，用于描述真实 gate 批准执行并验证后应出现的 summary 迁移。
+- 迁移顺序已锁定：`optional_package_publication -> optional_dependencies_declaration -> optional_package_install_chain -> packaging_config_allowlist -> packaged_app_bundled_binary_smoke -> default_enable_risk_review -> complete`。publication / declaration gate 的 `mustRemainUnverifiedAfterExecution` 已覆盖 lockfile / installed package 子证据，避免把声明阶段误判为 install-chain 已完成。
+- 边界语义保持：transition expectation 只做后续真实 gate 执行后的 fail-closed 验收输入，不驱动 `nextGate`、`verified`、candidate command、真实 publication、真实 optionalDependencies install-chain、builder allowlist、packaged binary 或 default-enable。
+- 版本同步：`@codeinsights/electron` 已递增到 `0.0.173` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（104 pass）；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`；显式 registry dry-run `bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3 --check-registry`；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' build:main`；`bun install --frozen-lockfile --dry-run`；`git diff --check`。
+- 预期 no-go 验证通过：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry` 返回 exit 1，因为 4 个计划 optional package 尚未真实发布。
+- 禁改边界保持：native 继续 default off / 显式 opt-in；默认 smoke 不联网；本轮未执行 `npm publish`，未运行真实 install，未修改 `apps/electron/electron-builder.yml`，未新增真实 native search optionalDependencies，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+- 禁改扫描通过：`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`apps/electron/package.json` 和 `bun.lock` 中未新增真实 native search optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`native-search` 或 `native-search.exe` packaged 产物。
+- code review：只读 code-review 子代理未发现 P0/P1/P2；剩余风险是 transition checklist 仍是描述性 metadata，未来若接入真实 executor，必须增加执行后 summary 与 expected / must-remain 字段的实际比较。
+- 状态同步：development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review 已回填 `b874628b` 最新开发基线、transition expectation 边界、未完成真实 optional / packaged gates 和下次启动提示词；本状态同步将单独提交。
+
 ## 2026-06-07 Rust/Go Phase 5 release handoff gate 执行证据清单计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/` 源码；当前分支为 `rust-go-refactor`，工作树起始干净，启动 HEAD 为 `bc53cc75 docs(rust-go): 回填 Phase 5 批准队列最新恢复入口`，最新开发基线为 `197569d5 feat(rust-go): 补齐 Phase 5 release handoff 批准队列`，最近历史包含 `bc53cc75`、`9d8520fa`、`197569d5`、`f78c44d6`、`bd0e61d3`、`99d76b0c`。本轮只推进真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改和真实 packaged app bundled binary smoke 之前的批准 / 证据准备：在 `nativeSearchReleaseHandoffPlan` 中新增只读 gate execution evidence checklist，明确每个真实 gate 在批准后必须产出的证据、当前 gate 可执行命令可见性、未来 gate fail-closed、以及不等于真实 verified 的边界。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
