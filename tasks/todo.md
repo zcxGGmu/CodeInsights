@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 release handoff 执行输入证据包计划
+
+范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`；当前分支为 `rust-go-refactor`，启动 HEAD 为 `5be9c233 docs(rust-go): 回填 Phase 5 最新开发状态`，最新实现基线保持 `66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器`。本轮只推进真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改和真实 packaged app bundled binary smoke 之前的批准 / 执行输入准备：在 `nativeSearchReleaseHandoffPlan` 中新增只读 execution input evidence packet，明确当前 gate 批准后真正执行前必须具备的输入、允许命令、副作用边界、验收命令和禁止动作。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 启动只读 explorer 子代理，分别核对 smoke / gate 代码入口和文档状态；确认当前文档恢复入口需从 `40366181` 回填到 `5be9c233`。
+- [x] 先补 `native-runtime-smoke.test.ts` BDD 场景，锁定 execution input evidence packet 的字段、blocked gate 空命令、当前 ready gate 命令可见性和 no-go 边界。
+- [x] 在 `apps/electron/scripts/native-runtime-smoke.ts` 中为 release handoff summary 增加只读 execution input evidence packet；不得执行发布、安装、builder 修改或 packaged smoke。
+- [x] 运行聚焦 smoke 测试和安全 smoke，确认 ready / blocked / no-go 语义没有漂移。
+- [x] 运行 no-go 边界验证，确认未触碰根文档、builder、package manifest / lockfile，未新增真实 native optionalDependencies，未创建 packaged native binary。
+- [x] 阶段完成后更新 development checklist、sidecar protocol / smoke plan、next-session-prompt.md、必要 lessons 和本 Review，并单独提交实现与状态同步。
+
+### Review
+
+- 实现提交：`461295b0 feat(rust-go): 补齐 Phase 5 release handoff 执行输入证据包`。
+- 已新增 `nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket`，从当前 approval packet 与 execution checklist 只读派生当前顺序 gate 的批准前输入、批准后允许动作、候选命令、执行后验证命令、副作用边界、执行后证据、expected next gate、must-remain-unverified、doesNotVerify 和 forbiddenActions。
+- Gate 命令边界：blocked / future gate 不暴露候选命令；publication ready 只暴露占位 `npm publish <native-search-package-source:...> --access public`；declaration ready 不暴露 `bun install`；install-chain 只有当前 gate ready 且需要 `install_chain_execution_approval` 后才暴露 `bun install --frozen-lockfile`；packaged smoke 只暴露 `<packaged-app-root>` 占位 smoke 命令；default-enable risk review 在当前 smoke 中仍 blocked 且不暴露默认启用命令。
+- 版本同步：`@codeinsights/electron` 从 `0.0.174` 递增到 `0.0.175` 并同步 `bun.lock`；未新增真实 `@codeinsights/native-search-*` optionalDependencies。
+- Code review：code-reviewer 无 Critical / High，结论 Approve；建议补 install-chain / packaged smoke / default-enable packet 断言，本轮已补入并通过测试。
+- 验证通过：`bun test apps/electron/scripts/native-runtime-smoke.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-package-manifest.test.ts apps/electron/src/main/lib/native-runtime/native-runtime-default-enable-readiness.test.ts`（114 pass）；`bun run --filter='@codeinsights/electron' typecheck`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode native-missing`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3`；`git diff --check`。
+- 禁改边界保持：`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`apps/electron/package.json` / `bun.lock` 未新增真实 native search optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；未执行 `npm publish`，未运行真实 install，未创建 packaged app / native binary，未 push，未创建 PR。
+- 状态同步：development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review 将回填 `461295b0` 最新实现基线、`5be9c233` 本轮前最新 docs 恢复入口、execution input packet 边界、未完成真实 optional / packaged gates 和下次启动提示词；本状态同步将单独提交。
+
 ## 2026-06-07 Rust/Go Phase 5 最新开发状态与启动提示词回填计划
 
 范围确认：用户要求更新文档最新开发状态、清楚标注完成 / 未完成，并给出下次启动可直接复制的提示词；同时要求把该动作记为每个阶段性任务完成后的固定习惯。本轮只同步 Rust / Go 文档、`tasks/todo.md` 和 `tasks/lessons.md`；不修改业务代码、根 `README.md` / 根 `AGENTS.md`、`apps/electron/electron-builder.yml`、`apps/electron/package.json` 或 `bun.lock`，不安装依赖，不执行 `npm publish`，不运行真实 install，不创建 packaged native binary，不 push，不创建 PR。启动核对显示当前分支为 `rust-go-refactor`，起始 HEAD 为 `40366181 docs(rust-go): 同步 Phase 5 gate 迁移校验器状态`，工作树起始干净，最新实现基线为 `66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器`。

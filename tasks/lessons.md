@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 release handoff 执行输入证据包边界
+
+- `461295b0 feat(rust-go): 补齐 Phase 5 release handoff 执行输入证据包` 已成为当前最新实现基线；本轮状态同步前最新已确认 docs 恢复入口为 `5be9c233 docs(rust-go): 回填 Phase 5 最新开发状态`。
+- `nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket` 只能表示当前顺序 gate 在批准前必须具备的输入、批准后允许动作 / 候选命令、执行后验证命令、副作用边界和验收证据；它不是执行结果，不等于 published / declared / installed / builder verified / packaged binary verified / default-enable evidence。
+- blocked / future gate 必须保持 `candidateCommandsAfterApproval=[]` 与 `postExecutionVerificationCommands=[]`；publication ready 只能暴露占位 publish 命令，declaration ready 不得混入 install，install-chain 只能在 `install_chain_execution_approval` 后暴露 `bun install --frozen-lockfile`，packaged smoke 只能暴露 `<packaged-app-root>` 占位 smoke 命令。
+- default-enable risk review 在当前 smoke 中即使 packaged smoke 合规迁移后仍保持 blocked，且 execution input packet 不得暴露默认启用命令；真实 default enable 必须等待真实 optional / packaged gate 可执行通过并完成风险复核。
+- 本轮 no-go 不变：native default off / 显式 opt-in；默认 smoke 不联网；不执行真实发布 / 安装；不修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不创建 packaged native binary；不 push / PR。
+
 ## 2026-06-07 Rust / Go 阶段性任务完成后的自动状态同步固定习惯
 
 - `40366181 docs(rust-go): 同步 Phase 5 gate 迁移校验器状态` 已成为本轮状态回填前最新已确认 Rust / Go docs 恢复入口；`66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器` 继续是最新实现基线。
