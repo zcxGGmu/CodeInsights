@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-07 Rust / Go 阶段完成后自动状态同步
+
+- `4518a2ce docs(rust-go): 收窄 Phase 5 后续范围` 已成为当前已存在的 Rust / Go docs 恢复入口；本轮再次状态同步后，最终回复必须给出新的实际 HEAD，并在下次启动提示词中要求用 `git log -5 --oneline` 确认最新 Rust / Go docs 提交。
+- 用户明确要求把“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”固定为每个阶段性任务完成后的自动动作；以后阶段实现、验证或范围调整完成后，不等待用户再次提醒，立即同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons。
+- 每次状态同步必须写清真实完成项、真实未完成项、no-go 边界、下一步入口和可复制启动提示词；ready / dry-run / handoff / approval packet / execution checklist 仍不得写成真实 publication、install-chain、builder verified、packaged binary verified 或 default-enable evidence。
+- 状态同步也要运行 no-go 验证：确认未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未创建 packaged native binary，未 push / PR。
+
 ## 2026-06-07 Rust / Go Phase 5 default-enable 证据清单网络副作用边界
 
 - `72a00b01 fix(rust-go): 标记 default enable 证据清单网络边界` 已成为当前最新开发基线；在本轮状态同步提交前，最新已确认恢复入口仍为 `bc53cc75 docs(rust-go): 回填 Phase 5 批准队列最新恢复入口`。

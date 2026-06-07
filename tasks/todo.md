@@ -8661,3 +8661,23 @@ CodeInsights 已具备 Agent / Pipeline 执行能力，但缺少类似 Codex App
 - Phase 8 残留范围已收紧为 Phase 5 真实 packaged app bundled binary smoke 所需的最小 packaged 验证设计；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`。
 - 当前 no-go 继续有效：native default off / 显式 opt-in；默认 smoke 不联网；不修改根 `README.md` / 根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
 - 验证通过：`git diff --check`；禁止文件 diff 扫描 `README.md` / `AGENTS.md` / `apps/electron/electron-builder.yml` / `apps/electron/package.json` / `bun.lock` 无输出；`apps/electron/package.json` 与 `bun.lock` 无真实 `@codeinsights/native-search-*` optionalDependencies；packaged native binary / `native-search-package.json` 仓库扫描无输出；当前 Rust / Go 恢复入口文档不再保留 `Phase 6-9` 待推进口径。
+
+## 2026-06-07 Rust / Go 最新开发状态同步计划
+
+范围确认：响应用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词，并记住每个阶段完成后自动做”。本轮只同步 Rust / Go 文档、`tasks/todo.md` 和 `tasks/lessons.md`；不修改业务代码、根 `README.md` / 根 `AGENTS.md`、`apps/electron/electron-builder.yml`、`apps/electron/package.json` 或 `bun.lock`，不安装依赖，不发布，不 push，不创建 PR。
+
+- [x] 确认当前工作树干净，最新提交为 `4518a2ce docs(rust-go): 收窄 Phase 5 后续范围`。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把最新已确认实现基线、恢复入口、完成 / 未完成状态和可复制启动提示词同步到 `4518a2ce` 后。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，标清 Phase 0-4 完成、Phase 5 已完成 / 未完成、Phase 6 / 7 / 9 暂停、Phase 8 最小化。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，同步最新状态入口，明确范围收窄不等于 packaged verified。
+- [x] 更新 `tasks/lessons.md`，把阶段完成后自动同步状态文档、next-session prompt、tasks/todo Review 和 no-go 验证写成长期习惯。
+- [x] 运行 no-go 验证，确认没有触碰禁止文件、没有新增 native optionalDependencies、没有创建 packaged native binary。
+- [x] 单独提交本轮状态同步文档。
+
+## 2026-06-07 Rust / Go 最新开发状态同步 Review
+
+- 已把最新已存在的 Rust / Go docs 恢复入口固定为 `4518a2ce docs(rust-go): 收窄 Phase 5 后续范围`；本轮提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 已明确完成项：Phase 0-4 完成；Phase 5 已完成 native search sidecar、sidecar manager、fallback gate、benchmark gate、Agent nested parity、smoke/cache、optional package manifest/resolver/layout/evidence/identity、optionalDependencies declaration/install-chain preflight、default-enable readiness、packaging config allowlist preflight、publication preflight、packaged smoke plan、publish-target dry-run、source `BINARY_VERSION=0.0.3` 对齐、optional package source preflight、optional / packaged execution plan、builder allowlist dry-run / candidateYamlEditPlan、optionalDependencies install-chain dry-run plan、optional package publication change / invocation plan、publication invocation 证据收紧、release handoff 证据计划、fail-closed 证据收紧、currentGateApprovalPacket、gateApprovalQueue、gateExecutionEvidenceChecklist、default-enable network side-effect 标记和 Phase 5 后续范围收窄。
+- 已明确未完成项：真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策；Phase 6 / 7 / 9 暂停；Phase 8 仅保留 Phase 5 packaged smoke 所需最小 packaged 验证设计。
+- 已记录长期习惯：每个阶段性任务完成并验证后，自动更新 development checklist、next-session prompt、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，并单独提交状态同步文档。
+- 验证通过：`git diff --check`；禁止文件 diff 扫描 `README.md` / `AGENTS.md` / `apps/electron/electron-builder.yml` / `apps/electron/package.json` / `bun.lock` 无输出；`apps/electron/package.json` 与 `bun.lock` 无真实 `@codeinsights/native-search-*` optionalDependencies；packaged native binary / `native-search-package.json` 仓库扫描无输出；恢复提示词 commit 列表无反引号缺失格式残留。
