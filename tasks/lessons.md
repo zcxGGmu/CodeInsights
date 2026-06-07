@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 release handoff 迁移校验器边界
+
+- `66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器` 已成为当前最新实现基线；状态同步提交前，已存在的最新恢复入口为 `aa0091a3 docs(rust-go): 回填 Phase 5 最新恢复入口`。
+- transition verifier 必须校验 before / after summary，而不是把 checklist metadata 或 expected flags 当作当前 evidence。合规迁移必须同时满足 before `nextGate`、checklist `currentGate=true`、`status=ready_for_approval`、after expected next gate、expected summary flags、must-remain-unverified flags 和 no-go boundary。
+- 中间 gate 不能过度 fail-closed。`optional_dependencies_declaration`、`optional_package_install_chain`、`packaging_config_allowlist` 在各自前置 readiness 已满足时，应允许进入 `ready_for_approval`；这只表示当前 gate 可审核，不等于 declaration / install-chain / builder 已真实完成。
+- packaged smoke gate 不能只看顶层 `bundledBinaryVerified=true`。迁移校验必须同时要求 packaged smoke plan / invocation plan verified、无 blocker、app node_modules root resolved、packaged app layout / evidence / identity verified；否则 blocked plan 不能绕过真实 packaged smoke。
+- 本轮 no-go 不变：native default off / 显式 opt-in；默认 smoke 不联网；不发布、不运行真实 install、不修改 `apps/electron/electron-builder.yml`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不修改根 `README.md` / 根 `AGENTS.md`、不 push / PR。
+
 ## 2026-06-07 Rust / Go 阶段完成后自动回填最新恢复入口
 
 - 阶段性实现或状态同步提交完成后，不能只停留在“文档里提示下次看 git log”；如果用户要求最新开发状态，必须把当前已存在的 docs HEAD 回填为 `next-session-prompt.md`、development checklist 和 sidecar / smoke plan 的最新恢复入口，并清楚标注完成 / 未完成。
