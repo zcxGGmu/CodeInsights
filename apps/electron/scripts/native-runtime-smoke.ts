@@ -309,6 +309,47 @@ export interface NativeSearchReleaseHandoffExecutionInputPacket {
   forbiddenActions: string[]
 }
 
+export type NativeSearchReleaseHandoffNoGoBoundaryViolationCode =
+  | 'native_explicit_opt_in_not_required'
+  | 'default_enable_candidate_true'
+  | 'release_handoff_default_off_not_required_before_verified'
+  | 'execution_packet_gate_mismatch'
+  | 'blocked_gate_exposes_candidate_commands'
+  | 'future_gate_exposes_candidate_commands'
+  | 'blocked_gate_exposes_post_execution_commands'
+  | 'future_gate_exposes_post_execution_commands'
+  | 'blocked_execution_packet_exposes_candidate_commands'
+  | 'blocked_execution_packet_exposes_post_execution_commands'
+  | 'declaration_gate_exposes_install_command'
+  | 'declaration_gate_has_unexpected_file_write_target'
+  | 'install_chain_ready_missing_install_command'
+  | 'install_chain_ready_missing_network_side_effect'
+  | 'install_chain_ready_missing_workspace_mutation'
+  | 'install_chain_ready_missing_lockfile_write_target'
+  | 'packaged_smoke_command_not_packaged_app_root_placeholder'
+  | 'packaged_smoke_ready_missing_post_execution_command'
+  | 'default_enable_gate_not_blocked'
+  | 'default_enable_gate_exposes_execution_commands'
+  | 'ready_gate_exposes_unexpected_candidate_commands'
+  | 'no_go_verified_flag_changed'
+  | 'summary_leaks_sensitive_path_or_registry'
+
+export interface NativeSearchReleaseHandoffNoGoBoundaryViolation {
+  code: NativeSearchReleaseHandoffNoGoBoundaryViolationCode
+  gate?: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  field?: string
+}
+
+export interface NativeSearchReleaseHandoffNoGoBoundaryAudit {
+  schemaVersion: 1
+  passed: boolean
+  currentGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  defaultOffRequired: boolean
+  explicitOptInRequired: boolean
+  defaultEnableCandidate: boolean
+  violations: NativeSearchReleaseHandoffNoGoBoundaryViolation[]
+}
+
 export interface NativeSearchReleaseHandoffGateTransitionEvaluation {
   schemaVersion: 1
   gate: NativeSearchReleaseHandoffApprovalGate
@@ -518,6 +559,275 @@ export function evaluateNativeSearchReleaseHandoffGateTransition(
     violatedMustRemainUnverifiedFlags,
     noGoBoundaryViolations,
     failedCriteria,
+  }
+}
+
+export function evaluateNativeSearchReleaseHandoffNoGoBoundary(
+  summary: NativeRuntimeSmokeSummary,
+): NativeSearchReleaseHandoffNoGoBoundaryAudit {
+  const plan = summary.nativeSearchReleaseHandoffPlan
+  const packet = plan.currentGateExecutionInputPacket
+  const violations: NativeSearchReleaseHandoffNoGoBoundaryViolation[] = []
+
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    !summary.nativeSearchDefaultEnableReadiness.explicitOptInRequired,
+    'native_explicit_opt_in_not_required',
+    undefined,
+    'nativeSearchDefaultEnableReadiness.explicitOptInRequired',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate,
+    'default_enable_candidate_true',
+    undefined,
+    'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    !plan.defaultOffRequired && !plan.verified,
+    'release_handoff_default_off_not_required_before_verified',
+    plan.nextGate,
+    'nativeSearchReleaseHandoffPlan.defaultOffRequired',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    packet.gate !== plan.nextGate,
+    'execution_packet_gate_mismatch',
+    packet.gate,
+    'currentGateExecutionInputPacket.gate',
+  )
+
+  for (const evidence of getNativeSearchReleaseHandoffNoGoOrderedEvidence(summary)) {
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      evidence.value && !summary.optionalPackageExecutionPlan.completedPrerequisites.includes(evidence.stage),
+      'no_go_verified_flag_changed',
+      undefined,
+      evidence.field,
+    )
+  }
+
+  for (const item of plan.gateApprovalQueue) {
+    if (item.status === 'blocked_current_gate' && item.candidateCommands.length > 0) {
+      addNativeSearchReleaseHandoffNoGoViolation(
+        violations,
+        true,
+        'blocked_gate_exposes_candidate_commands',
+        item.gate,
+        'gateApprovalQueue.candidateCommands',
+      )
+    }
+    if (item.status === 'blocked_until_prior_gate_verified' && item.candidateCommands.length > 0) {
+      addNativeSearchReleaseHandoffNoGoViolation(
+        violations,
+        true,
+        'future_gate_exposes_candidate_commands',
+        item.gate,
+        'gateApprovalQueue.candidateCommands',
+      )
+    }
+  }
+
+  for (const item of plan.gateExecutionEvidenceChecklist) {
+    if (item.status === 'blocked_current_gate' && item.postExecutionVerificationCommands.length > 0) {
+      addNativeSearchReleaseHandoffNoGoViolation(
+        violations,
+        true,
+        'blocked_gate_exposes_post_execution_commands',
+        item.gate,
+        'gateExecutionEvidenceChecklist.postExecutionVerificationCommands',
+      )
+    }
+    if (item.status === 'blocked_until_prior_gate_verified' && item.postExecutionVerificationCommands.length > 0) {
+      addNativeSearchReleaseHandoffNoGoViolation(
+        violations,
+        true,
+        'future_gate_exposes_post_execution_commands',
+        item.gate,
+        'gateExecutionEvidenceChecklist.postExecutionVerificationCommands',
+      )
+    }
+  }
+
+  const expectedCurrentGateApprovalCommands = getNativeSearchReleaseHandoffNoGoExpectedApprovalCommands(
+    summary,
+    plan.currentGateApprovalPacket.gate,
+  )
+  if (plan.currentGateApprovalPacket.status === 'ready_for_approval' && expectedCurrentGateApprovalCommands) {
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !sameStringSet(plan.currentGateApprovalPacket.candidateCommands, expectedCurrentGateApprovalCommands),
+      'ready_gate_exposes_unexpected_candidate_commands',
+      plan.currentGateApprovalPacket.gate,
+      'currentGateApprovalPacket.candidateCommands',
+    )
+  }
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    plan.currentGateApprovalPacket.status === 'blocked'
+      && plan.currentGateApprovalPacket.candidateCommands.length > 0,
+    'blocked_gate_exposes_candidate_commands',
+    plan.currentGateApprovalPacket.gate,
+    'currentGateApprovalPacket.candidateCommands',
+  )
+
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    packet.status === 'blocked' && packet.candidateCommandsAfterApproval.length > 0,
+    'blocked_execution_packet_exposes_candidate_commands',
+    packet.gate,
+    'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    packet.status === 'blocked' && packet.postExecutionVerificationCommands.length > 0,
+    'blocked_execution_packet_exposes_post_execution_commands',
+    packet.gate,
+    'currentGateExecutionInputPacket.postExecutionVerificationCommands',
+  )
+
+  const expectedPacketCommands = packet.status === 'ready_after_approval'
+    ? getNativeSearchReleaseHandoffNoGoExpectedPacketCommands(packet.gate)
+    : null
+  if (expectedPacketCommands) {
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !sameStringSet(packet.candidateCommandsAfterApproval, expectedPacketCommands),
+      'ready_gate_exposes_unexpected_candidate_commands',
+      packet.gate,
+      'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+    )
+  }
+
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    packet.gate === 'optional_dependencies_declaration'
+      && packet.candidateCommandsAfterApproval.includes('bun install --frozen-lockfile'),
+    'declaration_gate_exposes_install_command',
+    packet.gate,
+    'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    packet.gate === 'optional_dependencies_declaration'
+      && !sameStringSet(packet.sideEffects.fileWriteTargets, ['apps/electron/package.json']),
+    'declaration_gate_has_unexpected_file_write_target',
+    packet.gate,
+    'currentGateExecutionInputPacket.sideEffects.fileWriteTargets',
+  )
+
+  if (packet.gate === 'optional_package_install_chain' && packet.status === 'ready_after_approval') {
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !packet.candidateCommandsAfterApproval.includes('bun install --frozen-lockfile'),
+      'install_chain_ready_missing_install_command',
+      packet.gate,
+      'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+    )
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !packet.sideEffects.networkRequired,
+      'install_chain_ready_missing_network_side_effect',
+      packet.gate,
+      'currentGateExecutionInputPacket.sideEffects.networkRequired',
+    )
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !packet.sideEffects.workspaceMutationRequired,
+      'install_chain_ready_missing_workspace_mutation',
+      packet.gate,
+      'currentGateExecutionInputPacket.sideEffects.workspaceMutationRequired',
+    )
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !packet.sideEffects.fileWriteTargets.includes('bun.lock'),
+      'install_chain_ready_missing_lockfile_write_target',
+      packet.gate,
+      'currentGateExecutionInputPacket.sideEffects.fileWriteTargets',
+    )
+  }
+
+  if (packet.gate === 'packaged_app_bundled_binary_smoke' && packet.status === 'ready_after_approval') {
+    const packagedSmokeCommands = [
+      ...packet.candidateCommandsAfterApproval,
+      ...packet.postExecutionVerificationCommands,
+    ]
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      !packet.postExecutionVerificationCommands.includes(getNativeSearchPackagedSmokePlaceholderCommand()),
+      'packaged_smoke_ready_missing_post_execution_command',
+      packet.gate,
+      'currentGateExecutionInputPacket.postExecutionVerificationCommands',
+    )
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      packagedSmokeCommands.some((command) => !command.includes('<packaged-app-root>')),
+      'packaged_smoke_command_not_packaged_app_root_placeholder',
+      packet.gate,
+      'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+    )
+  }
+
+  if (packet.gate === 'default_enable_risk_review') {
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      packet.status !== 'blocked',
+      'default_enable_gate_not_blocked',
+      packet.gate,
+      'currentGateExecutionInputPacket.status',
+    )
+    addNativeSearchReleaseHandoffNoGoViolation(
+      violations,
+      packet.candidateCommandsAfterApproval.length > 0 || packet.postExecutionVerificationCommands.length > 0,
+      'default_enable_gate_exposes_execution_commands',
+      packet.gate,
+      'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+    )
+  }
+
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    summary.bundledBinaryVerified && summary.packagedBundledBinarySmokePlan.status !== 'verified',
+    'no_go_verified_flag_changed',
+    undefined,
+    'bundledBinaryVerified',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    summary.realPackagedBinaryVerified && summary.packagedBundledBinarySmokeInvocationPlan.status !== 'verified',
+    'no_go_verified_flag_changed',
+    undefined,
+    'realPackagedBinaryVerified',
+  )
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    summary.optionalPackageExecutionPlan.verified
+      && !summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate,
+    'no_go_verified_flag_changed',
+    undefined,
+    'optionalPackageExecutionPlan.verified',
+  )
+
+  const summaryJson = JSON.stringify(summary)
+  addNativeSearchReleaseHandoffNoGoViolation(
+    violations,
+    summaryJson.includes('/Users/')
+      || summaryJson.includes('binaryPath')
+      || summaryJson.includes('registry.npmjs.org'),
+    'summary_leaks_sensitive_path_or_registry',
+    undefined,
+    'summary',
+  )
+
+  return {
+    schemaVersion: 1,
+    passed: violations.length === 0,
+    currentGate: plan.nextGate,
+    defaultOffRequired: plan.defaultOffRequired,
+    explicitOptInRequired: summary.nativeSearchDefaultEnableReadiness.explicitOptInRequired,
+    defaultEnableCandidate: summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate,
+    violations,
   }
 }
 
@@ -977,7 +1287,7 @@ function buildPackagedBundledBinarySmokePlan(input: {
       'do_not_modify_electron_builder_yml_without_approval',
       'do_not_add_native_search_optional_dependencies_before_publication',
     ],
-    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+    candidateCommand: getNativeSearchPackagedSmokePlaceholderCommand(),
   }
 }
 
@@ -1076,7 +1386,7 @@ function buildNativeSearchReleaseHandoffPlan(input: {
       'electron_builder_allowlist_includes_exact_native_search_packages',
       'native_search_default_enable_readiness_verified',
     ]),
-    candidateNextCommands,
+    candidateNextCommands: [...candidateNextCommands],
     doesNotVerify: [
       'optional_packages_published',
       'optional_dependencies_declared',
@@ -1132,23 +1442,23 @@ function buildNativeSearchReleaseHandoffExecutionInputPacket(input: {
       })
       : [],
     postExecutionVerificationCommands: readyAfterApproval && checklist
-      ? checklist.postExecutionVerificationCommands
+      ? [...checklist.postExecutionVerificationCommands]
       : [],
     sideEffects: {
       schemaVersion: 1,
       remoteWriteRequired: checklist?.remoteWriteRequired ?? false,
       workspaceMutationRequired: checklist?.workspaceMutationRequired ?? false,
       networkRequired: checklist?.networkRequired ?? false,
-      fileWriteTargets: checklist?.fileWriteTargets ?? [],
+      fileWriteTargets: checklist ? [...checklist.fileWriteTargets] : [],
     },
     requiredEvidenceAfterExecution: readyAfterApproval && checklist
-      ? checklist.requiredEvidenceAfterExecution
+      ? [...checklist.requiredEvidenceAfterExecution]
       : [],
     expectedNextGateAfterExecution: checklist?.expectedNextGateAfterVerification ?? input.nextGate,
     mustRemainUnverifiedAfterExecution: readyAfterApproval && checklist
-      ? checklist.mustRemainUnverifiedAfterExecution
+      ? [...checklist.mustRemainUnverifiedAfterExecution]
       : [],
-    doesNotVerify: checklist?.doesNotVerify ?? [],
+    doesNotVerify: checklist ? [...checklist.doesNotVerify] : [],
     forbiddenActions: uniqueStrings([
       ...input.currentGateApprovalPacket.forbiddenActions,
       ...(checklist?.forbiddenActions ?? []),
@@ -1171,7 +1481,7 @@ function getNativeSearchReleaseHandoffPostApprovalCandidateCommands(input: {
   switch (input.gate) {
     case 'optional_package_publication':
     case 'packaged_app_bundled_binary_smoke':
-      return input.currentGateApprovalPacket.candidateCommands
+      return [...input.currentGateApprovalPacket.candidateCommands]
     case 'optional_package_install_chain':
       return ['bun install --frozen-lockfile']
     case 'optional_dependencies_declaration':
@@ -1214,7 +1524,7 @@ function buildNativeSearchReleaseHandoffApprovalPacket(input: {
       status: 'blocked',
       approvalRequired: false,
       requiredApproval: null,
-      requiredEvidenceBeforeExecution: input.missingEvidence,
+      requiredEvidenceBeforeExecution: [...input.missingEvidence],
       allowedActionsAfterApproval: [],
       candidateCommands: [],
       doesNotAuthorize: [
@@ -1242,7 +1552,7 @@ function buildNativeSearchReleaseHandoffApprovalPacket(input: {
     requiredApproval: getNativeSearchReleaseHandoffRequiredApproval(input.nextGate),
     requiredEvidenceBeforeExecution: getNativeSearchReleaseHandoffApprovalEvidence(input.nextGate),
     allowedActionsAfterApproval: getNativeSearchReleaseHandoffAllowedActions(input.nextGate),
-    candidateCommands: input.candidateNextCommands,
+    candidateCommands: [...input.candidateNextCommands],
     doesNotAuthorize: getNativeSearchReleaseHandoffUnauthorizedActions(input.nextGate),
     forbiddenActions: getNativeSearchReleaseHandoffApprovalForbiddenActions(input.nextGate),
   }
@@ -1277,21 +1587,21 @@ function buildNativeSearchReleaseHandoffApprovalQueue(input: {
       requiredEvidenceBeforeExecution: status === 'verified'
         ? []
         : readyCurrentGate
-          ? input.currentGateApprovalPacket.requiredEvidenceBeforeExecution
+          ? [...input.currentGateApprovalPacket.requiredEvidenceBeforeExecution]
           : getNativeSearchReleaseHandoffApprovalEvidence(gate),
       allowedActionsAfterApproval: readyCurrentGate
-        ? input.currentGateApprovalPacket.allowedActionsAfterApproval
+        ? [...input.currentGateApprovalPacket.allowedActionsAfterApproval]
         : [],
       candidateCommands: readyCurrentGate
-        ? input.currentGateApprovalPacket.candidateCommands
+        ? [...input.currentGateApprovalPacket.candidateCommands]
         : [],
       doesNotAuthorize: status === 'verified'
         ? []
         : readyCurrentGate
-          ? input.currentGateApprovalPacket.doesNotAuthorize
+          ? [...input.currentGateApprovalPacket.doesNotAuthorize]
           : getNativeSearchReleaseHandoffUnauthorizedActions(gate),
       forbiddenActions: readyCurrentGate
-        ? input.currentGateApprovalPacket.forbiddenActions
+        ? [...input.currentGateApprovalPacket.forbiddenActions]
         : getNativeSearchReleaseHandoffApprovalQueueForbiddenActions(status),
     }
   })
@@ -1516,12 +1826,12 @@ function getNativeSearchReleaseHandoffGatePostExecutionVerificationCommands(
       ]
     case 'packaged_app_bundled_binary_smoke':
       return [
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+        getNativeSearchPackagedSmokePlaceholderCommand(),
       ]
     case 'default_enable_risk_review':
       return [
         "bun run --filter='@codeinsights/electron' native-runtime:benchmark",
-        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+        getNativeSearchPackagedSmokePlaceholderCommand(),
       ]
   }
 }
@@ -2047,13 +2357,13 @@ function getNativeSearchReleaseHandoffCandidateCommands(input: {
   switch (input.optionalPackageExecutionPlan.nextStage) {
     case 'optional_package_publication':
       return input.optionalPackagePublicationInvocationPlan.status === 'ready_for_invocation'
-        ? input.optionalPackagePublicationInvocationPlan.candidatePublicationCommands
+        ? [...input.optionalPackagePublicationInvocationPlan.candidatePublicationCommands]
         : []
     case 'optional_dependencies_declaration':
     case 'optional_package_install_chain':
-      return input.optionalDependenciesInstallChainChangePlan.candidateVerificationCommands
+      return [...input.optionalDependenciesInstallChainChangePlan.candidateVerificationCommands]
     case 'packaging_config_allowlist':
-      return input.packagingConfigAllowlistChangePlan.candidateVerificationCommands
+      return [...input.packagingConfigAllowlistChangePlan.candidateVerificationCommands]
     case 'packaged_app_bundled_binary_smoke':
       return input.packagedBundledBinarySmokeInvocationPlan.status === 'ready_for_execution'
         ? [input.packagedBundledBinarySmokeInvocationPlan.candidateCommand]
@@ -2063,12 +2373,145 @@ function getNativeSearchReleaseHandoffCandidateCommands(input: {
       return []
     case 'default_enable_risk_review':
     case 'complete':
-      return input.optionalPackageExecutionPlan.candidateCommands
+      return [...input.optionalPackageExecutionPlan.candidateCommands]
   }
 }
 
 function uniqueStrings(values: string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) === index)
+}
+
+function getNativeSearchPackagedSmokePlaceholderCommand(): string {
+  return "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry"
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  const leftSet = new Set(left)
+  const rightSet = new Set(right)
+  if (leftSet.size !== left.length || rightSet.size !== right.length) return false
+  if (leftSet.size !== rightSet.size) return false
+  return Array.from(leftSet).every((value) => rightSet.has(value))
+}
+
+function getNativeSearchReleaseHandoffNoGoOrderedEvidence(summary: NativeRuntimeSmokeSummary): Array<{
+  stage: NativeSearchReleaseHandoffApprovalGate
+  field: string
+  value: boolean
+}> {
+  return [
+    {
+      stage: 'optional_package_publication',
+      field: 'optionalPackagesPublished',
+      value: summary.optionalPackagesPublished,
+    },
+    {
+      stage: 'optional_dependencies_declaration',
+      field: 'optionalDependenciesDeclared',
+      value: summary.optionalDependenciesDeclared,
+    },
+    {
+      stage: 'optional_package_install_chain',
+      field: 'optionalDependenciesInstallChainVerified',
+      value: summary.optionalDependenciesInstallChainVerified,
+    },
+    {
+      stage: 'optional_package_install_chain',
+      field: 'optionalDependenciesLockfileVerified',
+      value: summary.optionalDependenciesLockfileVerified,
+    },
+    {
+      stage: 'optional_package_install_chain',
+      field: 'optionalDependenciesInstalledPackagesVerified',
+      value: summary.optionalDependenciesInstalledPackagesVerified,
+    },
+    {
+      stage: 'packaging_config_allowlist',
+      field: 'packagingConfigVerified',
+      value: summary.packagingConfigVerified,
+    },
+    {
+      stage: 'packaged_app_bundled_binary_smoke',
+      field: 'realPackagedBinaryVerified',
+      value: summary.realPackagedBinaryVerified,
+    },
+    {
+      stage: 'packaged_app_bundled_binary_smoke',
+      field: 'bundledBinaryVerified',
+      value: summary.bundledBinaryVerified,
+    },
+  ]
+}
+
+function getNativeSearchReleaseHandoffNoGoExpectedApprovalCommands(
+  _summary: NativeRuntimeSmokeSummary,
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] | null {
+  switch (gate) {
+    case 'optional_package_publication':
+      return NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      ))
+    case 'optional_dependencies_declaration':
+    case 'optional_package_install_chain':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+        'bun install --frozen-lockfile --dry-run',
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+        getNativeSearchPackagedSmokePlaceholderCommand(),
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [getNativeSearchPackagedSmokePlaceholderCommand()]
+    case 'default_enable_risk_review':
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return []
+  }
+}
+
+function getNativeSearchReleaseHandoffNoGoExpectedPacketCommands(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): string[] | null {
+  switch (gate) {
+    case 'optional_package_publication':
+      return null
+    case 'packaged_app_bundled_binary_smoke':
+      return [getNativeSearchPackagedSmokePlaceholderCommand()]
+    case 'optional_package_install_chain':
+      return ['bun install --frozen-lockfile']
+    case 'optional_dependencies_declaration':
+    case 'packaging_config_allowlist':
+    case 'default_enable_risk_review':
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return []
+  }
+}
+
+function addNativeSearchReleaseHandoffNoGoViolation(
+  violations: NativeSearchReleaseHandoffNoGoBoundaryViolation[],
+  condition: boolean,
+  code: NativeSearchReleaseHandoffNoGoBoundaryViolationCode,
+  gate?: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+  field?: string,
+): void {
+  if (!condition) return
+  const violation: NativeSearchReleaseHandoffNoGoBoundaryViolation = { code }
+  if (gate) violation.gate = gate
+  if (field) violation.field = field
+  if (violations.some((item) => (
+    item.code === violation.code
+    && item.gate === violation.gate
+    && item.field === violation.field
+  ))) {
+    return
+  }
+  violations.push(violation)
 }
 
 function getNativeSearchReleaseHandoffTransitionReadinessFailures(input: {
@@ -2232,7 +2675,7 @@ function buildPackagedBundledBinarySmokeInvocationPlan(input: {
       'summary_bundledBinaryVerified_true',
     ],
     executionDesign: buildPackagedBundledBinarySmokeExecutionDesign(),
-    candidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+    candidateCommand: getNativeSearchPackagedSmokePlaceholderCommand(),
     legacyCandidateCommand: "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --app-node-modules-root <packaged-app-node_modules> --check-registry",
     forbiddenActions: [
       'do_not_enable_native_by_default_before_verified',

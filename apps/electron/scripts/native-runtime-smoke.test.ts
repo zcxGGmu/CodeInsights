@@ -11,6 +11,7 @@ import {
 import {
   buildPackagedPackagingConfigPreflightCase,
   buildNativeRuntimeSmokeSummary,
+  evaluateNativeSearchReleaseHandoffNoGoBoundary,
   evaluateNativeSearchReleaseHandoffGateTransition,
   getNativeRuntimeSmokeExitCode,
   parseNativeRuntimeSmokeArgs,
@@ -1480,6 +1481,429 @@ describe('native-runtime-smoke', () => {
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
+  })
+
+  test('release handoff no-go audit 通过默认离线 blocked summary', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: false,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: false,
+      },
+      cases: [{ name: 'packaged-manifest', status: 'skipped' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary)).toEqual({
+      schemaVersion: 1,
+      passed: true,
+      currentGate: 'publish_target_preflight',
+      defaultOffRequired: true,
+      explicitOptInRequired: true,
+      defaultEnableCandidate: false,
+      violations: [],
+    })
+  })
+
+  test('release handoff no-go audit 允许 blocked approval packet 不要求 ready 命令', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'optional-package-publish-target',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+      },
+      cases: [{ name: 'publication-blocked-packet', status: 'passed' }],
+    })
+
+    summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.status = 'blocked'
+    summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.approvalRequired = false
+    summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands = []
+
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.gate)
+      .toBe('optional_package_publication')
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations)
+      .not.toContainEqual({
+        code: 'ready_gate_exposes_unexpected_candidate_commands',
+        gate: 'optional_package_publication',
+        field: 'currentGateApprovalPacket.candidateCommands',
+      })
+  })
+
+  test('release handoff no-go audit 允许 declaration ready 但不允许 install 命令外溢', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+      },
+      cases: [{ name: 'before-declaration', status: 'passed' }],
+    })
+
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      gate: 'optional_dependencies_declaration',
+      status: 'ready_after_approval',
+      candidateCommandsAfterApproval: [],
+      sideEffects: expect.objectContaining({
+        fileWriteTargets: ['apps/electron/package.json'],
+        networkRequired: false,
+        workspaceMutationRequired: true,
+      }),
+    }))
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([])
+  })
+
+  test('release handoff no-go audit 允许 install-chain ready 且要求 install 副作用显式', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+      },
+      cases: [{ name: 'before-install-chain', status: 'passed' }],
+    })
+
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      gate: 'optional_package_install_chain',
+      status: 'ready_after_approval',
+      candidateCommandsAfterApproval: ['bun install --frozen-lockfile'],
+      sideEffects: expect.objectContaining({
+        networkRequired: true,
+        workspaceMutationRequired: true,
+        fileWriteTargets: [
+          'bun.lock',
+          'apps/electron/node_modules/@codeinsights/native-search-*',
+        ],
+      }),
+    }))
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([])
+  })
+
+  test('release handoff no-go audit 允许 packaged smoke 后进入 default-enable blocked 状态', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+        realPackagedBinaryVerified: true,
+        bundledBinaryVerified: true,
+      },
+      cases: [{ name: 'after-packaged-smoke', status: 'passed' }],
+    })
+
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      gate: 'default_enable_risk_review',
+      status: 'blocked',
+      candidateCommandsAfterApproval: [],
+      postExecutionVerificationCommands: [],
+    }))
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([])
+  })
+
+  test('release handoff no-go audit 拒绝越界命令和提前 verified flag', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: false,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: false,
+      },
+      cases: [{ name: 'packaged-manifest', status: 'skipped' }],
+    })
+
+    summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue[1]?.candidateCommands.push('bun install --frozen-lockfile')
+    summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist[1]
+      ?.postExecutionVerificationCommands.push("bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest")
+    summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.candidateCommandsAfterApproval.push('npm publish')
+    summary.bundledBinaryVerified = true
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary)).toEqual({
+      schemaVersion: 1,
+      passed: false,
+      currentGate: 'publish_target_preflight',
+      defaultOffRequired: true,
+      explicitOptInRequired: true,
+      defaultEnableCandidate: false,
+      violations: [
+        {
+          code: 'no_go_verified_flag_changed',
+          field: 'bundledBinaryVerified',
+        },
+        {
+          code: 'future_gate_exposes_candidate_commands',
+          gate: 'optional_dependencies_declaration',
+          field: 'gateApprovalQueue.candidateCommands',
+        },
+        {
+          code: 'future_gate_exposes_post_execution_commands',
+          gate: 'optional_dependencies_declaration',
+          field: 'gateExecutionEvidenceChecklist.postExecutionVerificationCommands',
+        },
+        {
+          code: 'blocked_execution_packet_exposes_candidate_commands',
+          gate: 'publish_target_preflight',
+          field: 'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+        },
+      ],
+    })
+  })
+
+  test('release handoff no-go audit 拒绝前置 gate 未完成时提前出现真实证据', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: false,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: false,
+      },
+      cases: [{ name: 'packaged-manifest', status: 'skipped' }],
+    })
+
+    summary.optionalDependenciesDeclared = true
+    summary.optionalDependenciesInstallChainVerified = true
+    summary.optionalDependenciesLockfileVerified = true
+    summary.optionalDependenciesInstalledPackagesVerified = true
+    summary.packagingConfigVerified = true
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([
+      {
+        code: 'no_go_verified_flag_changed',
+        field: 'optionalDependenciesDeclared',
+      },
+      {
+        code: 'no_go_verified_flag_changed',
+        field: 'optionalDependenciesInstallChainVerified',
+      },
+      {
+        code: 'no_go_verified_flag_changed',
+        field: 'optionalDependenciesLockfileVerified',
+      },
+      {
+        code: 'no_go_verified_flag_changed',
+        field: 'optionalDependenciesInstalledPackagesVerified',
+      },
+      {
+        code: 'no_go_verified_flag_changed',
+        field: 'packagingConfigVerified',
+      },
+    ])
+  })
+
+  test('release handoff no-go audit 拒绝当前 ready gate 暴露额外候选命令', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+      },
+      cases: [{ name: 'before-install-chain', status: 'passed' }],
+    })
+
+    summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands.push('npm publish')
+    summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.candidateCommandsAfterApproval.push(
+      'npm publish',
+    )
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([
+      {
+        code: 'ready_gate_exposes_unexpected_candidate_commands',
+        gate: 'optional_package_install_chain',
+        field: 'currentGateApprovalPacket.candidateCommands',
+      },
+      {
+        code: 'ready_gate_exposes_unexpected_candidate_commands',
+        gate: 'optional_package_install_chain',
+        field: 'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+      },
+    ])
+  })
+
+  test('release handoff no-go audit 拒绝 packaged smoke ready 缺少占位命令', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-app-layout',
+      packagedAppNodeModulesResolution: createResolvedExplicitAppNodeModulesRoot(),
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+        optionalDependenciesInstallChainVerified: true,
+        optionalDependenciesLockfileVerified: true,
+        optionalDependenciesInstalledPackagesVerified: true,
+        packagingConfigVerified: true,
+        packagedAppLayoutVerified: true,
+        packagedAppEvidenceVerified: true,
+        packagedAppIdentityVerified: true,
+      },
+      cases: [{ name: 'before-packaged-smoke', status: 'passed' }],
+    })
+
+    summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.candidateCommandsAfterApproval = []
+    summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.postExecutionVerificationCommands = []
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([
+      {
+        code: 'ready_gate_exposes_unexpected_candidate_commands',
+        gate: 'packaged_app_bundled_binary_smoke',
+        field: 'currentGateExecutionInputPacket.candidateCommandsAfterApproval',
+      },
+      {
+        code: 'packaged_smoke_ready_missing_post_execution_command',
+        gate: 'packaged_app_bundled_binary_smoke',
+        field: 'currentGateExecutionInputPacket.postExecutionVerificationCommands',
+      },
+    ])
+  })
+
+  test('release handoff summary 命令数组不共享可变引用', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: true,
+      },
+      cases: [{ name: 'before-install-chain', status: 'passed' }],
+    })
+    const originalChangePlanCommands = [
+      ...summary.optionalDependenciesInstallChainChangePlan.candidateVerificationCommands,
+    ]
+    const originalApprovalCommands = [
+      ...summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands,
+    ]
+    const currentQueueItem = summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue
+      .find((item) => item.currentGate)
+
+    summary.nativeSearchReleaseHandoffPlan.candidateNextCommands.push('npm publish')
+    expect(summary.optionalDependenciesInstallChainChangePlan.candidateVerificationCommands)
+      .toEqual(originalChangePlanCommands)
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands)
+      .toEqual(originalApprovalCommands)
+
+    summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands.push('npm publish')
+    currentQueueItem?.candidateCommands.push('npm publish')
+
+    expect(summary.optionalDependenciesInstallChainChangePlan.candidateVerificationCommands)
+      .toEqual(originalChangePlanCommands)
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateApprovalPacket.candidateCommands)
+      .toContain('npm publish')
+    expect(currentQueueItem?.candidateCommands).toContain('npm publish')
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.candidateCommandsAfterApproval)
+      .toEqual(['bun install --frozen-lockfile'])
+  })
+
+  test('release handoff no-go audit 扫描完整 summary 的敏感路径和 registry 字符串', () => {
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: false,
+        optionalPackagePublishTargetReady: false,
+        optionalPackageSourceChecked: false,
+        optionalPackageSourceReady: false,
+      },
+      cases: [{ name: 'packaged-manifest', status: 'skipped', detail: '/Users/me/binaryPath' }],
+    })
+
+    expect(evaluateNativeSearchReleaseHandoffNoGoBoundary(summary).violations).toEqual([
+      {
+        code: 'summary_leaks_sensitive_path_or_registry',
+        field: 'summary',
+      },
+    ])
   })
 
   test('release handoff transition verifier 通过 publication gate 的合规迁移', () => {
