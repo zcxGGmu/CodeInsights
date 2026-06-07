@@ -1,5 +1,27 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 最新开发状态与启动提示词回填计划
+
+范围确认：用户要求更新文档最新开发状态、清楚标注完成 / 未完成，并给出下次启动可直接复制的提示词；同时要求把该动作记为每个阶段性任务完成后的固定习惯。本轮只同步 Rust / Go 文档、`tasks/todo.md` 和 `tasks/lessons.md`；不修改业务代码、根 `README.md` / 根 `AGENTS.md`、`apps/electron/electron-builder.yml`、`apps/electron/package.json` 或 `bun.lock`，不安装依赖，不执行 `npm publish`，不运行真实 install，不创建 packaged native binary，不 push，不创建 PR。启动核对显示当前分支为 `rust-go-refactor`，起始 HEAD 为 `40366181 docs(rust-go): 同步 Phase 5 gate 迁移校验器状态`，工作树起始干净，最新实现基线为 `66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器`。
+
+- [x] 读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan，并列出 `native/search/`。
+- [x] 运行 `git status --short --branch` 与 `git log -25 --oneline`，确认最近历史包含 `40366181`、`66da7eba`、`aa0091a3`、`da6d79dc`、`b874628b`、`9b599b37`、`4518a2ce`、`ec64fec3`、`72a00b01` 和 `cb30b819`。
+- [x] 更新 development checklist，把最新已确认状态同步 / 恢复入口推进到 `40366181`，并明确 Phase 0-4 已完成、Phase 5 已完成到 gate 迁移校验器及其状态同步。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把可复制提示词中的恢复入口推进到 `40366181`，并继续标注真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策未完成。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，把最新状态同步推进到 `40366181`，并保留 verifier / handoff / dry-run / invocation 不等于真实 verified 的边界。
+- [x] 更新 `tasks/lessons.md`，记录“阶段完成并验证通过后自动状态同步、no-go 验证、单独提交并给出下次启动提示词”为固定习惯。
+- [x] 运行 `git diff --check`、禁改文件 diff 检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档，并在最终回复给出实际 docs HEAD 与可直接复制的下次启动提示词。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 的最新已确认状态同步 / 恢复入口推进到 `40366181 docs(rust-go): 同步 Phase 5 gate 迁移校验器状态`，并保留“本轮再次提交后以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为准”的恢复规则。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 release handoff gate 迁移校验器及对应状态同步。真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成；Phase 6、Phase 7、Phase 9 暂停，Phase 8 只保留 Phase 5 packaged smoke 所需最小验证设计。
+- 习惯固化：已更新 `tasks/lessons.md`，记录每个阶段性任务完成并验证通过后，自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，单独提交状态同步文档，并在最终回复给出可直接复制的下次启动提示词。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / tasks 状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml apps/electron/package.json bun.lock` 无输出；`apps/electron/package.json` / `bun.lock` 无真实 `@codeinsights/native-search-*` optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+- 提交状态：本轮状态同步文档随本次提交单独落地；提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-07 Rust/Go Phase 5 release handoff gate 迁移校验器计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`；当前分支为 `rust-go-refactor`，工作树起始干净，启动 HEAD 为 `aa0091a3 docs(rust-go): 回填 Phase 5 最新恢复入口`，最新实现基线为 `b874628b feat(rust-go): 补齐 Phase 5 gate 状态迁移期望`，最近历史包含 `aa0091a3`、`da6d79dc`、`b874628b`、`9b599b37`、`4518a2ce`、`ec64fec3`、`72a00b01`、`cb30b819`。只读 explorer 复核后指出：`b874628b` 已把 transition expectation 写进 release handoff checklist，但这些字段仍只是描述性 metadata，缺少真实 gate 执行后的 summary 对比函数。本轮据此重规划，只新增纯函数 `evaluateNativeSearchReleaseHandoffGateTransition()` 及测试，用现有 expectation 校验 before / after summary 是否按顺序迁移、expected flags 是否变 true、must-remain flags 是否保持未验证、no-go 边界是否被破坏。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-07 Rust / Go 阶段性任务完成后的自动状态同步固定习惯
+
+- `40366181 docs(rust-go): 同步 Phase 5 gate 迁移校验器状态` 已成为本轮状态回填前最新已确认 Rust / Go docs 恢复入口；`66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器` 继续是最新实现基线。
+- 用户再次要求记住：每个阶段性任务完成并通过验证后，要自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，单独提交状态同步文档，并在最终回复提供可直接复制的下次启动提示词。
+- 这不是可选文档美化，而是阶段完成定义的一部分；即使当前 HEAD 已经是 docs 状态同步提交，也要用 `git status --short --branch` 和 `git log -25 --oneline` 核对真实 HEAD，再把最新已存在 docs HEAD 回填进恢复入口。
+- 状态同步必须清楚拆分“已完成”和“未完成”：ready / handoff / invocation / dry-run / candidateYamlEditPlan / currentGateApprovalPacket / gateApprovalQueue / gateExecutionEvidenceChecklist / transition expectation / transition verifier 都不能写成真实 publication、install-chain、builder verified、packaged binary verified 或 default-enable evidence。
+- 本轮 no-go 仍不变：native default off / 显式 opt-in；默认 smoke 不联网；不执行真实发布 / 安装；不修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不创建 packaged native binary；不 push / PR。
+
 ## 2026-06-07 Rust / Go Phase 5 release handoff 迁移校验器边界
 
 - `66da7eba feat(rust-go): 补齐 Phase 5 gate 迁移校验器` 已成为当前最新实现基线；状态同步提交前，已存在的最新恢复入口为 `aa0091a3 docs(rust-go): 回填 Phase 5 最新恢复入口`。
