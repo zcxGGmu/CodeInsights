@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 release handoff transition 子证据边界
+
+- release handoff 的状态迁移期望不能只看聚合 verified 字段。`optional_dependencies_declaration` 执行后，除 `optionalDependenciesInstallChainVerified` 必须保持未验证外，`optionalDependenciesLockfileVerified` 和 `optionalDependenciesInstalledPackagesVerified` 也必须保持未验证，避免 declaration gate 提前混入 install-chain 子证据。
+- 后续为 gate 设计 `mustRemainUnverifiedAfterExecution` 时，要同时列出该后续 gate 的聚合字段和所有可独立变 true 的子证据字段；不能只依赖最终聚合 gate 阻止跳阶段。
+
 ## 2026-06-07 Rust / Go 阶段完成后自动状态同步
 
 - `4518a2ce docs(rust-go): 收窄 Phase 5 后续范围` 已成为当前已存在的 Rust / Go docs 恢复入口；本轮再次状态同步后，最终回复必须给出新的实际 HEAD，并在下次启动提示词中要求用 `git log -5 --oneline` 确认最新 Rust / Go docs 提交。

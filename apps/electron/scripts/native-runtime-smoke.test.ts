@@ -789,6 +789,67 @@ describe('native-runtime-smoke', () => {
         workspaceMutationRequired: false,
       },
     ])
+    expect(summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      expectedNextGateAfterVerification: item.expectedNextGateAfterVerification,
+      expectedSummaryFlagsAfterExecution: item.expectedSummaryFlagsAfterExecution,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'optional_dependencies_declaration',
+        expectedSummaryFlagsAfterExecution: [
+          'optionalPackagePublicationChecked=true',
+          'optionalPackagesPublished=true',
+        ],
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'optional_package_install_chain',
+        expectedSummaryFlagsAfterExecution: [
+          'optionalDependenciesDeclared=true',
+        ],
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'packaging_config_allowlist',
+        expectedSummaryFlagsAfterExecution: [
+          'optionalDependenciesInstallChainVerified=true',
+          'optionalDependenciesLockfileVerified=true',
+          'optionalDependenciesInstalledPackagesVerified=true',
+        ],
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'packaged_app_bundled_binary_smoke',
+        expectedSummaryFlagsAfterExecution: [
+          'packagingConfigVerified=true',
+        ],
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'default_enable_risk_review',
+        expectedSummaryFlagsAfterExecution: [
+          'realPackagedBinaryVerified=true',
+          'bundledBinaryVerified=true',
+          'usesTemporaryFixture=false',
+        ],
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'complete',
+        expectedSummaryFlagsAfterExecution: [
+          'nativeSearchDefaultEnableReadiness.defaultEnableCandidate=true',
+          'optionalPackageExecutionPlan.verified=true',
+        ],
+      },
+    ])
     expect(summary.nativeSearchReleaseHandoffPlan.blockedBy).toEqual([
       'optional_package_publish_target_not_ready',
       'optional_package_source_not_ready',
@@ -1074,6 +1135,72 @@ describe('native-runtime-smoke', () => {
         'summary_optionalPackagesPublished_true_after_registry_check',
       ],
     }))
+    expect(executionChecklist.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      expectedNextGateAfterVerification: item.expectedNextGateAfterVerification,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'ready_for_approval',
+        expectedNextGateAfterVerification: 'optional_dependencies_declaration',
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'optional_package_install_chain',
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'packaging_config_allowlist',
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'packaged_app_bundled_binary_smoke',
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'default_enable_risk_review',
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        expectedNextGateAfterVerification: 'complete',
+      },
+    ])
+    expect(executionChecklist[0]).toEqual(expect.objectContaining({
+      expectedNextGateAfterVerification: 'optional_dependencies_declaration',
+      expectedSummaryFlagsAfterExecution: [
+        'optionalPackagePublicationChecked=true',
+        'optionalPackagesPublished=true',
+      ],
+      mustRemainUnverifiedAfterExecution: [
+        'optionalDependenciesDeclared',
+        'optionalDependenciesInstallChainVerified',
+        'optionalDependenciesLockfileVerified',
+        'optionalDependenciesInstalledPackagesVerified',
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ],
+      transitionFailClosedCriteria: [
+        'expected_next_gate_not_reached',
+        'expected_summary_flags_missing_after_execution',
+        'must_remain_unverified_flag_changed',
+        'no_go_boundary_violation',
+      ],
+      doesNotVerify: [
+        'optional_dependencies_declared',
+        'optional_dependencies_installed',
+        'packaging_config_verified',
+        'packaged_binary_verified',
+        'default_enable_candidate',
+      ],
+    }))
     expect(summary.nativeSearchReleaseHandoffPlan.acceptanceEvidence).toContain(
       'registry_packument_contains_exact_expected_versions',
     )
@@ -1095,6 +1222,115 @@ describe('native-runtime-smoke', () => {
     expect(summary.realPackagedBinaryVerified).toBe(false)
     expect(summary.bundledBinaryVerified).toBe(false)
     expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
+    expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
+  })
+
+  test('summary publication verified 后 transition 期望只推进到 optionalDependencies declaration', () => {
+    const packages = NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => plan.packageName)
+    const summary = buildNativeRuntimeSmokeSummary({
+      mode: 'packaged-manifest',
+      verification: {
+        optionalPackagePublishTargetChecked: true,
+        optionalPackagePublishTargetReady: true,
+        optionalPackagePublishTargetVersion: '0.0.3',
+        optionalPackageSourceChecked: true,
+        optionalPackageSourceReady: true,
+        optionalPackageSourceVersion: '0.0.3',
+        optionalPackageSourceReadyPackages: packages,
+        plannedOptionalPackageSourceManifestsVerified: true,
+        nativeSearchVersionConsistencyVerified: true,
+        plannedOptionalPackageManifestsVerified: true,
+        optionalPackagePublicationChecked: true,
+        optionalPackagesPublished: true,
+        publishedOptionalPackages: packages,
+        optionalDependenciesDeclared: false,
+      },
+      cases: [{
+        name: 'release-handoff',
+        status: 'passed',
+        detail: 'publication verified; optionalDependencies still missing',
+      }],
+    })
+
+    expect(summary.optionalPackagesPublished).toBe(true)
+    expect(summary.optionalDependenciesDeclared).toBe(false)
+    expect(summary.optionalDependenciesInstallChainVerified).toBe(false)
+    expect(summary.packagingConfigVerified).toBe(false)
+    expect(summary.realPackagedBinaryVerified).toBe(false)
+    expect(summary.bundledBinaryVerified).toBe(false)
+    expect(summary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(summary.nativeSearchReleaseHandoffPlan.nextGate).toBe('optional_dependencies_declaration')
+    expect(summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue.map((item) => ({
+      gate: item.gate,
+      status: item.status,
+      currentGate: item.currentGate,
+      candidateCommands: item.candidateCommands,
+    }))).toEqual([
+      {
+        gate: 'optional_package_publication',
+        status: 'verified',
+        currentGate: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'optional_dependencies_declaration',
+        status: 'blocked_current_gate',
+        currentGate: true,
+        candidateCommands: [],
+      },
+      {
+        gate: 'optional_package_install_chain',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaging_config_allowlist',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'packaged_app_bundled_binary_smoke',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        candidateCommands: [],
+      },
+      {
+        gate: 'default_enable_risk_review',
+        status: 'blocked_until_prior_gate_verified',
+        currentGate: false,
+        candidateCommands: [],
+      },
+    ])
+    const declarationChecklist = summary.nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist
+      .find((item) => item.gate === 'optional_dependencies_declaration')
+    expect(declarationChecklist).toEqual(expect.objectContaining({
+      status: 'blocked_current_gate',
+      currentGate: true,
+      postExecutionVerificationCommands: [],
+      expectedNextGateAfterVerification: 'optional_package_install_chain',
+      expectedSummaryFlagsAfterExecution: [
+        'optionalDependenciesDeclared=true',
+      ],
+      mustRemainUnverifiedAfterExecution: [
+        'optionalDependenciesInstallChainVerified',
+        'optionalDependenciesLockfileVerified',
+        'optionalDependenciesInstalledPackagesVerified',
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ],
+      transitionFailClosedCriteria: [
+        'expected_next_gate_not_reached',
+        'expected_summary_flags_missing_after_execution',
+        'must_remain_unverified_flag_changed',
+        'no_go_boundary_violation',
+      ],
+    }))
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')

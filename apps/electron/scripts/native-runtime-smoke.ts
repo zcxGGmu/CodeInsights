@@ -268,8 +268,12 @@ export interface NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem {
   remoteWriteRequired: boolean
   workspaceMutationRequired: boolean
   networkRequired: boolean
+  expectedNextGateAfterVerification: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  expectedSummaryFlagsAfterExecution: string[]
+  mustRemainUnverifiedAfterExecution: string[]
   successCriteria: string[]
   failClosedCriteria: string[]
+  transitionFailClosedCriteria: string[]
   doesNotVerify: string[]
   forbiddenActions: string[]
 }
@@ -1127,11 +1131,20 @@ function buildNativeSearchReleaseHandoffGateExecutionEvidenceChecklist(
         'packaged_app_bundled_binary_smoke',
         'default_enable_risk_review',
       ].includes(item.gate),
+      expectedNextGateAfterVerification: getNativeSearchReleaseHandoffGateExpectedNextGate(item.gate),
+      expectedSummaryFlagsAfterExecution: getNativeSearchReleaseHandoffGateExpectedSummaryFlags(item.gate),
+      mustRemainUnverifiedAfterExecution: getNativeSearchReleaseHandoffGateMustRemainUnverified(item.gate),
       successCriteria: [
         ...getNativeSearchReleaseHandoffGateExecutionEvidence(item.gate),
         'no_no_go_boundary_violation',
       ],
       failClosedCriteria: getNativeSearchReleaseHandoffGateFailClosedCriteria(item.gate),
+      transitionFailClosedCriteria: [
+        'expected_next_gate_not_reached',
+        'expected_summary_flags_missing_after_execution',
+        'must_remain_unverified_flag_changed',
+        'no_go_boundary_violation',
+      ],
       doesNotVerify: getNativeSearchReleaseHandoffGateExecutionDoesNotVerify(item.gate),
       forbiddenActions: uniqueStrings([
         ...item.forbiddenActions,
@@ -1185,6 +1198,109 @@ function getNativeSearchReleaseHandoffGateExecutionEvidence(
         'summary_bundledBinaryVerified_true',
         'default_enable_risk_review_approved',
       ]
+  }
+}
+
+function getNativeSearchReleaseHandoffGateExpectedNextGate(
+  gate: NativeSearchReleaseHandoffApprovalGate,
+): NativeSearchOptionalPackageExecutionPlan['nextStage'] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return 'optional_dependencies_declaration'
+    case 'optional_dependencies_declaration':
+      return 'optional_package_install_chain'
+    case 'optional_package_install_chain':
+      return 'packaging_config_allowlist'
+    case 'packaging_config_allowlist':
+      return 'packaged_app_bundled_binary_smoke'
+    case 'packaged_app_bundled_binary_smoke':
+      return 'default_enable_risk_review'
+    case 'default_enable_risk_review':
+      return 'complete'
+  }
+}
+
+function getNativeSearchReleaseHandoffGateExpectedSummaryFlags(
+  gate: NativeSearchReleaseHandoffApprovalGate,
+): string[] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        'optionalPackagePublicationChecked=true',
+        'optionalPackagesPublished=true',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        'optionalDependenciesDeclared=true',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        'optionalDependenciesInstallChainVerified=true',
+        'optionalDependenciesLockfileVerified=true',
+        'optionalDependenciesInstalledPackagesVerified=true',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        'packagingConfigVerified=true',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        'realPackagedBinaryVerified=true',
+        'bundledBinaryVerified=true',
+        'usesTemporaryFixture=false',
+      ]
+    case 'default_enable_risk_review':
+      return [
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate=true',
+        'optionalPackageExecutionPlan.verified=true',
+      ]
+  }
+}
+
+function getNativeSearchReleaseHandoffGateMustRemainUnverified(
+  gate: NativeSearchReleaseHandoffApprovalGate,
+): string[] {
+  switch (gate) {
+    case 'optional_package_publication':
+      return [
+        'optionalDependenciesDeclared',
+        'optionalDependenciesInstallChainVerified',
+        'optionalDependenciesLockfileVerified',
+        'optionalDependenciesInstalledPackagesVerified',
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ]
+    case 'optional_dependencies_declaration':
+      return [
+        'optionalDependenciesInstallChainVerified',
+        'optionalDependenciesLockfileVerified',
+        'optionalDependenciesInstalledPackagesVerified',
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ]
+    case 'optional_package_install_chain':
+      return [
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ]
+    case 'packaging_config_allowlist':
+      return [
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ]
+    case 'packaged_app_bundled_binary_smoke':
+      return [
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ]
+    case 'default_enable_risk_review':
+      return []
   }
 }
 
