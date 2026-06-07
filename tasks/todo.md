@@ -1,5 +1,21 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 no-go 边界审计状态同步计划
+
+范围确认：实现提交 `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计` 已落地并通过验证；本轮只同步 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review。继续保持 native default off / 显式 opt-in；不执行发布、不安装、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。
+
+- [x] 回填最新实现基线为 `8a0bcfd5`，最新已确认 docs 恢复入口为当前已存在的 `7898dae6`。
+- [x] 在 development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 标注 `evaluateNativeSearchReleaseHandoffNoGoBoundary()` 已完成。
+- [x] 在 `tasks/lessons.md` 记录 no-go audit 的审计边界、blocked packet / packaged smoke 命令校验边界和不可外推为真实 verified 的规则。
+- [x] 运行 no-go 边界验证并单独提交状态同步文档。
+
+### Review
+
+- 文档同步将 Phase 5 最新实现基线推进到 `8a0bcfd5`，并把本轮前最新 docs 恢复入口推进到 `7898dae6`；提交后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+- 完成项新增：release handoff no-go boundary audit 已完成，覆盖 default off / explicit opt-in、blocked / future gate 命令外溢、current approval / execution packet 命令边界、install-chain 副作用、packaged smoke 占位命令、default-enable blocked、提前 verified flag 和敏感字符串泄露。
+- 未完成项保持不变：真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成；ready / handoff / invocation / dry-run / approval packet / execution input packet / no-go audit 都不等于真实 verified。
+- 验证通过：stale 最新基线扫描无旧 `461295b0` / `5be9c233` 或 `66da7eba` / `40366181` 作为当前最新基线残留；`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml apps/electron/package.json bun.lock` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；提交前 `git status --short --branch` 仅显示本轮 5 个 docs / tasks 状态同步文件修改。
+
 ## 2026-06-07 Rust/Go Phase 5 release handoff no-go 边界审计计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。当前分支为 `rust-go-refactor`，启动后已读取指定 lessons / todo / Rust-Go docs / `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；上一阶段状态同步已单独提交为 `7898dae6 docs(rust-go): 同步 Phase 5 执行输入证据包状态`，最新实现基线为 `461295b0 feat(rust-go): 补齐 Phase 5 release handoff 执行输入证据包`。本轮只新增只读 release handoff no-go / execution-boundary audit helper，用现有 smoke summary 校验 `currentGateExecutionInputPacket`、`gateApprovalQueue`、`gateExecutionEvidenceChecklist` 与 default readiness 的一致性；不执行发布、不安装、不修改 builder、不新增真实 optionalDependencies、不创建 packaged native binary、不默认启用 native。
