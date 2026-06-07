@@ -1,5 +1,26 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 最小真实 optional package gate 启动计划
+
+范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；当前 HEAD 为 `7c8057e3 docs(rust-go): 收缩 Phase 5 后续核心 gate`，最新实现基线为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。本轮先做最小真实 optional package gate 的发布前只读 readiness：当前可验证平台为 darwin-arm64，对应计划包为 `@codeinsights/native-search-darwin-arm64`，但既有 smoke / manifest gate 仍按 4 个计划平台包输出整体矩阵。未获明确批准前，本轮不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR；native 继续 default off / 显式 opt-in，默认 smoke 不联网。
+
+- [x] 复核启动文件、`native/search` 版本和最近 Git 历史，确认 Cargo version 与 `BINARY_VERSION` 均为 `0.0.3`。
+- [x] 启动只读子代理分别复核 smoke / gate 命令边界与 optional package source shape。
+- [x] 运行 no-go 内只读验证：`optional-package-source --native-search-package-version 0.0.3`、显式 registry dry-run `optional-package-publish-target --check-registry`、默认离线 `packaged-manifest`。
+- [x] 运行 no-go 边界扫描：`git diff --check`、禁改文件 diff、真实 native optionalDependencies 扫描和 packaged native binary 产物扫描。
+- [x] 在本 Review 记录 readiness 结果、当前需要用户明确批准的最小真实 publication 命令集合，以及未完成 / no-go 边界。
+- [x] 若只读 readiness 通过，停止在真实 publication 前并请求用户明确批准；不把 ready / invocation / handoff / registry dry-run 外推为 package published。
+
+### Review
+
+- 启动恢复完成：当前分支为 `rust-go-refactor`，启动 HEAD 为 `7c8057e3 docs(rust-go): 收缩 Phase 5 后续核心 gate`，最近历史包含用户指定的 `7c8057e3`、`885e89b5`、`63e0fc2b`、`345dcf01`、`8a0bcfd5`、`7898dae6`、`461295b0`；工作树启动时干净。
+- `native/search` 版本一致：`native/search/Cargo.toml` package version 为 `0.0.3`，`native/search/src/lib.rs` 的 `BINARY_VERSION` 为 `0.0.3`；当前平台 darwin-arm64 对应计划包为 `@codeinsights/native-search-darwin-arm64`，但现有 smoke 仍按 4 个计划平台包输出整体矩阵。
+- 只读 readiness 结果：`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-source --native-search-package-version 0.0.3` 通过，`optionalPackageSourceReady=true`；`bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode optional-package-publish-target --native-search-package-version 0.0.3 --check-registry` 通过，`optionalPackagePublishTargetReady=true`、4 个 planned package 目标版本均可发布、无 collision / invalid / unavailable package。
+- 预期 no-go evidence：默认离线 `packaged-manifest` 通过且 no-go audit passed；显式 `packaged-manifest --check-registry` 预期 exit 1，`optionalPackagesPublished=false`，4 个 planned package 均在 `missingPublishedOptionalPackages`，说明真实 publication 尚未执行。
+- 下一步需要用户明确批准的真实 publication 命令集合仍是：`npm publish <native-search-package-source:@codeinsights/native-search-darwin-arm64> --access public`、`npm publish <native-search-package-source:@codeinsights/native-search-darwin-x64> --access public`、`npm publish <native-search-package-source:@codeinsights/native-search-win32-x64> --access public`、`npm publish <native-search-package-source:@codeinsights/native-search-linux-x64> --access public`；执行后必须跑 `packaged-manifest --check-registry` 验证 exact-version registry evidence。
+- 边界保持：本轮未执行真实 `npm publish`，未运行真实 install，未修改 `apps/electron/package.json` / `bun.lock` 以新增真实 optionalDependencies，未修改 `apps/electron/electron-builder.yml`，未创建 packaged app / native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR；native 继续 default off / 显式 opt-in。
+- 验证通过：`git diff --check` 无输出；禁改文件 diff 无输出；`apps/electron/package.json` / `bun.lock` 中无真实 `@codeinsights/native-search-*` optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+
 ## 2026-06-07 Rust/Go Phase 5 后续计划缩减与启动提示词状态同步计划
 
 范围确认：本轮只更新 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review，记录用户要求的“后续尽可能保留最核心关键部分”。当前实现基线仍是 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`，本轮前最新 docs 恢复入口为 `885e89b5 docs(rust-go): 同步 Phase 5 no-go audit summary 状态`。继续保持 native default off / 显式 opt-in；不执行真实 optional package 发布、不运行真实 install、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。

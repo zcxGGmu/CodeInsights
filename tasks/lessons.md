@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 最小 optional package gate 发布前 readiness
+
+- `7c8057e3 docs(rust-go): 收缩 Phase 5 后续核心 gate` 是本轮启动时的最新恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 本轮只读验证已确认 `native/search` 的 Cargo version 与 `BINARY_VERSION` 均为 `0.0.3`；`optional-package-source --native-search-package-version 0.0.3` 通过，显式 `optional-package-publish-target --native-search-package-version 0.0.3 --check-registry` 通过，4 个 planned package 的目标版本当前无 registry collision。
+- `packaged-manifest --check-registry` 预期失败且作为 no-go evidence：4 个 planned package 仍全部在 `missingPublishedOptionalPackages`，`optionalPackagesPublished=false`；这不是错误，而是说明真实 `npm publish` 尚未执行。
+- readiness / ready_for_invocation / candidate publish commands 不能外推为 package published。真实 publication 仍需要用户明确批准 `npm publish <native-search-package-source:...> --access public`，且执行后必须用 `packaged-manifest --check-registry` 重新拿 registry exact-version evidence。
+- 继续保持 no-go：native default off / 显式 opt-in；未获明确批准前不执行真实 `npm publish`、不运行真实 install、不新增真实 optionalDependencies、不修改 builder、不创建 packaged native binary、不修改根 `README.md` / `AGENTS.md`、不 push / PR。
+
 ## 2026-06-07 Rust / Go Phase 5 后续计划缩减与阶段收尾习惯
 
 - 用户已要求把后续 Phase 5 计划尽可能缩到核心关键：只保留最小真实 optional package gate、最小 install-chain gate、最小 packaged smoke gate；default-enable 继续暂缓，即使 packaged opt-in 最小验证通过，也只记录 packaged opt-in 可用，不默认启用 native。
