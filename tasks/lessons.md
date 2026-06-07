@@ -96,14 +96,14 @@
 - `f949fc13 feat(rust-go): 补齐 Phase 5 optional package publication invocation plan` 只把真实 `npm publish` 的 required inputs、candidate commands、per-package blocker、acceptance evidence 和 forbidden actions 机器可读化；`ready_for_invocation` 仍只表示可进入人工审核 / 调用，不等于 package 已发布。
 - `optionalPackagePublicationInvocationPlan.publishedPackages` 必须只来自 package-level `status="published"` 的有效 registry exact-version evidence；invalid、unavailable、duplicate、collision 或 plan-level 矛盾 evidence 都不能透传为已发布。
 - 完整 publication verified 必须要求 planned package 集合与 published package 集合唯一且严格匹配；任何重复、缺失、未知 package 或 metadata 无法验证，都只能进入 blocker / exclusion，不能让 `not_required_already_published` 或 default-enable gate 误通过。
-- 本轮仍不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 本轮仍不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策；Phase 6、Phase 7、Phase 9 已按 2026-06-07 当前范围暂停，Phase 8 全量 scope 已最小化。
 
 ## 2026-06-06 Rust / Go Phase 5 packaged smoke invocation 最新恢复入口回填
 
 - `076f25c6 docs(rust-go): 同步 Phase 5 packaged smoke invocation 状态` 是 `edeba827 feat(rust-go): 补齐 Phase 5 packaged smoke invocation plan` 后当前已确认的 Rust / Go docs 恢复入口；后续下次启动提示词的最新开发基线继续指向 `edeba827`，最新恢复入口应从 `076f25c6` 或其后的最新 Rust / Go docs 提交继续。
 - 当用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，必须同时更新 development checklist 顶部状态、底部可复制提示词和 `next-session-prompt.md`；不能只改一处，避免下次启动恢复入口分叉。
 - 阶段完成后的默认收尾固定为：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；最终回复里的提示词再补上本轮提交后的实际 HEAD。
-- 本轮只是恢复入口回填，不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 本轮只是恢复入口回填，不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策；Phase 6、Phase 7、Phase 9 已按 2026-06-07 当前范围暂停，Phase 8 全量 scope 已最小化。
 
 ## 2026-06-06 Rust / Go Phase 5 packaged smoke invocation plan 边界
 
@@ -111,14 +111,14 @@
 - `packagedBundledBinarySmokeInvocationPlan` 只表示真实 packaged app bundled binary smoke 的调用输入、候选命令、验收证据和禁止动作已机器可读化；它不创建 packaged app、不发布 package、不安装、不修改 builder、不读取 binary path，也不证明 `bundledBinaryVerified=true`。
 - 真实 packaged smoke 候选命令优先使用 `--packaged-app-root <packaged-app-root>`；legacy `--app-node-modules-root <packaged-app-node_modules>` 仅保留兼容，且 legacy root 缺失时必须进入 `app_node_modules_root_unresolved` blocker，不能标成 resolved。
 - packaged app root / node_modules root / binary path / home path / raw fs error 都不能泄露到 summary 或 docs 示例；只允许输出 evidence code、reason code、候选命令占位符和 gate 状态。
-- Phase 5 no-go 不变：native 继续 default off / 显式 opt-in；真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- Phase 5 no-go 不变：native 继续 default off / 显式 opt-in；真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策；Phase 6、Phase 7、Phase 9 已按 2026-06-07 当前范围暂停，Phase 8 全量 scope 已最小化。
 
 ## 2026-06-06 Rust / Go Phase 5 publication plan 最新恢复入口回填
 
 - `c4000bc9 docs(rust-go): 同步 Phase 5 publication plan 证据拆分状态` 曾是 `d679eabb fix(rust-go): 拆分 Phase 5 publication plan 发布证据` 后最新已确认 Rust / Go docs 恢复入口；本条已被上方 packaged smoke invocation plan lesson 覆盖，后续最新开发基线应指向 `edeba827`，不再停留在 `d679eabb` / `c4000bc9`。
 - 用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，即使上一轮已经完成状态同步，也要用当前 `git log` 回填真实最新 docs 提交，不能让 checklist 或 next-session prompt 停在旧恢复入口。
 - 每个阶段性任务完成并通过验证后，把状态同步作为默认收尾动作：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，并单独提交状态同步文档；不要等用户再次提醒。
-- 状态同步只改变恢复入口和完成 / 未完成说明，不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策和 Phase 6-9 仍未完成。
+- 状态同步只改变恢复入口和完成 / 未完成说明，不改变 Phase 5 no-go：native 继续 default off / 显式 opt-in；真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke、最终 default-enable 风险决策；Phase 6、Phase 7、Phase 9 已按 2026-06-07 当前范围暂停，Phase 8 全量 scope 已最小化。
 
 ## 2026-06-06 Rust / Go Phase 5 publication plan 发布证据边界
 
@@ -685,3 +685,9 @@
 - 即使 helper 已做保留名校验，runtime 合并 extra env 时也必须二次防护：禁止覆盖任何 Git guard/base env，禁止 `GIT_*` / proxy / Codex auth/home 等保留前缀，否则外部调用可绕过 helper。
 - 使用 SDK `config` 传 HTTP header 映射时，header name 也会变成 dotted config path 的 key；不能安全表示的 header key 先跳过或改用隔离 TOML，不能生成会被 CLI 解析成嵌套 map 的 override。
 - smoke 不能手写一份看起来等价的 Codex `--config` 参数；必须从真实 helper 输出派生验证输入，否则 helper 映射坏了 smoke 仍可能误报通过。
+
+## 2026-06-07 阶段范围收窄同步
+
+- 用户接受跳过或暂停后续阶段时，不能只在回复里说明；必须同步 `tasks/todo.md`、对应 development checklist 和 next-session prompt，把暂停阶段、最小化阶段、风险接受人和当前停止点写成新的恢复事实源。
+- 对仍保留的历史阶段清单，要在阶段标题或里程碑表标注 `[skip]` / `[min]`，避免下次 Codex 因旧 unchecked item 惯性推进已经暂停的 Phase。
+- 对 Phase 5 / Phase 8 这类有重叠 gate 的计划，要明确“最小 packaged 验证并入 Phase 5”不等于全量打包 / CI / 发布收口，也不授权修改 builder、声明 optionalDependencies、创建 packaged binary 或 default enable。

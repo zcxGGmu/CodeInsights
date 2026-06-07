@@ -8642,3 +8642,22 @@ CodeInsights 已具备 Agent / Pipeline 执行能力，但缺少类似 Codex App
 - 已在 `tasks/lessons.md` 补充每个阶段完成后要同步开发清单、更新 next-session prompt，并在 `tasks/todo.md` Review 中写明完成项、未完成项、验证结果和下一阶段入口。
 - 本轮仅修改 v1 文档、`tasks/lessons.md` 和 `tasks/todo.md`，未修改业务代码、根 `README.md`、根 `AGENTS.md`，未安装依赖，未 push。
 - 验证通过：`test -f docs/improve/pipeline/v1/next-session-prompt.md`；`rg -n "TODO|TBD|待补|xxx|FIXME" docs/improve/pipeline/v1/next-session-prompt.md docs/improve/pipeline/v1/2026-05-28-pipeline-mode-development-checklist.md` 无命中；Markdown 代码块 fence 成对；`git diff --check -- docs/improve/pipeline/v1 tasks/todo.md tasks/lessons.md`。
+
+## 2026-06-07 Rust / Go Phase 5 收口范围收窄计划
+
+范围确认：响应用户确认“Phase 6-9 可以不做”的建议，本轮只修改 Rust / Go 计划文档和任务记录，把当前目标收窄为 Phase 5 verified / release handoff 收口；Phase 6、Phase 7、Phase 9 暂停，Phase 8 仅保留 Phase 5 packaged smoke 所需的最小 packaged 验证设计。不修改业务代码、根 `README.md` / 根 `AGENTS.md`、`apps/electron/electron-builder.yml`、`apps/electron/package.json` 或 `bun.lock`，不安装依赖，不联网发布，不 push，不创建 PR。
+
+- [x] 复核当前分支、最近 Rust / Go 提交历史和 no-go 边界。
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，把 Phase 6 / 7 / 9 标为暂停，把 Phase 8 标为最小化，并同步下次启动入口。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把恢复提示词改为 Phase 5 verified 收口，不再默认推进 Phase 6-9。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，明确 Phase 5 smoke plan 仍是最小 packaged 验证来源，不代表全量 Phase 8。
+- [x] 更新 `tasks/lessons.md`，记录用户收窄阶段范围后必须同步 checklist / next-session prompt，避免后续会话惯性推进已暂停阶段。
+- [x] 运行文档 diff / no-go 验证，确认没有触碰禁止文件、没有新增 native optionalDependencies、没有创建 packaged native binary。
+- [x] 本轮只提交文档状态同步改动，提交信息使用详细中文。
+
+## 2026-06-07 Rust / Go Phase 5 收口范围收窄 Review
+
+- 已把当前计划改为 Phase 5 verified / release handoff 收口；Phase 6、Phase 7、Phase 9 明确暂停，Phase 8 全量打包 / CI / 发布收口不再作为当前独立阶段推进。
+- Phase 8 残留范围已收紧为 Phase 5 真实 packaged app bundled binary smoke 所需的最小 packaged 验证设计；不创建 packaged native binary，不修改 `apps/electron/electron-builder.yml`。
+- 当前 no-go 继续有效：native default off / 显式 opt-in；默认 smoke 不联网；不修改根 `README.md` / 根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不 push，不创建 PR。
+- 验证通过：`git diff --check`；禁止文件 diff 扫描 `README.md` / `AGENTS.md` / `apps/electron/electron-builder.yml` / `apps/electron/package.json` / `bun.lock` 无输出；`apps/electron/package.json` 与 `bun.lock` 无真实 `@codeinsights/native-search-*` optionalDependencies；packaged native binary / `native-search-package.json` 仓库扫描无输出；当前 Rust / Go 恢复入口文档不再保留 `Phase 6-9` 待推进口径。
