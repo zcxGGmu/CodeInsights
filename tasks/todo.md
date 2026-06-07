@@ -1,5 +1,26 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 最新开发状态回填计划
+
+范围确认：用户要求更新文档最新开发状态，清楚标注完成 / 未完成，确保下次启动可继续跟踪，并要求把该习惯固定为每个阶段性任务完成后的自动动作。本轮只做 docs / tasks 状态同步：当前分支为 `rust-go-refactor`，工作树起始干净，当前 HEAD 为 `da6d79dc docs(rust-go): 同步 Phase 5 gate 状态迁移期望`，最新实现基线为 `b874628b feat(rust-go): 补齐 Phase 5 gate 状态迁移期望`。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。
+
+- [x] 复核 `tasks/lessons.md`、`tasks/todo.md`、`next-session-prompt.md`、development checklist、sidecar protocol / smoke plan，并运行 `git status --short --branch` 与 `git log -8 --oneline`。
+- [x] 更新 development checklist，把最新已确认状态同步 / 恢复入口推进到 `da6d79dc`，并明确 Phase 0-4 已完成、Phase 5 已完成到 gate 状态迁移期望及其状态同步。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，把可复制提示词中的恢复入口推进到 `da6d79dc`，并继续标注真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策未完成。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，把最新状态同步推进到 `da6d79dc`，并保留 transition expectation 只读 / 不等于真实 verified 的边界。
+- [x] 更新 `tasks/lessons.md`，再次固化“每个阶段性任务完成后自动同步状态文档、Review、lessons、no-go 验证并给出下次启动提示词”的习惯。
+- [x] 运行 `git diff --check`、禁改文件 diff 检查、真实 native optionalDependencies 扫描、packaged native binary 产物扫描和 `git status --short --branch`。
+- [x] 单独提交本轮状态同步文档，并在最终回复给出实际 docs HEAD 与可直接复制的下次启动提示词。
+
+### Review
+
+- 文档校正：已将 Rust / Go development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 的最新已确认状态同步 / 恢复入口推进到 `da6d79dc docs(rust-go): 同步 Phase 5 gate 状态迁移期望`，并保留“本轮再次提交后以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为准”的恢复规则。
+- 完成 / 未完成状态保持清晰：Phase 0-4 已完成；Phase 5 已完成到 release handoff gate 状态迁移期望及对应状态同步。真实 optional package 发布、optionalDependencies 实际声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成；Phase 6、Phase 7、Phase 9 暂停，Phase 8 只保留 Phase 5 packaged smoke 所需最小验证设计。
+- 习惯固化：已更新 `tasks/lessons.md`，再次记录每个阶段性任务完成并验证通过后，自动更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 边界验证，单独提交状态同步文档，并在最终回复给出可直接复制的下次启动提示词。
+- 边界保持：native 继续 default off / 显式 opt-in；本轮只做文档 / tasks 状态同步，未创建 packaged native binary，未修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未 push，未创建 PR。
+- 验证通过：`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`git diff -- apps/electron/package.json bun.lock | rg -n '@codeinsights/native-search-' || true` 无输出；`rg -n '"@codeinsights/native-search-[^"]+"\\s*:' apps/electron/package.json || true` 无输出；`rg -n '"?@codeinsights/native-search-' bun.lock || true` 无输出；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`native-search` 或 `native-search.exe`。
+- 提交状态：本轮状态同步文档随本次提交单独落地；提交完成后以下次 `git log -5 --oneline` 中最新 Rust / Go docs 提交为实际恢复入口。
+
 ## 2026-06-07 Rust/Go Phase 5 release handoff gate 执行后状态迁移期望计划
 
 范围确认：继续 Phase 5 “Rust search sidecar 试点”。启动检查已读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、`docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`、`docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md` 和 `native/search/`；当前分支为 `rust-go-refactor`，工作树起始干净，启动 HEAD 为 `9b599b37 docs(rust-go): 同步 Phase 5 最新开发状态`，最新已确认实现基线仍为 `72a00b01 fix(rust-go): 标记 default enable 证据清单网络边界`，最近历史包含 `9b599b37`、`4518a2ce`、`ec64fec3`、`72a00b01`、`cb30b819`、`bc53cc75`、`9d8520fa`、`197569d5`。只读 explorer 复核后指出：现有 `gateExecutionEvidenceChecklist` 已说明“批准执行后要补哪些 evidence / post verification command”，但尚未说明“这些 evidence 成立后 summary 应迁移到哪个 next gate、哪些字段应变 true、哪些字段仍必须 false”。本轮据此重新规划，只在 `nativeSearchReleaseHandoffPlan.gateExecutionEvidenceChecklist` 中新增只读状态迁移期望字段，帮助后续真实 optional / packaged gate 执行后做 fail-closed 验收。继续保持 native default off / 显式 opt-in；默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR。

@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-06-07 Rust / Go 阶段完成后自动回填最新恢复入口
+
+- 阶段性实现或状态同步提交完成后，不能只停留在“文档里提示下次看 git log”；如果用户要求最新开发状态，必须把当前已存在的 docs HEAD 回填为 `next-session-prompt.md`、development checklist 和 sidecar / smoke plan 的最新恢复入口，并清楚标注完成 / 未完成。
+- 用户再次明确要求把“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”作为固定习惯。以后每个阶段性任务完成并验证通过后，自动执行：更新 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review、必要 lessons，运行 no-go 边界验证，单独提交状态同步文档，并在最终回复提供可直接复制的下次启动提示词。
+- 状态回填不能改变事实边界：ready / dry-run / handoff / approval packet / approval queue / execution checklist / transition expectation 仍不是 published、installed、builder verified、packaged binary verified 或 default-enable evidence；真实 verified 仍必须满足真实 optional / packaged gate 可执行通过。
+- 每次状态同步都要复核禁改边界：不修改根 `README.md` / 根 `AGENTS.md` / `apps/electron/electron-builder.yml`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不创建 packaged native binary，不 push / PR。
+
 ## 2026-06-07 Rust / Go Phase 5 release handoff transition 子证据边界
 
 - release handoff 的状态迁移期望不能只看聚合 verified 字段。`optional_dependencies_declaration` 执行后，除 `optionalDependenciesInstallChainVerified` 必须保持未验证外，`optionalDependenciesLockfileVerified` 和 `optionalDependenciesInstalledPackagesVerified` 也必须保持未验证，避免 declaration gate 提前混入 install-chain 子证据。
