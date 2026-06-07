@@ -683,6 +683,46 @@ describe('native-runtime-smoke', () => {
         'do_not_treat_blocked_packet_as_approved',
       ],
     })
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual({
+      schemaVersion: 1,
+      gate: 'publish_target_preflight',
+      status: 'blocked',
+      approvalRequiredBeforeExecution: false,
+      requiredApproval: null,
+      requiredInputsBeforeExecution: [
+        'optional_package_publish_target_registry_check',
+        'optional_package_source_preflight',
+        'optional_package_publication_registry_evidence',
+        'optional_dependencies_declared_in_package_json',
+        'optional_dependency_lockfile_resolved_entries',
+        'optional_dependency_installed_package_manifests',
+        'electron_builder_native_search_allowlist_verified',
+        'real_packaged_app_bundled_binary_smoke',
+        'default_enable_risk_review',
+      ],
+      allowedActionsAfterApproval: [],
+      candidateCommandsAfterApproval: [],
+      postExecutionVerificationCommands: [],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: false,
+        workspaceMutationRequired: false,
+        networkRequired: false,
+        fileWriteTargets: [],
+      },
+      requiredEvidenceAfterExecution: [],
+      expectedNextGateAfterExecution: 'publish_target_preflight',
+      mustRemainUnverifiedAfterExecution: [],
+      doesNotVerify: [],
+      forbiddenActions: [
+        'do_not_execute_candidate_commands_without_required_approval',
+        'do_not_skip_authoritative_next_gate',
+        'do_not_treat_approval_packet_as_completed_evidence',
+        'do_not_treat_blocked_packet_as_approved',
+        'do_not_execute_candidate_commands_before_required_approval',
+        'do_not_treat_execution_input_packet_as_completed_evidence',
+      ],
+    })
     expect(summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue.map((item) => ({
       gate: item.gate,
       status: item.status,
@@ -988,6 +1028,67 @@ describe('native-runtime-smoke', () => {
         'do_not_modify_bun_lock_before_publication_verified',
         'do_not_modify_electron_builder_yml_without_approval',
       ],
+    })
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual({
+      schemaVersion: 1,
+      gate: 'optional_package_publication',
+      status: 'ready_after_approval',
+      approvalRequiredBeforeExecution: true,
+      requiredApproval: 'release_approval',
+      requiredInputsBeforeExecution: [
+        'release_approval_recorded',
+        'npm_registry_auth_with_publish_access',
+        'optional_package_publish_target_ready',
+        'optional_package_source_ready',
+      ],
+      allowedActionsAfterApproval: [
+        'run_candidate_npm_publish_commands',
+        'run_packaged_manifest_registry_check_after_publish',
+      ],
+      candidateCommandsAfterApproval: NATIVE_SEARCH_OPTIONAL_PACKAGE_PLANS.map((plan) => (
+        `npm publish <native-search-package-source:${plan.packageName}> --access public`
+      )),
+      postExecutionVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest --check-registry",
+      ],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: true,
+        workspaceMutationRequired: false,
+        networkRequired: true,
+        fileWriteTargets: [],
+      },
+      requiredEvidenceAfterExecution: [
+        'npm_publish_commands_exit_zero_for_all_ready_packages',
+        'registry_packument_contains_exact_expected_versions',
+        'registry_metadata_matches_platform_arch_and_binary',
+        'summary_optionalPackagesPublished_true_after_registry_check',
+      ],
+      expectedNextGateAfterExecution: 'optional_dependencies_declaration',
+      mustRemainUnverifiedAfterExecution: [
+        'optionalDependenciesDeclared',
+        'optionalDependenciesInstallChainVerified',
+        'optionalDependenciesLockfileVerified',
+        'optionalDependenciesInstalledPackagesVerified',
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ],
+      doesNotVerify: [
+        'optional_dependencies_declared',
+        'optional_dependencies_installed',
+        'packaging_config_verified',
+        'packaged_binary_verified',
+        'default_enable_candidate',
+      ],
+      forbiddenActions: expect.arrayContaining([
+        'do_not_execute_candidate_commands_without_required_approval',
+        'do_not_modify_package_json_before_publication_verified',
+        'do_not_treat_execution_checklist_as_completed_evidence',
+        'do_not_execute_candidate_commands_before_required_approval',
+        'do_not_treat_execution_input_packet_as_completed_evidence',
+      ]),
     })
     expect(summary.nativeSearchReleaseHandoffPlan.gateApprovalQueue.map((item) => ({
       gate: item.gate,
@@ -1338,6 +1439,44 @@ describe('native-runtime-smoke', () => {
         'no_go_boundary_violation',
       ],
     }))
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      gate: 'optional_dependencies_declaration',
+      status: 'ready_after_approval',
+      approvalRequiredBeforeExecution: true,
+      requiredApproval: 'package_json_optional_dependencies_change_approval',
+      requiredInputsBeforeExecution: [
+        'optional_packages_published_for_expected_version',
+        'package_json_optional_dependencies_change_approval',
+      ],
+      allowedActionsAfterApproval: [
+        'edit_apps_electron_package_json_optional_dependencies',
+        'review_native_search_optional_dependency_specs',
+      ],
+      candidateCommandsAfterApproval: [],
+      postExecutionVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: false,
+        workspaceMutationRequired: true,
+        networkRequired: false,
+        fileWriteTargets: ['apps/electron/package.json'],
+      },
+      requiredEvidenceAfterExecution: [
+        'apps_electron_package_json_contains_exact_native_search_optional_dependencies',
+        'native_search_optional_dependency_specs_are_exact_versions',
+        'summary_optionalDependenciesDeclared_true',
+      ],
+      expectedNextGateAfterExecution: 'optional_package_install_chain',
+    }))
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.forbiddenActions).toContain(
+      'do_not_treat_execution_input_packet_as_completed_evidence',
+    )
+    expect(summary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.candidateCommandsAfterApproval).not.toContain(
+      'bun install --frozen-lockfile',
+    )
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('/Users/')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('binaryPath')
     expect(JSON.stringify(summary.nativeSearchReleaseHandoffPlan)).not.toContain('registry.npmjs.org')
@@ -1692,6 +1831,57 @@ describe('native-runtime-smoke', () => {
       cases: [{ name: 'after-install-chain', status: 'passed' }],
     })
 
+    expect(beforeSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      gate: 'optional_package_install_chain',
+      status: 'ready_after_approval',
+      approvalRequiredBeforeExecution: true,
+      requiredApproval: 'install_chain_execution_approval',
+      requiredInputsBeforeExecution: [
+        'optional_dependencies_declared_in_package_json',
+        'install_chain_execution_approval',
+      ],
+      allowedActionsAfterApproval: [
+        'run_bun_install_for_native_search_optional_dependencies',
+        'verify_bun_lock_resolved_entries',
+        'verify_installed_package_manifests',
+      ],
+      candidateCommandsAfterApproval: ['bun install --frozen-lockfile'],
+      postExecutionVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-manifest",
+      ],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: false,
+        workspaceMutationRequired: true,
+        networkRequired: true,
+        fileWriteTargets: [
+          'bun.lock',
+          'apps/electron/node_modules/@codeinsights/native-search-*',
+        ],
+      },
+      requiredEvidenceAfterExecution: [
+        'bun_install_completed_after_optional_dependencies_declaration',
+        'optional_dependency_lockfile_resolved_entries_present',
+        'optional_dependency_installed_package_manifests_valid',
+        'summary_optionalDependenciesInstallChainVerified_true',
+      ],
+      expectedNextGateAfterExecution: 'packaging_config_allowlist',
+      mustRemainUnverifiedAfterExecution: [
+        'packagingConfigVerified',
+        'realPackagedBinaryVerified',
+        'bundledBinaryVerified',
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ],
+      doesNotVerify: [
+        'packaging_config_verified',
+        'packaged_binary_verified',
+        'default_enable_candidate',
+      ],
+    }))
+    expect(beforeSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.forbiddenActions).toContain(
+      'do_not_run_install_chain_before_install_chain_approval',
+    )
     expect(evaluateNativeSearchReleaseHandoffGateTransition({
       gate: 'optional_package_install_chain',
       beforeSummary,
@@ -1992,6 +2182,54 @@ describe('native-runtime-smoke', () => {
       cases: [{ name: 'after-packaged-smoke', status: 'passed' }],
     })
 
+    expect(beforeSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      gate: 'packaged_app_bundled_binary_smoke',
+      status: 'ready_after_approval',
+      approvalRequiredBeforeExecution: true,
+      requiredApproval: 'packaged_app_smoke_execution_approval',
+      requiredInputsBeforeExecution: [
+        'optional_packages_published_for_expected_version',
+        'optional_dependencies_install_chain_verified',
+        'builder_allowlist_includes_native_search_packages',
+        'prebuilt_packaged_app_root',
+        'packaged_app_identity',
+        'packaged_app_smoke_execution_approval',
+      ],
+      allowedActionsAfterApproval: [
+        'run_packaged_app_layout_smoke_with_packaged_app_root',
+        'verify_summary_bundledBinaryVerified_true',
+      ],
+      candidateCommandsAfterApproval: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+      ],
+      postExecutionVerificationCommands: [
+        "bun run --filter='@codeinsights/electron' smoke:native-runtime -- --mode packaged-app-layout --packaged-app-root <packaged-app-root> --check-registry",
+      ],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: false,
+        workspaceMutationRequired: false,
+        networkRequired: true,
+        fileWriteTargets: [],
+      },
+      requiredEvidenceAfterExecution: [
+        'real_packaged_app_root_used',
+        'packaged_app_identity_matches_codeinsights_electron',
+        'realPackagedBinaryVerified_true',
+        'summary_bundledBinaryVerified_true',
+      ],
+      expectedNextGateAfterExecution: 'default_enable_risk_review',
+      mustRemainUnverifiedAfterExecution: [
+        'nativeSearchDefaultEnableReadiness.defaultEnableCandidate',
+      ],
+      doesNotVerify: [
+        'default_enable_candidate',
+      ],
+    }))
+    expect(beforeSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.forbiddenActions).toContain(
+      'do_not_create_packaged_native_binary_from_approval_packet',
+    )
     expect(evaluateNativeSearchReleaseHandoffGateTransition({
       gate: 'packaged_app_bundled_binary_smoke',
       beforeSummary,
@@ -2008,6 +2246,35 @@ describe('native-runtime-smoke', () => {
       failedCriteria: [],
     })
     expect(afterSummary.nativeSearchDefaultEnableReadiness.defaultEnableCandidate).toBe(false)
+    expect(afterSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket).toEqual(expect.objectContaining({
+      schemaVersion: 1,
+      gate: 'default_enable_risk_review',
+      status: 'blocked',
+      approvalRequiredBeforeExecution: false,
+      requiredApproval: null,
+      requiredInputsBeforeExecution: [
+        'default_enable_risk_review',
+      ],
+      allowedActionsAfterApproval: [],
+      candidateCommandsAfterApproval: [],
+      postExecutionVerificationCommands: [],
+      sideEffects: {
+        schemaVersion: 1,
+        remoteWriteRequired: false,
+        workspaceMutationRequired: false,
+        networkRequired: true,
+        fileWriteTargets: [],
+      },
+      requiredEvidenceAfterExecution: [],
+      expectedNextGateAfterExecution: 'complete',
+      mustRemainUnverifiedAfterExecution: [],
+      doesNotVerify: [
+        'remote_publication_or_install_chain',
+      ],
+    }))
+    expect(afterSummary.nativeSearchReleaseHandoffPlan.currentGateExecutionInputPacket.forbiddenActions).toContain(
+      'do_not_treat_execution_input_packet_as_completed_evidence',
+    )
   })
 
   test('summary 顶层 ready 字段必须绑定 checked，避免和 execution plan 分叉', () => {

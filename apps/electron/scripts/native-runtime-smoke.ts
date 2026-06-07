@@ -278,6 +278,37 @@ export interface NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem {
   forbiddenActions: string[]
 }
 
+export type NativeSearchReleaseHandoffExecutionInputPacketStatus =
+  | 'blocked'
+  | 'ready_after_approval'
+  | 'verified'
+
+export interface NativeSearchReleaseHandoffExecutionInputSideEffects {
+  schemaVersion: 1
+  remoteWriteRequired: boolean
+  workspaceMutationRequired: boolean
+  networkRequired: boolean
+  fileWriteTargets: string[]
+}
+
+export interface NativeSearchReleaseHandoffExecutionInputPacket {
+  schemaVersion: 1
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  status: NativeSearchReleaseHandoffExecutionInputPacketStatus
+  approvalRequiredBeforeExecution: boolean
+  requiredApproval: string | null
+  requiredInputsBeforeExecution: string[]
+  allowedActionsAfterApproval: string[]
+  candidateCommandsAfterApproval: string[]
+  postExecutionVerificationCommands: string[]
+  sideEffects: NativeSearchReleaseHandoffExecutionInputSideEffects
+  requiredEvidenceAfterExecution: string[]
+  expectedNextGateAfterExecution: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  mustRemainUnverifiedAfterExecution: string[]
+  doesNotVerify: string[]
+  forbiddenActions: string[]
+}
+
 export interface NativeSearchReleaseHandoffGateTransitionEvaluation {
   schemaVersion: 1
   gate: NativeSearchReleaseHandoffApprovalGate
@@ -308,6 +339,7 @@ export interface NativeSearchReleaseHandoffPlan {
   currentGateApprovalPacket: NativeSearchReleaseHandoffApprovalPacket
   gateApprovalQueue: NativeSearchReleaseHandoffApprovalQueueItem[]
   gateExecutionEvidenceChecklist: NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem[]
+  currentGateExecutionInputPacket: NativeSearchReleaseHandoffExecutionInputPacket
   requiredApprovals: string[]
   acceptanceEvidence: string[]
   candidateNextCommands: string[]
@@ -993,6 +1025,12 @@ function buildNativeSearchReleaseHandoffPlan(input: {
     nextGate: input.optionalPackageExecutionPlan.nextStage,
     currentGateApprovalPacket,
   })
+  const gateExecutionEvidenceChecklist = buildNativeSearchReleaseHandoffGateExecutionEvidenceChecklist(gateApprovalQueue)
+  const currentGateExecutionInputPacket = buildNativeSearchReleaseHandoffExecutionInputPacket({
+    nextGate: input.optionalPackageExecutionPlan.nextStage,
+    currentGateApprovalPacket,
+    gateExecutionEvidenceChecklist,
+  })
 
   return {
     schemaVersion: 1,
@@ -1018,7 +1056,8 @@ function buildNativeSearchReleaseHandoffPlan(input: {
     },
     currentGateApprovalPacket,
     gateApprovalQueue,
-    gateExecutionEvidenceChecklist: buildNativeSearchReleaseHandoffGateExecutionEvidenceChecklist(gateApprovalQueue),
+    gateExecutionEvidenceChecklist,
+    currentGateExecutionInputPacket,
     requiredApprovals: [
       'release_approval',
       'npm_registry_publish_access',
@@ -1057,6 +1096,91 @@ function buildNativeSearchReleaseHandoffPlan(input: {
       'do_not_treat_release_handoff_as_packaged_binary_verified',
       'do_not_enable_native_by_default_before_verified',
     ],
+  }
+}
+
+function buildNativeSearchReleaseHandoffExecutionInputPacket(input: {
+  nextGate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  currentGateApprovalPacket: NativeSearchReleaseHandoffApprovalPacket
+  gateExecutionEvidenceChecklist: NativeSearchReleaseHandoffGateExecutionEvidenceChecklistItem[]
+}): NativeSearchReleaseHandoffExecutionInputPacket {
+  const checklist = isNativeSearchReleaseHandoffApprovalGate(input.nextGate)
+    ? input.gateExecutionEvidenceChecklist.find((item) => item.gate === input.nextGate)
+    : undefined
+  const readyAfterApproval = input.currentGateApprovalPacket.status === 'ready_for_approval'
+    && checklist?.currentGate === true
+    && checklist.status === 'ready_for_approval'
+  const verified = input.currentGateApprovalPacket.status === 'verified'
+  const status: NativeSearchReleaseHandoffExecutionInputPacketStatus = verified
+    ? 'verified'
+    : readyAfterApproval ? 'ready_after_approval' : 'blocked'
+
+  return {
+    schemaVersion: 1,
+    gate: input.nextGate,
+    status,
+    approvalRequiredBeforeExecution: readyAfterApproval,
+    requiredApproval: readyAfterApproval ? input.currentGateApprovalPacket.requiredApproval : null,
+    requiredInputsBeforeExecution: input.currentGateApprovalPacket.requiredEvidenceBeforeExecution,
+    allowedActionsAfterApproval: readyAfterApproval
+      ? input.currentGateApprovalPacket.allowedActionsAfterApproval
+      : [],
+    candidateCommandsAfterApproval: readyAfterApproval
+      ? getNativeSearchReleaseHandoffPostApprovalCandidateCommands({
+        gate: input.nextGate,
+        currentGateApprovalPacket: input.currentGateApprovalPacket,
+      })
+      : [],
+    postExecutionVerificationCommands: readyAfterApproval && checklist
+      ? checklist.postExecutionVerificationCommands
+      : [],
+    sideEffects: {
+      schemaVersion: 1,
+      remoteWriteRequired: checklist?.remoteWriteRequired ?? false,
+      workspaceMutationRequired: checklist?.workspaceMutationRequired ?? false,
+      networkRequired: checklist?.networkRequired ?? false,
+      fileWriteTargets: checklist?.fileWriteTargets ?? [],
+    },
+    requiredEvidenceAfterExecution: readyAfterApproval && checklist
+      ? checklist.requiredEvidenceAfterExecution
+      : [],
+    expectedNextGateAfterExecution: checklist?.expectedNextGateAfterVerification ?? input.nextGate,
+    mustRemainUnverifiedAfterExecution: readyAfterApproval && checklist
+      ? checklist.mustRemainUnverifiedAfterExecution
+      : [],
+    doesNotVerify: checklist?.doesNotVerify ?? [],
+    forbiddenActions: uniqueStrings([
+      ...input.currentGateApprovalPacket.forbiddenActions,
+      ...(checklist?.forbiddenActions ?? []),
+      'do_not_execute_candidate_commands_before_required_approval',
+      'do_not_treat_execution_input_packet_as_completed_evidence',
+    ]),
+  }
+}
+
+function isNativeSearchReleaseHandoffApprovalGate(
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage'],
+): gate is NativeSearchReleaseHandoffApprovalGate {
+  return NATIVE_SEARCH_RELEASE_HANDOFF_APPROVAL_GATES.includes(gate as NativeSearchReleaseHandoffApprovalGate)
+}
+
+function getNativeSearchReleaseHandoffPostApprovalCandidateCommands(input: {
+  gate: NativeSearchOptionalPackageExecutionPlan['nextStage']
+  currentGateApprovalPacket: NativeSearchReleaseHandoffApprovalPacket
+}): string[] {
+  switch (input.gate) {
+    case 'optional_package_publication':
+    case 'packaged_app_bundled_binary_smoke':
+      return input.currentGateApprovalPacket.candidateCommands
+    case 'optional_package_install_chain':
+      return ['bun install --frozen-lockfile']
+    case 'optional_dependencies_declaration':
+    case 'packaging_config_allowlist':
+    case 'default_enable_risk_review':
+    case 'publish_target_preflight':
+    case 'package_source_preflight':
+    case 'complete':
+      return []
   }
 }
 
