@@ -1,8 +1,15 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 no-go audit summary 与 installed manifest metadata 加固
+
+- `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 已成为当前最新实现基线；本轮状态同步前最新已确认 docs 恢复入口为 `345dcf01 docs(rust-go): 同步 Phase 5 no-go 边界审计状态`。
+- `NativeRuntimeSmokeSummary.nativeSearchReleaseHandoffNoGoBoundaryAudit` 与 `release-handoff-no-go-boundary-audit` smoke case 只是把既有只读 no-go audit 外显为可归档 evidence；audit 失败会让 smoke exit code fail closed，但 audit 通过仍不等于 package published、optionalDependencies declared / installed、builder allowlist modified、real packaged binary verified、bundledBinaryVerified 或 default-enable candidate。
+- installed optional package manifest 校验不能只看 `name/version`。`validateNativeSearchOptionalPackageInstallChain()` 必须要求 installed package manifest 满足 optional package source 的严格 package.json shape：exact version、`os` / `cpu` / `bin` / `files` / `publishConfig.access=public` 与 planned package 一致，并拒绝 lifecycle scripts 与 runtime dependency 字段。
+- 本轮 no-go 不变：native default off / 显式 opt-in；默认 smoke 不联网；不执行真实发布 / 安装；不修改 `apps/electron/electron-builder.yml`、根 `README.md`、根 `AGENTS.md`；不新增真实 `@codeinsights/native-search-*` optionalDependencies；不创建 packaged native binary；不 push / PR。
+
 ## 2026-06-07 Rust / Go Phase 5 release handoff no-go 边界审计
 
-- `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计` 已成为当前最新实现基线；本轮状态同步前最新已确认 docs 恢复入口为 `7898dae6 docs(rust-go): 同步 Phase 5 执行输入证据包状态`。
+- `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计` 是该阶段当时的实现基线，已被 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 取代；该阶段状态同步前最新已确认 docs 恢复入口为 `7898dae6 docs(rust-go): 同步 Phase 5 执行输入证据包状态`。
 - `evaluateNativeSearchReleaseHandoffNoGoBoundary()` 只能做只读边界审计：检查 default off / explicit opt-in、blocked / future gate 命令外溢、currentGateApprovalPacket / currentGateExecutionInputPacket / gateApprovalQueue / gateExecutionEvidenceChecklist 的命令与副作用边界、提前 verified flag 和敏感路径 / registry 字符串泄露。它不执行命令、不联网、不写文件、不读取 binary path。
 - blocked approval packet 不能按 ready gate 的候选命令集合校验；只有 `status="ready_for_approval"` 时才比较 expected candidate commands。blocked packet 的失败条件是暴露了 candidate commands，而不是缺少 ready commands。
 - packaged smoke ready gate 必须同时要求 `<packaged-app-root>` 占位候选命令和 post-execution verification command；命令数组必须 clone，避免 release handoff plan 的 candidate arrays 被外部 mutation alias 污染。

@@ -1,5 +1,23 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 no-go audit summary 与 install-chain metadata 状态同步计划
+
+范围确认：实现提交 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 已落地并通过验证；本轮只同步 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review。继续保持 native default off / 显式 opt-in；不执行发布、不安装、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。
+
+- [x] 回填最新实现基线为 `63e0fc2b`，最新已确认 docs 恢复入口为当前已存在的 `345dcf01`。
+- [x] 在 development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 标注 `nativeSearchReleaseHandoffNoGoBoundaryAudit` summary / smoke case 已外显。
+- [x] 标注 install-chain installed package manifest metadata 已加固：只有完整 optional package source package.json shape 才能通过 installed package 校验。
+- [x] 在 `tasks/lessons.md` 记录 no-go audit summary 外显、install-chain metadata 加固和不可外推为真实 verified 的规则。
+- [x] 运行 no-go 边界验证并单独提交状态同步文档。
+
+### Review
+
+- 文档同步完成：development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review 已回填 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`；本轮前最新已确认 docs 恢复入口为 `345dcf01 docs(rust-go): 同步 Phase 5 no-go 边界审计状态`，提交后以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口。
+- 状态边界已补齐：`nativeSearchReleaseHandoffNoGoBoundaryAudit` summary 字段和 `release-handoff-no-go-boundary-audit` smoke case 只表示只读 no-go audit 外显，audit failed 会让 smoke fail closed；audit passed 仍不等于真实 publication、optionalDependencies declaration / install-chain、builder allowlist、packaged binary 或 default-enable verified。
+- Install-chain metadata 口径已同步：installed package manifest 不能只靠 `name/version` 通过，必须满足 optional package source package.json 严格 shape，包括 exact version、`os` / `cpu`、`bin`、精确 `files`、`publishConfig.access=public`，并拒绝 lifecycle scripts 与 runtime dependency 字段；metadata 不合规时 install-chain smoke 必须 failed。
+- 未完成项保持不变：真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和最终 default-enable 风险决策仍未完成；native 继续 default off / 显式 opt-in。
+- 验证通过：stale 最新基线扫描无输出；`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+
 ## 2026-06-07 Rust/Go Phase 5 no-go audit summary 与 install-chain metadata 加固计划
 
 范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；当前 HEAD 为 `345dcf01 docs(rust-go): 同步 Phase 5 no-go 边界审计状态`，最新实现基线为 `8a0bcfd5 feat(rust-go): 补齐 Phase 5 release handoff no-go 边界审计`。本轮只在 native default off / 显式 opt-in 前提下推进两个 no-go 内切片：把已有 `evaluateNativeSearchReleaseHandoffNoGoBoundary()` 外显到 smoke summary / case 证据面，并加固 optional package install-chain 对 installed package manifest metadata 的只读校验。默认 smoke 不联网；不执行 `npm publish`，不运行真实 install，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不修改根 `README.md` / 根 `AGENTS.md`，不创建 packaged native binary，不 push，不创建 PR。
