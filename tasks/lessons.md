@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-07 Rust / Go Phase 5 后续计划缩减与阶段收尾习惯
+
+- 用户已要求把后续 Phase 5 计划尽可能缩到核心关键：只保留最小真实 optional package gate、最小 install-chain gate、最小 packaged smoke gate；default-enable 继续暂缓，即使 packaged opt-in 最小验证通过，也只记录 packaged opt-in 可用，不默认启用 native。
+- Go supervisor、Phase 6 / 7 / 9、Phase 8 全平台 CI / 发布矩阵和 helper-only approval / handoff / dry-run 新增工作均不进入当前后续计划；只有真实 gate 执行暴露明确缺口时，才补新的辅助 evidence / handoff 代码。
+- 用户再次明确要求“每个阶段性任务完成后自动更新最新开发状态、标注完成 / 未完成、提供下次启动提示词”。以后阶段完成并验证通过后，不等待再次提醒，固定同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，并单独提交状态同步文档。
+- 状态同步必须继续区分真实 evidence 与准备材料：ready / handoff / invocation / dry-run / candidateYamlEditPlan / approval packet / approval queue / execution checklist / transition expectation / transition verifier / no-go audit / summary audit 都不是 package published、optionalDependencies declared / installed、builder allowlist modified、packaged binary verified 或 default-enable evidence。
+- 本轮 no-go 不变：native default off / 显式 opt-in；默认 smoke 不联网；未获明确批准前，不执行真实 `npm publish`、不运行真实 install、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。
+
 ## 2026-06-07 Rust / Go Phase 5 no-go audit summary 与 installed manifest metadata 加固
 
 - `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 已成为当前最新实现基线；本轮状态同步前最新已确认 docs 恢复入口为 `345dcf01 docs(rust-go): 同步 Phase 5 no-go 边界审计状态`。

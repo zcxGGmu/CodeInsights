@@ -1,5 +1,25 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-07 Rust/Go Phase 5 后续计划缩减与启动提示词状态同步计划
+
+范围确认：本轮只更新 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review，记录用户要求的“后续尽可能保留最核心关键部分”。当前实现基线仍是 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`，本轮前最新 docs 恢复入口为 `885e89b5 docs(rust-go): 同步 Phase 5 no-go audit summary 状态`。继续保持 native default off / 显式 opt-in；不执行真实 optional package 发布、不运行真实 install、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。
+
+- [x] 将后续 Phase 5 计划缩减为 3 个核心 gate：最小真实 optional package gate、最小 install-chain gate、最小 packaged smoke gate。
+- [x] 明确 default-enable 继续暂缓：即使最小 packaged opt-in 通过，也只证明 packaged opt-in 可用，不默认启用 native。
+- [x] 明确删除 / 暂缓项：不再新增 helper-only approval / handoff / dry-run 代码，Phase 6 / 7 / 9 和 Go supervisor 暂缓，全平台 CI / 发布矩阵暂缓。
+- [x] 更新 `next-session-prompt.md` 的最新恢复入口、完成 / 未完成状态和可直接复制提示词。
+- [x] 在 `tasks/lessons.md` 记录用户要求的阶段完成后自动状态同步习惯，以及本轮缩减计划边界。
+- [x] 运行 no-go 文档验证并单独提交状态同步文档。
+
+### Review
+
+- 文档状态已更新：development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 已把本轮前最新恢复入口推进到 `885e89b5 docs(rust-go): 同步 Phase 5 no-go audit summary 状态`，并说明本轮状态同步提交后以下次 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口。
+- 后续计划已缩减：Phase 5 只保留最小真实 optional package gate、最小 install-chain gate、最小 packaged smoke gate。default-enable、Go supervisor、Phase 6 / 7 / 9、Phase 8 全平台 CI / 发布矩阵和 helper-only approval / handoff / dry-run 新增工作均暂缓。
+- 未完成状态保持明确：真实 optional package 发布、真实 optionalDependencies 声明与安装执行、builder allowlist 实际修改、真实 packaged app bundled binary smoke 仍未完成；default-enable 风险决策继续暂缓，native 必须保持 default off / 显式 opt-in。
+- 阶段收尾习惯已记录：`tasks/lessons.md` 新增本轮 lesson，明确以后每个阶段完成并验证通过后，自动同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，并单独提交状态同步文档。
+- 验证通过：旧当前恢复入口扫描无输出；`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+- 本轮只做 docs / tasks 状态同步；未执行真实 `npm publish`，未运行真实 install，未修改 builder allowlist，未创建 packaged app / native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+
 ## 2026-06-07 Rust/Go Phase 5 no-go audit summary 与 install-chain metadata 状态同步计划
 
 范围确认：实现提交 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 已落地并通过验证；本轮只同步 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/lessons.md` 和本 Review。继续保持 native default off / 显式 opt-in；不执行发布、不安装、不修改 `apps/electron/electron-builder.yml`、不修改根 `README.md` / 根 `AGENTS.md`、不新增真实 `@codeinsights/native-search-*` optionalDependencies、不创建 packaged native binary、不 push、不创建 PR。
