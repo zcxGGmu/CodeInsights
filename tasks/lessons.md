@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-08 Rust / Go Phase 5 e2b620ba 恢复入口回填与 publish shell 边界
+
+- `e2b620ba docs(rust-go): 回填 Phase 5 optional readiness 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 状态文档必须把 `e2b620ba` 明确写成当前恢复入口，不能继续停在 `baa0ae3d`；但本轮状态同步提交完成后，最终回复还要给出本轮新提交 hash，并提示下次以 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口。
+- 当前真实完成边界不变：Phase 0-4 完成；Phase 5 已完成到 no-go audit summary / installed manifest metadata 加固、3 个核心 gate 计划收缩、最小 optional package gate 发布前只读 readiness 和 `e2b620ba` 恢复入口回填。`optional-package-source` 与 publish-target registry dry-run ready 仍不等于 package published。
+- 当前真实未完成边界不变：未执行成功的真实 `npm publish`，未声明真实 `@codeinsights/native-search-*` optionalDependencies，未运行真实 install，未获得 `bun.lock` / installed package manifest metadata 的真实 package evidence，未修改 builder allowlist，未创建真实 packaged app / native binary，未完成 packaged bundled binary smoke，default-enable 继续暂缓。
+- 执行审计 / 搜索命令时，不能把包含反引号或 `npm publish` 文本的文档片段直接拼进 shell；优先用 `rg` 固定字符串、文件参数和单引号，或先写入安全变量。未获明确批准前，任何会执行 `npm publish`、install、builder 修改或 packaged binary 创建的命令都不能运行；如果出现误触发尝试，必须立即用 registry evidence 和 no-go 扫描确认没有真实副作用，并记录在 Review。
+
 ## 2026-06-08 Rust / Go Phase 5 optional readiness 状态回填与自动收尾习惯
 
 - `baa0ae3d docs(rust-go): 同步 Phase 5 optional package readiness` 是本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
