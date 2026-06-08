@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-08 Rust / Go Phase 5 bcc65b3d 恢复入口自引用回填
+
+- `bcc65b3d docs(rust-go): 回填 e2b620ba Phase 5 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 当 HEAD 已经是新的 docs 状态同步提交时，仍要检查活跃状态文档正文是否把上一轮提交写成“最新恢复入口”。如果 `next-session-prompt.md`、development checklist 或 sidecar / smoke plan 仍指向 `e2b620ba`，必须自引用回填到 `bcc65b3d`，并保留 `e2b620ba` 作为历史恢复入口记录。
+- 当前真实完成边界不变：Phase 0-4 完成；Phase 5 已完成到 no-go audit summary / installed manifest metadata 加固、3 个核心 gate 计划收缩、最小 optional package gate 发布前只读 readiness、`e2b620ba` 恢复入口回填和 `bcc65b3d` 恢复入口回填。readiness、dry-run、handoff、approval packet、execution checklist、transition verifier 和 no-go audit 都不能写成真实 package published / installed / packaged verified。
+- 当前真实未完成边界不变：未执行成功的真实 `npm publish`，未声明真实 `@codeinsights/native-search-*` optionalDependencies，未运行真实 install，未获得 `bun.lock` / installed package manifest metadata 的真实 package evidence，未修改 builder allowlist，未创建真实 packaged app / native binary，未完成 packaged bundled binary smoke，default-enable 继续暂缓。
+- 未获明确批准前，仍不得执行真实 `npm publish`、真实 install、`apps/electron/electron-builder.yml` 修改、真实 `@codeinsights/native-search-*` optionalDependencies 新增、packaged binary 创建、push 或 PR；只读 registry evidence 也必须清楚标注为 no-go / readiness，不得外推为 publication 完成。
+
 ## 2026-06-08 Rust / Go Phase 5 e2b620ba 恢复入口回填与 publish shell 边界
 
 - `e2b620ba docs(rust-go): 回填 Phase 5 optional readiness 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
