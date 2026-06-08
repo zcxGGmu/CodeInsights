@@ -1,5 +1,24 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-08 Rust/Go Phase 5 最新开发状态回填计划
+
+范围确认：响应用户要求“更新文档最新开发状态，标注完成 / 未完成，确保下次启动可继续跟踪，并把阶段完成后自动同步状态文档和下次启动提示词作为固定习惯”。本轮只同步 Rust / Go development checklist、sidecar protocol / smoke plan、`next-session-prompt.md`、`tasks/todo.md` 和 `tasks/lessons.md`；不修改业务代码、根 `README.md` / 根 `AGENTS.md`、`apps/electron/electron-builder.yml`、`apps/electron/package.json` 或 `bun.lock`，不运行真实 install，不执行真实 `npm publish`，不创建 packaged native binary，不 push，不创建 PR。当前分支为 `rust-go-refactor`，启动工作树干净，当前 HEAD 为 `baa0ae3d docs(rust-go): 同步 Phase 5 optional package readiness`，最新实现基线仍为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。
+
+- [x] 更新 `docs/improve/rust-go/2026-06-01-rust-go-development-checklist.md`，把最新状态同步 / 恢复入口推进到 `baa0ae3d`，并清楚标注 Phase 0-4 完成、Phase 5 已完成到 optional package readiness、真实 publication / install-chain / builder / packaged smoke / default-enable 未完成。
+- [x] 更新 `docs/improve/rust-go/2026-06-03-phase-5-sidecar-protocol-and-smoke-plan.md`，同步 `baa0ae3d` readiness 状态与下一步必须等待真实 `npm publish` 批准的边界。
+- [x] 更新 `docs/improve/rust-go/next-session-prompt.md`，修正顶部恢复入口和可复制提示词，确保下次启动先读指定文档、运行 `git status --short --branch` 与 `git log -25 --oneline`，并只继续 Phase 5 三个核心 gate。
+- [x] 更新 `tasks/lessons.md`，再次固化“每个阶段性任务完成后自动同步状态文档 / Review / lessons / 下次启动提示词并单独提交”的习惯。
+- [x] 运行 no-go 验证：`git diff --check`、禁改文件 diff、真实 native optionalDependencies 扫描、packaged native binary / package manifest 产物扫描。
+- [x] 单独提交本轮文档状态同步，并在最终回复给出提交 hash、验证结果和可直接复制的下次启动提示词。
+
+### Review
+
+- 已把 development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 的最新已确认状态同步 / 恢复入口推进到 `baa0ae3d docs(rust-go): 同步 Phase 5 optional package readiness`；本轮文档提交完成后，下次启动仍应以 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口。
+- 完成 / 未完成状态已拆清：Phase 0-4 已完成；Phase 5 已完成到 no-go audit summary / smoke case 外显、install-chain installed manifest metadata 加固、后续计划缩减为 3 个核心 gate，以及最小 optional package gate 发布前只读 readiness。真实 `npm publish`、真实 optionalDependencies 声明与 install-chain、`bun.lock` / installed package metadata 的真实 evidence、builder allowlist 实际修改、真实 packaged app bundled binary smoke 和 default-enable 风险决策仍未完成。
+- `tasks/lessons.md` 已再次记录用户要求的固定习惯：每个阶段性任务完成并验证后，自动同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，单独提交状态同步文档，并在最终回复给出可直接复制的下次启动提示词。
+- no-go 验证通过：`git diff --check` 无输出；`git diff --name-only -- README.md AGENTS.md apps/electron/electron-builder.yml apps/electron/package.json bun.lock` 无输出；`rg -n '"@codeinsights/native-search' apps/electron/package.json bun.lock` 无匹配；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。
+- 边界保持：本轮只做文档 / tasks 状态同步，未执行真实 `npm publish`，未运行真实 install，未修改 builder allowlist，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未创建 packaged app / native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR。
+
 ## 2026-06-07 Rust/Go Phase 5 最小真实 optional package gate 启动计划
 
 范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；当前 HEAD 为 `7c8057e3 docs(rust-go): 收缩 Phase 5 后续核心 gate`，最新实现基线为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。本轮先做最小真实 optional package gate 的发布前只读 readiness：当前可验证平台为 darwin-arm64，对应计划包为 `@codeinsights/native-search-darwin-arm64`，但既有 smoke / manifest gate 仍按 4 个计划平台包输出整体矩阵。未获明确批准前，本轮不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR；native 继续 default off / 显式 opt-in，默认 smoke 不联网。

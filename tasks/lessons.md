@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-08 Rust / Go Phase 5 optional readiness 状态回填与自动收尾习惯
+
+- `baa0ae3d docs(rust-go): 同步 Phase 5 optional package readiness` 是本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 状态文档必须把 `baa0ae3d` 明确写成当前恢复入口，不能继续停在 `7c8057e3`；但文档同步提交完成后，最终回复还要给出本轮新提交 hash，并提示下次以 `git log -5 --oneline` 最新 Rust / Go docs 提交为实际恢复入口。
+- 当前真实完成边界：Phase 0-4 完成；Phase 5 已完成到 no-go audit summary / installed manifest metadata 加固、3 个核心 gate 计划收缩，以及最小 optional package gate 发布前只读 readiness。`optional-package-source` 与 publish-target registry dry-run ready 仍不等于 package published。
+- 当前真实未完成边界：未执行真实 `npm publish`，未声明真实 `@codeinsights/native-search-*` optionalDependencies，未运行真实 install，未获得 `bun.lock` / installed package manifest metadata 的真实 package evidence，未修改 builder allowlist，未创建真实 packaged app / native binary，未完成 packaged bundled binary smoke，default-enable 继续暂缓。
+- 用户再次要求“记住这个习惯”：以后每个阶段性任务完成并验证后，自动同步 development checklist、`next-session-prompt.md`、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，单独提交状态同步文档，并在最终回复提供可直接复制的下次启动提示词；这属于完成定义，不需要用户再次提醒。
+
 ## 2026-06-07 Rust / Go Phase 5 最小 optional package gate 发布前 readiness
 
 - `7c8057e3 docs(rust-go): 收缩 Phase 5 后续核心 gate` 是本轮启动时的最新恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
