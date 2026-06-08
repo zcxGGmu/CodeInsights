@@ -1,5 +1,31 @@
 # CodeInsights Agent 重构任务
 
+## 2026-06-08 Rust/Go Phase 5 5bc9ebe8 恢复与 gate 前 check-in 计划
+
+范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。本轮启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`。当前 HEAD 为 `5bc9ebe8 docs(rust-go): 回填 bcc65b3d Phase 5 恢复入口`，工作树启动时干净；最新实现基线仍为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。本轮已按用户要求只做状态同步：把活跃 Rust / Go 状态文档的最新已确认状态同步 / 恢复入口从 `bcc65b3d` 回填到 `5bc9ebe8`，并继续标注 Phase 5 已完成 / 未完成边界。未获用户明确批准前，不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR；native 继续 default off / 显式 opt-in，default-enable 继续暂缓。
+
+- [x] 完成启动读取、`native/search` 文件列表与关键源码核对。
+- [x] 运行 `git status --short --branch`，确认当前分支 `rust-go-refactor` 且启动工作树干净。
+- [x] 运行 `git log -25 --oneline`，确认最新状态同步提交为 `5bc9ebe8`，最近历史包含 `bcc65b3d`、`e2b620ba`、`baa0ae3d`、`7c8057e3` 和 `63e0fc2b`。
+- [x] 确认 `native/search/Cargo.toml` package version 与 `native/search/src/lib.rs` 的 `BINARY_VERSION` 均为 `0.0.3`，`tail_jsonl` 仍未进入最小 search sidecar 切片。
+- [x] 记录实现前 check-in 计划与 no-go 边界。
+- [x] 等待用户明确确认下一步：只做 `5bc9ebe8` 恢复入口自引用回填 / 只读复核，或批准进入最小真实 optional package gate。
+- [x] 若只获准做状态回填：更新 development checklist、sidecar protocol / smoke plan、`next-session-prompt.md` 和必要 lessons，把最新已确认恢复入口从 `bcc65b3d` 回填为 `5bc9ebe8`，并运行只读 readiness/no-go 与禁改扫描。
+- [ ] 若明确批准真实 optional package gate：按当前平台 / 计划包范围执行用户批准的真实 `npm publish` 命令，并在执行后用 `packaged-manifest --check-registry` 获取 registry exact-version evidence；仍不进入 install-chain / builder / packaged smoke，除非再获明确批准。
+- [x] 运行只读 readiness/no-go 验证：`optional-package-source --native-search-package-version 0.0.3`、显式 `optional-package-publish-target --native-search-package-version 0.0.3 --check-registry`、默认离线 `packaged-manifest`，以及预期失败的 `packaged-manifest --check-registry` evidence。
+- [x] 运行禁改扫描：`git diff --check`、禁改文件 diff、真实 native optionalDependencies 扫描和 packaged native binary / package manifest 产物扫描。
+- [x] 单独提交本轮文档状态同步；提交后最终回复给出提交 hash、验证结果和可直接复制的下次启动提示词。
+
+### Review
+
+- 启动恢复完成：当前分支为 `rust-go-refactor`，启动 HEAD 为 `5bc9ebe8 docs(rust-go): 回填 bcc65b3d Phase 5 恢复入口`，最近历史包含 `5bc9ebe8`、`bcc65b3d`、`e2b620ba`、`baa0ae3d`、`7c8057e3`、`885e89b5` 和 `63e0fc2b`；工作树启动时干净。
+- 文档状态已回填：development checklist、sidecar protocol / smoke plan 和 `next-session-prompt.md` 已把最新已确认状态同步 / 恢复入口推进到 `5bc9ebe8`，并继续保留 `63e0fc2b` 为最新实现基线。`bcc65b3d`、`e2b620ba` 与 `baa0ae3d` 仍作为历史状态同步提交记录，不再作为当前恢复入口。
+- 习惯固化：`tasks/lessons.md` 已记录用户要求的固定习惯：每个阶段性任务完成并验证后，自动同步 development checklist、`next-session-prompt.md`、sidecar / smoke plan、`tasks/todo.md` Review 和必要 lessons，运行 no-go 验证，单独提交状态同步文档，并在最终回复给出可直接复制的下次启动提示词。
+- 只读 readiness 结果：`optional-package-source --native-search-package-version 0.0.3` 通过，summary 显示 `optionalPackageSourceReady=true`、`optionalPackagesPublished=false`、`realPackagedBinaryVerified=false`；显式 registry dry-run `optional-package-publish-target --native-search-package-version 0.0.3 --check-registry` 通过，summary 显示 `optionalPackagePublishTargetReady=true`、4 个 planned package 目标版本无 collision / invalid / unavailable package，且仍 `optionalPackagesPublished=false`、`realPackagedBinaryVerified=false`。
+- no-go evidence：默认离线 `packaged-manifest` 通过，继续显示 `optionalPackagePublicationChecked=false`、`optionalPackagesPublished=false`、`optionalDependenciesDeclared=false`、`optionalDependenciesInstallChainVerified=false`、`packagingConfigVerified=false`、`bundledBinaryVerified=false`、`realPackagedBinaryVerified=false`、`defaultEnableCandidate=false`，且 `release-handoff-no-go-boundary-audit` passed。显式 `packaged-manifest --check-registry` 按预期 exit 1，summary 显示 `optionalPackagePublicationChecked=true`、`optionalPackagesPublished=false`，4 个 planned packages 均在 `missingPublishedPackages`，说明真实 publication 尚未完成。
+- 边界保持：本轮未执行真实 `npm publish`，未运行真实 install，未修改 `apps/electron/package.json` / `bun.lock` 以新增真实 optionalDependencies，未修改 `apps/electron/electron-builder.yml`，未创建 packaged app / native binary，未修改根 `README.md` / 根 `AGENTS.md`，未 push，未创建 PR；native 继续 default off / 显式 opt-in，default-enable 继续暂缓。
+- 验证通过：`git diff --check` 无输出；禁改文件 diff 无输出；`apps/electron/package.json` / `bun.lock` 中无真实 `@codeinsights/native-search-*` optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`；只读 explorer 复核确认主要 Rust / Go 文档和 `tasks/lessons.md` 已同步到 `5bc9ebe8`，本 Review 已修正 `tasks/todo.md` 顶部执行前语境残留。
+
 ## 2026-06-08 Rust/Go Phase 5 bcc65b3d 恢复与三 gate 收口计划
 
 范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`。当前 HEAD 为 `bcc65b3d docs(rust-go): 回填 e2b620ba Phase 5 恢复入口`，工作树启动时干净，最新实现基线仍为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。当前文档正文仍多处把最新已确认状态同步 / 恢复入口写为 `e2b620ba`，因此本轮先做恢复入口回填、只读 readiness/no-go 复核，并停在真实 gate 批准点前。未获用户明确批准前，不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR；native 继续 default off / 显式 opt-in，default-enable 继续暂缓。

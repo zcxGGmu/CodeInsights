@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-08 Rust / Go Phase 5 5bc9ebe8 恢复入口回填与自动状态同步习惯
+
+- `5bc9ebe8 docs(rust-go): 回填 bcc65b3d Phase 5 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 当用户要求“更新文档最新开发状态、标注完成 / 未完成、给下次启动提示词”时，默认执行状态同步完整闭环：更新 development checklist、`next-session-prompt.md`、sidecar / smoke plan、`tasks/todo.md` Review 和必要 lessons，运行只读 readiness/no-go 与禁改扫描，最后单独提交状态同步文档。
+- 阶段完成后的自动状态同步是固定习惯，不需要用户每次再次提醒；但不得因此越过 no-go。未获明确批准前，仍不得执行真实 `npm publish`、真实 install、`apps/electron/electron-builder.yml` 修改、真实 `@codeinsights/native-search-*` optionalDependencies 新增、packaged binary 创建、push 或 PR。
+- 当前真实完成边界不变：Phase 0-4 完成；Phase 5 已完成到 no-go audit summary / installed manifest metadata 加固、3 个核心 gate 计划收缩、最小 optional package gate 发布前只读 readiness、`e2b620ba` / `bcc65b3d` / `5bc9ebe8` 恢复入口回填。readiness、dry-run、handoff、approval packet、execution checklist、transition verifier 和 no-go audit 仍不能写成真实 package published / installed / packaged verified。
+- 当前真实未完成边界不变：未执行真实 `npm publish`，未声明真实 `@codeinsights/native-search-*` optionalDependencies，未运行真实 install，未获得 `bun.lock` / installed package manifest metadata 的真实 package evidence，未修改 builder allowlist，未创建真实 packaged app / native binary，未完成 packaged bundled binary smoke，default-enable 继续暂缓。
+
 ## 2026-06-08 Rust / Go Phase 5 bcc65b3d 恢复入口自引用回填
 
 - `bcc65b3d docs(rust-go): 回填 e2b620ba Phase 5 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
