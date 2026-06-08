@@ -1,5 +1,13 @@
 # Lessons
 
+## 2026-06-08 Rust / Go Phase 5 c95c5cf6 恢复入口回填与 no-go 复核
+
+- `c95c5cf6 docs(rust-go): 同步 5bc9ebe8 Phase 5 最新状态` 是本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
+- 当用户给出的最新恢复入口已经是 HEAD，但 active 文档仍把上一轮 `5bc9ebe8` 写成“最新状态同步 / 恢复入口”时，必须执行自引用回填：更新 development checklist、`next-session-prompt.md`、sidecar / smoke plan、`tasks/todo.md` Review 和必要 lessons，把最新入口推进到 `c95c5cf6`，同时保留 `5bc9ebe8` 作为历史状态同步提交。
+- 当前真实完成边界不变：Phase 0-4 完成；Phase 5 已完成到 no-go audit summary / smoke case 外显、install-chain installed manifest metadata 加固、3 个核心 gate 计划收缩、最小 optional package gate 发布前只读 readiness、`5bc9ebe8` 恢复入口回填和 `c95c5cf6` 状态同步。readiness、dry-run、handoff、approval packet、execution checklist、transition verifier、no-go audit 和状态同步都不能写成真实 package published / installed / packaged verified。
+- 当前真实未完成边界不变：未执行真实 `npm publish`，未声明真实 `@codeinsights/native-search-*` optionalDependencies，未运行真实 install，未获得 `bun.lock` / installed package manifest metadata 的真实 package evidence，未修改 builder allowlist，未创建真实 packaged app / native binary，未完成 packaged bundled binary smoke，default-enable 继续暂缓。
+- 本轮只读 no-go 复核继续成立：`native/search` Cargo version 与 `BINARY_VERSION` 均为 `0.0.3`；`optional-package-source`、显式 publish-target registry dry-run 和默认离线 `packaged-manifest` 是 readiness evidence；`packaged-manifest --check-registry` 预期 exit 1 且 4 个 planned packages 均缺失，是未发布 evidence，不是错误。未获明确批准前，不执行真实 `npm publish`、真实 install、`apps/electron/electron-builder.yml` 修改、真实 optionalDependencies 新增、packaged binary 创建、push 或 PR。
+
 ## 2026-06-08 Rust / Go Phase 5 5bc9ebe8 恢复入口回填与自动状态同步习惯
 
 - `5bc9ebe8 docs(rust-go): 回填 bcc65b3d Phase 5 恢复入口` 已成为本轮启动时最新已确认状态同步 / 恢复入口；`63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest` 仍是最新实现基线。
