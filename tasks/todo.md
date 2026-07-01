@@ -1,5 +1,66 @@
 # CodeInsights Agent 重构任务
 
+## 2026-07-01 Pipeline 全面测试计划
+
+范围确认：本轮目标是全面验证当前 Pipeline 功能是否存在问题，覆盖 shared 类型契约、主进程 LangGraph / checkpoint / session / gate 服务、IPC / preload、renderer atoms / 全局 listeners、Pipeline UI 基础旅程，以及现有 smoke。默认只做测试、只读审计和结果记录；如发现明确 bug，先复现和定位根因，再决定是否需要修复。继续不执行真实 `npm publish`，不修改 `apps/electron/electron-builder.yml`，不新增 `@codeinsights/native-search-*` optionalDependencies，不创建 packaged binary，不 push，不 PR。
+
+- [x] 盘点 Pipeline 相关源码、测试文件、脚本和 IPC/UI 流程，明确测试覆盖矩阵。
+- [x] 运行静态验证：类型检查、Pipeline 相关单元测试、全量测试中与 Pipeline 相邻的关键套件。
+- [x] 运行 Pipeline smoke：fixture / session / gate / stop / resume / checkpoint 相关可执行验证。
+- [x] 在当前 dev 环境进行 UI 层验证，确认 Pipeline 页面能加载、会话列表/输入区/记录区/人工审核卡片等基础状态不崩。
+- [x] 汇总发现：区分已验证通过、真实问题、环境限制和建议后续修复项，并写入本 Review。
+
+### Review
+
+- 代码与流程盘点完成：Pipeline 入口覆盖 `shared` 状态契约、主进程 `pipeline-service` / graph / checkpoint / session / gate / artifact / patch-work / git submission / Codex runner、IPC handlers / preload、renderer atoms / listeners / Pipeline UI、fixture smoke 和 packaged smoke 脚本。子代理只读复核补充了 IPC 功能面、v2 六阶段不变量、Git guard / patch-work 安全边界和现有测试覆盖。
+- 类型与测试验证通过：`bun run typecheck` 全仓通过；Pipeline 聚焦套件 `bun test --isolate packages/shared/src/utils/pipeline-state.test.ts apps/electron/src/main/lib/pipeline-*.test.ts apps/electron/src/main/lib/codex-pipeline-node-runner.test.ts apps/electron/src/main/lib/native-runtime/ts-pipeline-tail-service.test.ts apps/electron/src/renderer/atoms/pipeline-atoms.test.ts apps/electron/src/renderer/components/pipeline/*.test.ts apps/electron/src/renderer/components/pipeline/*.test.tsx apps/electron/src/renderer/components/settings/pipeline-codex-channel-settings.test.ts` 382 pass / 0 fail；全量 `bun test --isolate` 1006 pass / 0 fail。
+- Pipeline smoke 验证通过：`bun test --isolate apps/electron/src/main/lib/pipeline-smoke.test.ts` 3 pass / 0 fail，覆盖 draft-only、local commit、mock remote 三条确定性路径。隔离 Electron + CDP dev fixture 通过：Onboarding 可进入 Pipeline 主界面，v2 主路径依次经过 `explorer/task_selection`、`planner/document_review`、`developer/document_review`、`tester/document_review`、`committer/submission_review`，最终 `status=completed`、`currentNode=committer`、`lastApprovedNode=committer`、`committerStatus=draft_only`、records=30、Git commit count 仍为 1。
+- packaged smoke 未完成：`bun run --filter='@codeinsights/electron' smoke:pipeline-fixture` 失败原因是当前未创建打包产物 `/apps/electron/out/mac-arm64/CodeInsights.app/Contents/MacOS/CodeInsights`，两条场景均报 packaged app 不存在；真实 GitHub remote smoke 按脚本提示也未执行，因为未获明确远端写授权。本轮遵守边界，未运行 `dist:*`、`pack` 或 electron-builder 创建 packaged binary。
+- 真实复现问题 1：同一 Pipeline 会话运行中重复调用 `start()` 会被 `runExecution()` 拒绝，但拒绝前已经追加第二条 `user_input` 并更新 meta。临时脚本复现结果：`secondError="Pipeline 会话正在运行中: ..."`，records 中已有 `["first input","second input"]`。根因是 `start()` 先写 record / contribution task / meta，再进入 `runExecution()` 的 active guard。
+- 真实复现问题 2：已完成会话调用 `stop()` 会把终态从 `completed` 覆盖成 `terminated`。临时脚本复现结果：`beforeStatus=completed`、`stoppedStatus=terminated`、`afterStatus=terminated`。`stop()` 当前没有 terminal-state guard，直接 abort / update meta / emit terminated。
+- 真实复现问题 3：artifact content 读取不要求 session meta 存在，也不要求 ref 来自 manifest 登记。临时脚本可用伪 sessionId 在 artifacts 目录写入 `loose.txt`，随后 `service.readArtifactContent({ kind: "content", relativePath: "loose.txt" })` 成功读取；路径穿越仍会被拒绝。这更像授权 / 一致性边界缺口，不是路径逃逸。
+- 未复现但建议后续补专项测试的风险：renderer snapshot 可能覆盖较新的 stream state / pending gate；专用 gate panel 缺少统一 submitted lock 可能重复提交；`startPipeline` UI 调用是 fire-and-forget，IPC 异步失败时输入可能已被清空；StrictMode 下 stream subscribe / unsubscribe 仍建议做 refcount 或幂等专项验证。
+- 当前 dev 环境仍在运行：`bun run dev` 根进程 PID `29038`，Vite PID `29070`，electronmon PID `29339`，Electron PID `29515`；`http://localhost:5173/` 返回 200。日志仍有 Electron sandbox bundle `TypeError: object is not iterable` 和 DevTools Autofill warning，但隔离 Electron UI 与 Pipeline fixture 已证明主窗口 / preload / Pipeline 流程可用。
+
+## 2026-07-01 当前项目部署运行计划
+
+范围确认：本轮目标是把当前仓库按现有 Bun workspace / Electron dev 流程在本机启动起来，并给出可访问的本地地址或明确的环境阻断原因。只做运行、构建和必要的本地依赖健康检查；不改业务代码，不执行真实 `npm publish`，不修改 `apps/electron/electron-builder.yml`，不新增 `@codeinsights/native-search-*` optionalDependencies，不创建 packaged binary，不 push，不 PR。
+
+- [x] 复核本地 Bun、依赖目录、Electron binary 状态和当前工作树，避免覆盖既有修改。
+- [x] 运行 Electron 构建验证，确认 main / preload / renderer 能生成。
+- [x] 如 Electron 安装不完整，使用锁文件约束的依赖恢复命令修复本地运行环境，不升级或新增依赖。
+- [x] 启动开发模式并读取日志，确认 Vite 地址、Electron 启动状态和可访问性。
+- [x] 在本 Review 记录实际命令、运行地址、进程信息、失败原因或残余风险。
+
+### Review
+
+- 构建验证通过：`bun run electron:build` 成功生成 main / preload / file-preview preload / renderer / resources；Vite 仅输出既有 large chunk warning。
+- 启动前发现 Electron binary 不完整：`bunx electron --version` 报 `Electron failed to install correctly`，根因是 `node_modules/.bun/electron@39.8.9/node_modules/electron/` 缺少 `path.txt` 和 `dist/Electron.app`。
+- 本地依赖健康修复完成：未改 `package.json` / `bun.lock`，只用当前锁定的 Electron `39.8.9` 运行官方 `install.js`；GitHub 下载超时后设置 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 补齐 binary，随后 `bunx electron --version` 返回 `v39.8.9`。
+- 当前已运行：使用 `bun run dev` 启动完整开发环境，根进程 PID 为 `29038`，日志写入 `/tmp/codeinsights-dev.log`。Vite 地址为 `http://localhost:5173/`，`curl` 返回 200，页面包含 `CodeInsights` 标题、`#root` 和 `/main.tsx`。
+- Electron 状态：`electronmon` PID `29339`，Electron 主进程 PID `29515`，macOS 可见进程列表包含 `Electron`；日志显示运行时初始化完成，Node / Bun / Git / safeStorage 检测通过，IPC 与更新 IPC 注册完成，托盘、工作区监听和快捷键注册成功。
+- 残余日志：启动初期有一次 electronmon 重启触发的 MachPort / parent died 报错，随后 Electron 正常重启并稳定运行；当前 renderer 控制台仍有 Electron sandbox bundle `TypeError: object is not iterable` 与 DevTools Autofill protocol warning，需要后续做 UI 交互深测时再判断是否影响功能。
+
+## 2026-06-09 客户端整体运行与功能验证计划
+
+范围确认：本轮只验证当前 `rust-go-refactor` 分支客户端能构建、能启动、关键 native runtime / Rust search sidecar 相关改动在只读 no-go 边界内正常工作。启动复核已读取 lessons、todo、Rust / Go next-session prompt、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`；当前 HEAD 为 `b485ca29 docs(rust-go): 回填 4cf20557 Phase 5 恢复入口`，工作树启动时干净。未获明确批准前，本轮不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/electron-builder.yml`，不新增真实 `@codeinsights/native-search-*` optionalDependencies，不创建 packaged binary，不 push，不 PR。
+
+- [x] 运行全仓类型检查，确认 shared / electron / renderer 类型契约未破坏。
+- [x] 运行 native runtime / Rust search sidecar 相关聚焦测试，覆盖 smoke summary、manifest、default-enable readiness、service、IPC handlers、renderer diagnostics 和 atoms。
+- [x] 运行只读 smoke：`native-missing`、`packaged-manifest`、`optional-package-source --native-search-package-version 0.0.3`；必要时追加默认不联网 no-go 边界扫描。
+- [x] 构建 Electron 客户端产物（main / preload / renderer），不执行 electron-builder dist 或 packaged binary 创建。
+- [x] 启动开发客户端，验证 renderer 能加载，基础 UI / 设置诊断入口不崩溃；若 Electron GUI 受环境限制，记录失败原因并保留 Vite renderer 验证证据。
+- [x] 在本 Review 记录实际命令、通过 / 失败结果、任何环境限制和残余风险。
+
+### Review
+
+- 类型 / 测试验证通过：`bun run typecheck` 全仓通过；native runtime 聚焦测试 144 pass；`bun test --isolate` 全量 1006 pass；`cargo test --manifest-path native/search/Cargo.toml` 13 pass。
+- Electron 构建通过：`bun run electron:build` 成功完成 main / preload / file-preview preload / renderer / resources 构建；Vite 仅输出既有 large chunk warning，未运行 `dist:*`、`pack` 或 `electron-builder` 分发打包命令。
+- 只读 native runtime smoke 通过：`native-missing`、`protocol-mismatch`、`crash`、`timeout`、`cache-corruption`、`packaged-manifest`、`packaged-app-layout`、`optional-package-source --native-search-package-version 0.0.3` 和离线 `optional-package-publish-target --native-search-package-version 0.0.3` 均 exit 0。关键 evidence：TS fallback 可用；missing / mismatch / crash / timeout / cache_corrupted fallback reason 符合预期；`optionalPackageSourceReady=true`；离线 publish-target 保持未 checked / not ready；`defaultEnableCandidate=false`；`release-handoff-no-go-boundary-audit` 通过。
+- 开发 renderer 运行验证完成：启动 `bun run --filter='@codeinsights/electron' dev:vite -- --host 127.0.0.1`，`http://127.0.0.1:5173/` 返回 `CodeInsights` 页面和 root 容器，`/main.tsx` 返回 200，说明 renderer dev server 和基础资源链路可用；验证后已停止 Vite 进程。
+- Electron GUI 启动受本地依赖环境阻断：使用隔离 `CODEINSIGHTS_AUTOMATION=1`、`CODEINSIGHTS_CONFIG_DIR=/tmp/codeinsights-client-verify/config`、`CODEINSIGHTS_USER_DATA_DIR=/tmp/codeinsights-client-verify/user-data` 尝试 `bunx electron --remote-debugging-port=9223 .`，进程立即失败，日志为 `Electron failed to install correctly, please delete node_modules/electron and try installing again`。复核发现 `node_modules/.bun/electron@39.8.9/node_modules/electron/` 缺少 `path.txt` 和 `Electron.app` binary，仓库 / 常见缓存 / Applications 下未找到可复用 Electron binary。因用户明确禁止 install，本轮未运行 `bun install`、`npm install` 或 Electron postinstall 下载，所以不能完成真实 Electron 窗口 UI 操作验证。
+- no-go 边界保持：未执行真实 `npm publish`，未运行真实 install，未修改 `apps/electron/electron-builder.yml`，未新增真实 `@codeinsights/native-search-*` optionalDependencies，未创建 packaged binary，未 push，未 PR。`git diff --check` 无输出；禁改文件 diff 无输出；`apps/electron/package.json` / `bun.lock` 无真实 native-search optionalDependencies；排除 `.git` / `node_modules` / `apps/electron/node_modules` / `native/search/target` 后未发现 `native-search-package.json`、`codeinsights-native-search` 或 `codeinsights-native-search.exe`。当前工作树只保留本 Review 对 `tasks/todo.md` 的记录修改。
+
 ## 2026-06-08 Rust/Go Phase 5 4cf20557 恢复入口回填计划
 
 范围确认：继续 `rust-go-refactor` 分支 Phase 5 “Rust search sidecar 试点”。本轮启动已按要求读取 `tasks/lessons.md`、`tasks/todo.md`、`docs/improve/rust-go/next-session-prompt.md`、development checklist、sidecar protocol / smoke plan 和 `native/search/`，并运行 `git status --short --branch` 与 `git log -25 --oneline`。实际 HEAD 为 `4cf20557 docs(rust-go): 回填 26221722 Phase 5 恢复入口`，工作树启动时干净；最新实现基线仍为 `63e0fc2b feat(rust-go): 外显 no-go audit 并加固 install-chain manifest`。当前 active 文档仍有最新状态同步 / 恢复入口停在 `26221722` 的语义，因此本轮只做 `4cf20557` 恢复入口回填、只读 readiness/no-go 复核和状态同步提交。未获用户明确批准前，不执行真实 `npm publish`，不运行真实 install，不修改 `apps/electron/package.json` / `bun.lock` 以新增真实 `@codeinsights/native-search-*` optionalDependencies，不修改 `apps/electron/electron-builder.yml`，不创建 packaged native binary，不修改根 `README.md` / 根 `AGENTS.md`，不 push，不创建 PR；native 继续 default off / 显式 opt-in，default-enable 继续暂缓。
